@@ -21,17 +21,28 @@ The EGAS-L2 cruise/ACC speed-control plausibility monitor (`C_VS_MIN_CRU_MON`). 
 - **Operative floor = 15-SET / 7-CLEAR hysteresis pair → `MON_cru_permit_flags` (d000d7d1) bit7:**
   | cell | km/h | role |
   |---|---|---|
-  | **`0x80389809`** (+0x11d) | **15** | SET/arm edge. On a **fresh engage below 15** (openpilot at low speed) permit never arms → bit7 stays 0 → fault from cycle 1. THIS is the operative trip. |
-  | **`0x8038980e`** (+0x122) | **7** | CLEAR edge. Governs the other case: ACC engaged >15 then decel — permit holds 15→7, faults at 7. Zero it too so permit holds through standstill. |
+  | **`0x80389809`** (+0x11d) | **15** | ARM-from-scratch edge. With the permit memory `dc87`=0 (key-on init, or after it cleared), speed must exceed 15 to set `dc87`=1 and arm the engaged-latch. |
+  | **`0x8038980e`** (+0x122) | **7** | RE-ARM / memory-clear edge — **LIVE, not dead.** `dc87` (SET at 15, CLEAR at 7) is a *persistent, never-reset* hysteretic memory. Once =1 it stays 1 down to 7, so ACC can drop and **re-engage anywhere down to 7**; below 7 (while un-latched) `dc87` clears → must exceed 15 to re-arm. |
 - Secondary arming windows (NOT the operative floor, generally leave stock): 17/15 band
   (`0x8038980a`=17, `0x80389808`=2-width), 5 band (`0x8038980f`), [10,65] window (`0x80389811`/`0x80389810`),
   17/14 window (`0x80389812`/`0x80389813`).
 
-**The fault mechanism (resolved 2026-07-27, subagent):**
-- **The fault is the plausibility condition itself: `cru_acc_active_flag` (d000a113)=1 AND permit bit7=0**
-  (ACC active while below the C_VS_MIN_CRU permit floor). It drives the L2 export bytes `d000dee5..dee8`
-  (`800efbf6`/`800f006c`) → aggregator `FUN_800d9936` → verdict `d000d344` → an EGAS-L2 cruise-monitoring
-  **Dem event**.
+**The fault mechanism (resolved 2026-07-27, two subagent passes — supersedes the "bit7=0 is the fault" reading):**
+- **The permit floor is a latch-gated feedback loop over a PERSISTENT permit memory; the trigger is the
+  engaged-latch FAILING TO ARM.** `MON_cru_permit_floor_flag` (`dc87`) is a hysteretic memory — SET at >15,
+  CLEARED at <7 — that is **written only in the floor block (`800f006c:742` / `800f027c:656`) and reset
+  NOWHERE** (persists across latch cycles and ACC on/off; zeroed only at key-on). The 15/7 block runs only
+  while `MON_cru_speed_engaged_latch`==0 (`800f006c:728`) — the *arming phase*. When ACC is active and
+  `dc87`=1 → `bit7`=1 → the latch ARMS and then HOLDS until ACC-off or a `d000d240` 0x8f→8 recovery
+  (frozen while latched). So **both cells are live, for different engagements:**
+  - **`0x80389809`=15 (arm-from-scratch):** with `dc87`=0, speed must exceed 15 to set it.
+  - **`0x8038980e`=7 (re-arm floor):** once `dc87`=1 it stays 1 down to 7, so ACC can drop and **re-engage
+    down to 7** and re-arm immediately; below 7 (un-latched) `dc87` clears → must exceed 15 again.
+  **Behaviour:** continuous engage from >15 → holds to 0; re-engage at 7-15 with `dc87`=1 → re-arms (works
+  to 7); **engage with `dc87`=0 (fresh key-on below 15, or after dropping below 7) → latch never arms = the
+  sub-15 lockout.** The discriminator is the un-armed latch, which the (out-of-corpus) ACC-availability
+  coordinator stores + enforces = the key-off-on lockout `[G]`. (`bit7` itself is read by nothing outside the
+  monitor; it's internal state, not a downstream fault bit.)
 - **`MON_cru_speed_engaged_latch` (d00148be) is NOT the fault — it is a monitor-*engaged* latch** (⚠ corrects
   the earlier claim here). Proof: it is unconditionally cleared the instant ACC deactivates
   (`800f006c:791` `if (a113==0 || recovery) latch=0`), and its set-term `d7f2` includes permit-bit7-*SET*
@@ -46,11 +57,15 @@ The EGAS-L2 cruise/ACC speed-control plausibility monitor (`C_VS_MIN_CRU_MON`). 
   OS message, `a9` unresolved) — same `[G]` as `engage_state.md`. Inference: re-enable gated on the event
   being absent → clears on the next ignition cycle = "until key-off/on".
 
-**openpilot edit: set `0x80389809` (15→0) AND `0x8038980e` (7→0).** With both 0 the floor test becomes
-`0 < speed` (arm at any speed>0) and the disarm test `speed < 0` never fires, so permit bit7 is **permanently
-SET at every speed ≥ 0** → the fault condition (bit7=0 while active) can never become true → no L2 cruise Dem
-event → no lockout. **Fix confirmed by static analysis.** Bench-confirm no EGAS-L2 cruise DTC sets sub-15
-after the edit.
+**openpilot edit: set `0x80389809` (15→0) AND `0x8038980e` (7→0) — both are meaningful.** 15→0 makes `dc87`
+arm at any speed > 0 (so a fresh engage below 15 arms instead of faulting); 7→0 makes `dc87` never clear
+(clear test `speed < 0` never fires), so the permit memory stays armed through standstill and any re-engage.
+Together: `dc87` is permanently set after any motion → the latch arms at any speed → the sub-15 lockout
+cannot occur regardless of engagement/re-engagement pattern. **Confirmed cycle-by-cycle.** Note: **if
+openpilot keeps ACC continuously engaged from above 15, stock cal already permits control to 0** — so the
+observed sub-15 lockout means openpilot is (re-)engaging ACC *below* 15 with `dc87`=0 (fresh first-engage, or
+re-asserting at low speed). The 15→0 edit makes arm-speed irrelevant; separately, keeping openpilot's ACC
+engagement continuous from above 15 would avoid the trigger even on stock cal. Bench-confirm after the edit.
 
 ## ACC-relevant, secondary (indirect)
 

@@ -10,9 +10,12 @@ re-parses clean with `core/maps/a2l.py` and every value re-decodes.
 > lockstep" with the functional L1 cells. That was **wrong**. The corrected A2L (12 cells) and
 > `maps/l2_monitors.md` establish:
 > - **The ACC min-speed lockout is ONE hysteresis pair in cal #208: `0x80389809`=15 (SET) + `0x8038980e`=7
->   (CLEAR).** Set **both to 0** (15 covers the moving range; 7 holds the permit through standstill —
->   otherwise at speed 0 the `else if` fires and the permit flips, provoking the fault while openpilot holds
->   a stop). Empirically confirmed: ACC <15 km/h latches a non-volatile fault (key-off-on).
+>   (CLEAR).** Both are live: `dc87` (the permit memory) is persistent (never reset), SET at 15 / CLEAR at 7.
+>   **15 = arm-from-scratch** (with `dc87`=0 you must exceed 15 to arm); **7 = re-arm floor** (once `dc87`=1
+>   you can re-engage down to 7; below 7 it clears). The lockout is engaging with `dc87`=0 below 15 (fresh
+>   engage / after dropping below 7). Set **15→0** (arm at any speed) **and 7→0** (never clear) for a fully
+>   re-engage-robust fix. Empirically: ACC <15 km/h latches a non-volatile fault (key-off-on). See
+>   `maps/l2_monitors.md` "The fault mechanism".
 > - **The #148 / #215 cells are NOT the ACC floor** and are no longer in the primary group — #148 provably
 >   self-disables below ~12 km/h, #215's crawl trip is a failsafe branch (signal 0x3fc stale).
 > - **No "move L1/L2 together".** The functional L1 cells and the L2 monitor are independent; the lockout is

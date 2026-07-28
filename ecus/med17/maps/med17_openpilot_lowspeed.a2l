@@ -47,11 +47,11 @@ ASAP2_VERSION 1 71
        This is the ONE genuine ACC min-speed floor (maps/l2_monitors.md).
        ===================================================================== */
 
-    /begin CHARACTERISTIC C_VS_MON_CRU_permit_SET_15 "15 km/h (u8=15); VERIFIED [C]. *** THE operative ACC min-speed floor -- SET/re-arm edge. *** cal #208 +0x11d. FUN_800f006c:737 `cal*128 < veh_speed_MON_128` -> permit=1. openpilot lever: set 0. With cal=0 the compare becomes `0 < speed`, TRUE at every nonzero speed, so permit stays 1 through the whole moving range (the else-if 7 edge is then only reached at exactly speed 0). Set together with C_VS_MON_CRU_permit_CLR_7. Recompute cal checksum."
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_SET_15 "15 km/h (u8=15); VERIFIED [C]. *** THE operative ACC min-speed lever -- the SET/ARM edge. *** cal #208 +0x11d. FUN_800f006c:737 `cal*128 < veh_speed_MON_128` -> permit bit7=1 -> the engaged-latch ARMS. The 15/7 floor block runs ONLY while the latch is 0 (800f006c:728); once armed it holds until ACC-off regardless of speed. So the lockout is the FRESH-ENGAGE-BELOW-15 case (latch never arms). Set cal=0 -> arm test becomes `0 < speed` -> latch arms at any speed>0 (incl. a sub-15 engage) -> lockout cannot occur. This is the fix. Recompute cal checksum."
       VALUE 0x80389809 RL_V_UBYTE 0 CM_KMH_MON 0 255
     /end CHARACTERISTIC
 
-    /begin CHARACTERISTIC C_VS_MON_CRU_permit_CLR_7 "7 km/h (u8=7); VERIFIED [C]. *** WITHDRAW edge of the permit floor -- set 0 for standstill hold. *** cal #208 +0x122. FUN_800f006c:742 `speed < cal*128` -> permit=0. This else-if is only evaluated at speed 0 once SET_15 is lowered to 0; with cal=7 it fires at standstill (permit->0, provoking the active-while-not-permitted fault when openpilot holds a stop). Set cal=0 so at speed 0 `0 < 0` is false -> neither branch -> permit HOLDS its previous 1. Set together with C_VS_MON_CRU_permit_SET_15."
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_CLR_7 "7 km/h (u8=7); VERIFIED [C]. RE-ARM / memory-clear edge -- LIVE (not dead). cal #208 +0x122. FUN_800f006c:742 `speed < cal*128` clears the permit memory dc87 (MON_cru_permit_floor_flag), which is a PERSISTENT hysteretic flag (SET at 15, CLEAR at 7, written only in the floor block, reset nowhere). Once dc87=1 it stays 1 down to 7, so ACC can drop and RE-ENGAGE down to 7 and re-arm; below 7 (un-latched) dc87 clears -> must exceed 15 to re-arm. Set cal=0 so dc87 never clears -> permit memory permanent -> re-engage works at any speed incl. standstill. Set together with SET_15."
       VALUE 0x8038980e RL_V_UBYTE 0 CM_KMH_MON 0 255
     /end CHARACTERISTIC
 

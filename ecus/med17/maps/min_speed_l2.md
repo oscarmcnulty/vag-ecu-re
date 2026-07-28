@@ -13,8 +13,10 @@ Confidence tags: **[C]** read the code/bytes · **[I]** inferred · **[G]** gap.
 > - **The operative ACC min-speed lockout is ONE hysteresis pair in cal #208: `0x80389809`=15 (SET) and
 >   `0x8038980e`=7 (CLEAR)** → `MON_cru_permit_flags` bit7 → latch `d00148be` → `d00000e1.b4` → stored Dem DTC.
 >   It is gated on `cru_acc_active_flag` (d000a113), i.e. it only faults when cruise/ACC is the active
->   controller — that is what makes it the ACC monitor. **The 7-CLEAR edge was missing from §Q2 below; it must
->   be zeroed too** (so the permit holds through standstill — see the A2L GROUP 1 note).
+>   controller — that is what makes it the ACC monitor. **Both edges are live:** `dc87` (the permit memory)
+>   is persistent (never reset), SET at 15 / CLEAR at 7. 15 = arm-from-scratch; 7 = re-arm floor (once armed
+>   you can re-engage down to 7). The lockout is engaging with `dc87`=0 below 15. Set **15→0 and 7→0** (arm
+>   at any speed + never clear the memory). See `maps/l2_monitors.md` "The fault mechanism".
 > - **The other cells in the §Q2 table are NOT the ACC floor.** #148 (`0x80384760/61`, `800d5828`) is a general
 >   torque monitor that **provably self-disables below ~12 km/h**; #215 (`0x8038a5c6/c9/ca`, `800f5d68`) is a
 >   crawl monitor whose trip runs only in a **failsafe branch** (signal 0x3fc stale). Neither is the lockout.

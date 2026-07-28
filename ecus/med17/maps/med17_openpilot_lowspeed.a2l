@@ -1,0 +1,149 @@
+ASAP2_VERSION 1 71
+/begin PROJECT MED1711 "Bosch MED17.1.1 8R0907115N_0006 - openpilot ACC-to-0km/h cal set"
+  /begin MODULE MED1711 "Audi Q5 2.0 TFSI (B8/8R) CHJA - the calibration cells to let openpilot hold ACC longitudinal control below the ~15 km/h factory floor down to standstill. UPDATED 2026-07-27 after an 8-subagent characterisation of every EGAS-L2 monitor (see maps/l2_monitors.md): the operative ACC min-speed lockout is ONE hysteresis pair in cal #208 (15/7); most other 'monitor floors' are general EGAS torque/speed monitors, NOT ACC. Empirically confirmed: ACC below 15 km/h latches a non-volatile fault (key-off-on to clear). Every CHARACTERISTIC validated against raw firmware (sha256 3f95531a...a086c4fe) + the decompiled read site. Load base 0x80000000; file off = addr & 0x1FFFFFFF; little-endian."
+
+    /begin MOD_COMMON ""
+      BYTE_ORDER MSB_LAST
+      ALIGNMENT_BYTE 1
+      ALIGNMENT_WORD 2
+    /end MOD_COMMON
+
+    /begin MOD_PAR "MED17.1.1 8R0907115N rev 0006 - Bosch SW 1037520874 / cal 1037550165"
+      /begin MEMORY_SEGMENT CAL_BLOCK "Calibration / maps region" DATA FLASH INTERN 0x80380000 0x80000 -1 -1 -1 -1 -1
+      /end MEMORY_SEGMENT
+      /begin MEMORY_SEGMENT CALOBJ_TABLE "cal-object pointer table (a9 base = uncached alias 0xa0103464)" DATA FLASH INTERN 0x80103464 0xF2C -1 -1 -1 -1 -1
+      /end MEMORY_SEGMENT
+    /end MOD_PAR
+
+    /* ---- COMPU_METHODs ---- */
+    /begin COMPU_METHOD CM_IDENTITY "raw 1:1" RAT_FUNC "%.0f" "-"
+      COEFFS 0 1 0 0 0 1
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_KMH_L1 "Functional ego-speed scale: phys=0.01*x (0.01 km/h). Compared against DAT_d0008f5e/DAT_d0008c22." LINEAR "%.2f" "km/h"
+      COEFFS_LINEAR 0.01 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_KMH_MON "L2-monitor ego-speed scale: cell is u8 km/h, compared in code as cell*128 against DAT_d0007b8a (veh_speed_MON_128, 1/128 km/h)." LINEAR "%.0f" "km/h"
+      COEFFS_LINEAR 1 0
+    /end COMPU_METHOD
+
+    /* ---- RECORD_LAYOUTs ---- */
+    /begin RECORD_LAYOUT RL_V_UBYTE
+      FNC_VALUES 1 UBYTE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_V_UWORD
+      FNC_VALUES 1 UWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_V_SWORD
+      FNC_VALUES 1 SWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+
+    /* =====================================================================
+       GROUP 1 -- THE ACC MIN-SPEED LOCKOUT (edit these two, set both to 0).
+       cal #208 @0x803896ec (FUN_800f006c/800f027c = EGAS_L2_cru_speed_monitor,
+       gated on cru_acc_active_flag d000a113). The 15/7 hysteresis pair drives
+       MON_cru_permit_flags(d000d7d1).b7 = "cruise speed-control permitted".
+       Below the floor while ACC is active -> latch d00148be -> diag status
+       d00000e1.b4 -> stored Dem DTC = the non-volatile key-off-on lockout.
+       This is the ONE genuine ACC min-speed floor (maps/l2_monitors.md).
+       ===================================================================== */
+
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_SET_15 "15 km/h (u8=15); VERIFIED [C]. *** THE operative ACC min-speed floor -- SET/re-arm edge. *** cal #208 +0x11d. FUN_800f006c:737 `cal*128 < veh_speed_MON_128` -> permit=1. openpilot lever: set 0. With cal=0 the compare becomes `0 < speed`, TRUE at every nonzero speed, so permit stays 1 through the whole moving range (the else-if 7 edge is then only reached at exactly speed 0). Set together with C_VS_MON_CRU_permit_CLR_7. Recompute cal checksum."
+      VALUE 0x80389809 RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_CLR_7 "7 km/h (u8=7); VERIFIED [C]. *** WITHDRAW edge of the permit floor -- set 0 for standstill hold. *** cal #208 +0x122. FUN_800f006c:742 `speed < cal*128` -> permit=0. This else-if is only evaluated at speed 0 once SET_15 is lowered to 0; with cal=7 it fires at standstill (permit->0, provoking the active-while-not-permitted fault when openpilot holds a stop). Set cal=0 so at speed 0 `0 < 0` is false -> neither branch -> permit HOLDS its previous 1. Set together with C_VS_MON_CRU_permit_SET_15."
+      VALUE 0x8038980e RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /* =====================================================================
+       GROUP 2 -- #208 SECONDARY BANDS (usually leave stock). These arm OTHER
+       sub-checks inside the same monitor, not the operative permit floor. The
+       17/15 band (dc78) is a separate flag (d000d7de); the 2 is its band width.
+       Move only if a bench test shows a secondary #208 check faulting.
+       ===================================================================== */
+
+    /begin CHARACTERISTIC C_VS_MON_speed17_SET "17 km/h (u8=17); VERIFIED [C]. cal #208 +0x11e. FUN_800f006c:114 SET edge of the SEPARATE 17/15 band flag MON_speed_above17_flag (dc78 -> d000d7de); clear edge = 17 - C_VS_MON_speed17_bandwidth2(2) = 15. NOT the operative permit floor -- it arms a companion sub-check. Leave stock unless a bench test implicates it."
+      VALUE 0x8038980a RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC C_VS_MON_speed17_bandwidth2 "2 km/h (u8=2); VERIFIED [C]. cal #208 +0x11c. FUN_800f006c:120 SUBTRACTED band width for the 17-band (clear edge = 17-2 = 15). Relative width, leave stock."
+      VALUE 0x80389808 RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC C_VS_MON_208_speed_band_block "MONITOR SPEED BAND (u8 km/h x13); VERIFIED [C] block view of cal #208 +0x11c..+0x128, the full set of speed thresholds/windows read by FUN_800f006c/027c. Stock [2,15,17,5,105,2,7,5,65,10,17,14,100]. idx1=+0x11d=FLOOR 15 (SET), idx6=+0x122=7 (CLEAR) -- those two are the operative lockout (see GROUP 1); the rest arm secondary sub-checks. Edit the named cells above, not raw indices."
+      VAL_BLK 0x80389808 RL_V_UBYTE 0 CM_KMH_MON 0 255
+      MATRIX_DIM 13
+    /end CHARACTERISTIC
+
+    /* =====================================================================
+       GROUP 3 -- SECONDARY ACC-ADJACENT MONITORS (verify on bench; likely
+       leave stock unless the fault reappears at a lower speed after GROUP 1).
+       ===================================================================== */
+
+    /begin CHARACTERISTIC ACC_setpoint_band_speed_25_0x8038a4ed "25 km/h (u8=25); VERIFIED [C]. cal #213 +0x127 (FUN_800f4abe = EGAS_L2_ACC_longsetpoint_band, bounds the ACC longitudinal setpoint; feeds #208 + the aggregator). FUN_800f4abe:500 -- a speed edge enabling one sub-check. Not the operative floor. Lower ONLY if a bench test shows a fault reappearing near 25 km/h. (The nearby #213 cells 0x8038a4d7/d8/d9=16/18/16 and 0x8038a4ee=12 are torque-rail coefficients, NOT speeds.)"
+      VALUE 0x8038a4ed RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC ACC_crawl_mon_speed_6_0x8038a5c9 "6 km/h (u8=6); VERIFIED [C]. cal #215 +0x61 (FUN_800f5d68 = EGAS_L2_cru_lowspeed_crawl). Crawl ARMING window. IMPORTANT: the crawl trip runs ONLY in the failsafe branch (when internal signal 0x3fc is STALE -- startup / message-loss), so in normal operation it likely never fires. Leave stock; lower only if a bench test shows a sub-6 km/h crawl fault. Companion 0x8038a5ca=6 moves with it."
+      VALUE 0x8038a5c9 RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC ACC_crawl_mon_speed_6b_0x8038a5ca "6 km/h (u8=6); VERIFIED [C]. cal #215 +0x62, companion of 0x8038a5c9 (FUN_800f5d68:108). Failsafe-branch crawl arming -- leave stock (see 0x8038a5c9)."
+      VALUE 0x8038a5ca RL_V_UBYTE 0 CM_KMH_MON 0 255
+    /end CHARACTERISTIC
+
+    /* =====================================================================
+       GROUP 4 -- FUNCTIONAL (L1) low-speed cells (behavioural, 0x803b region,
+       0.01 km/h vs DAT_d0008f5e). NOT the lockout: the functional decel/hold
+       path is cal-map-driven to standstill with NO hardcoded barrier, and ACC
+       engagement is a table-driven state machine with no speed gate (maps/
+       engage_state.md). These only shape low-speed BEHAVIOUR; the lockout is
+       GROUP 1. Edit only to tune low-speed feel, not to enable to-0 control.
+       ===================================================================== */
+
+    /begin CHARACTERISTIC ACC_lowspeed_substate_gate_0x803b528e "10.00 km/h (u16=1000); VERIFIED [C]. cal #251 +0x5e. FUN_801455ae:60 `cal < DAT_d0008f5e` -> enters the ACC low-speed creep/approach sub-state (clears d0009e1b/d000aafe). Behavioural sub-state, feeds observers -- NOT the lockout. Lower to relax low-speed behaviour; optional for to-0 control."
+      VALUE 0x803b528e RL_V_UWORD 0 CM_KMH_L1 0 655.35
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC ACC_creep_gate_diagnostic_LEAVE_STOCK "3.00 km/h (u16=300); VERIFIED [C] -- LEAVE STOCK. cal #279 +0x14c. FUN_8030347a:276 sets DAT_d000f737/738/f73c; d000f73c has ZERO control-path readers (0x8030 diagnostic block) -> dead measurement flag, not a control gate."
+      VALUE 0x803b88ae RL_V_UWORD 0 CM_KMH_L1 0 655.35
+    /end CHARACTERISTIC
+
+    /begin CHARACTERISTIC cruise_plaus_window_A_hi_0x803b5a30 "20.00 km/h (u16=2000); VERIFIED [C] -- PLAUSIBILITY WINDOW, NOT a floor. cal #260 +0x8a, FUN_802c35d8:201 upper bound of window [0,20] on DAT_d0008c22 (self-contained speed-signal plausibility). Leave stock."
+      VALUE 0x803b5a30 RL_V_UWORD 0 CM_KMH_L1 0 655.35
+    /end CHARACTERISTIC
+
+    /* =====================================================================
+       GROUP 5 -- DECEL AUTHORITY (reference; how hard, not how slow). The ACC
+       decel is shaped by cal maps in #247/#269, but the internal +/-500000
+       authority rail and the on-wire TSK_Verzoeg_Anf -3.984 floor are HARDCODED
+       (FUN_801434de:27-28, FUN_801455ae:241/283/338 + Com config) -- firmware
+       patch, not cal. Irrelevant to controlling to 0 (a min-SPEED problem, not
+       a decel-magnitude problem). Blocks exposed u16 for visibility only.
+       ===================================================================== */
+
+    /begin CHARACTERISTIC ACC_decel_shaping_object_247_ref "REFERENCE BLOCK (structured, mixed u8/u16) -- ACC decel-shaping cal #247 @0x803b4834 (1768 B, via a9+0x3dc); 24x map lookups in FUN_801418ea. Low-speed decel axis 0x803b4eb6.. = 12.0..26.6 km/h. Edit specific fields against the decompile, not blindly. Shapes decel magnitude, not the min-speed floor."
+      VAL_BLK 0x803b4834 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 884
+    /end CHARACTERISTIC
+
+    /* -----------------------------------------------------------------------
+       NOT-ACC monitors -- do NOT edit for openpilot (proven general EGAS-L2
+       torque/speed supervision, maps/l2_monitors.md): #209 (800f25e2), #214
+       (800f5982), #173 (800df26a; its 15 is a torque-window bound, coincidence),
+       #211 (800f40bc), #193 (800e759e), #148 (800d5828; provably no low-speed
+       fault, self-disables <12), and 800fb796/800e0a66/800f9520. Their speed
+       cells are torque-model axes / plausibility windows / disabled ceilings.
+       No CHARACTERISTIC emitted; listed so they are not mistakenly edited.
+       ----------------------------------------------------------------------- */
+
+    /begin GROUP OPENPILOT_ACC_TO_ZERO "PRIMARY EDIT: set both #208 permit cells to 0 to remove the sub-15 ACC lockout and hold permit through standstill. GROUP 2/3 only if a bench test shows a secondary/crawl fault at a lower speed."
+      ROOT
+      /begin REF_CHARACTERISTIC
+        C_VS_MON_CRU_permit_SET_15
+        C_VS_MON_CRU_permit_CLR_7
+      /end REF_CHARACTERISTIC
+    /end GROUP
+
+  /end MODULE
+/end PROJECT

@@ -1,0 +1,72 @@
+# Large binary assets (track via symlink / external storage, not git)
+*.bin
+*.ols
+*.pdf
+*.frf
+*.odx-f
+ecus/*/firmware/*
+# comma/openpilot drive logs (large, private; not repo content)
+*.zst
+*--rlog*
+# Ghidra projects & generated artifacts (fully regenerable via reproduce.sh)
+ecus/*/ghidra_proj/
+*.gpr
+*.rep/
+*.lock
+*.lock~
+# JVM crash/replay dumps -- Ghidra headless drops these in the CWD and they carry
+# local paths + full command lines. Never repo content.
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+# editor/agent local state (also covered by some users' global ignore -- pin it here
+# so it does not depend on machine config)
+.claude/settings.local.json
+.claude/*.lock
+annotations/
+__pycache__/
+*.pyc
+# Decompiled C is a DERIVED WORK of the (copyrighted) firmware -- never commit it.
+# Regenerate locally with ecus/<ecu>/reproduce.sh from the version-controlled metadata
+# (analysis/function_entries.txt + analysis/symbols_merged.csv + core/ghidra/*.java).
+decompiles/
+ecus/*/analysis/decompiles*/
+# per-function decompile outcome manifest (regenerable via reproduce.sh step 6 / DecompileAll.java)
+ecus/*/analysis/decompiles*.manifest.csv
+# annotated disasm for decompiler-degraded fns (regenerable via reproduce.sh step 6b / DumpDisasmFns.java)
+ecus/*/analysis/disasm_r/
+ecus/*/analysis/degraded_fns.txt
+ecus/*/analysis/recovered_returns.csv
+
+# machine-specific env (use .env.sh.example as template)
+.env.sh
+# generated annotation sidecars (regenerable; keep curated symbols.csv only)
+ecus/*/analysis/annotations*/
+# iterative closed-loop outputs (regenerable via core/pipeline/iterate.py)
+ecus/*/analysis/decompiles_p*/
+ecus/*/analysis/callgraph_*.csv
+# a1-relative cal-access table (regenerable via reproduce.sh step 6 / ResolveCalReads.java)
+ecus/*/analysis/cal_reads.csv
+# reproduce.sh build outputs (derived from committed sources -- regenerated every run):
+#   a2l_symbols.csv <- a2l_to_symbols.py(simos85.a2l) at step 4b
+#   map_calls.csv   <- TraceMapCalls.java at step 8
+ecus/*/maps/a2l_symbols.csv
+ecus/*/maps/map_calls.csv
+# ad-hoc ScanCalIndexed.java diagnostic output (regenerable)
+ecus/*/analysis/scan_*.csv
+ecus/*/analysis/symbols_iter.csv
+ecus/*/analysis/iter_metrics.json
+ecus/*/analysis/iter_logs/
+# Derived Funktionsrahmen index. The FR is a proprietary Continental/Bosch document;
+# any index/excerpt derived from it is treated like the decompiled C -- regenerable from
+# the PDF via core/pdf/fr_index.py, never committed.
+ecus/*/analysis/fr/
+ecus/*/analysis/*.log
+ecus/*/maps/*.log
+# per-step headless logs from ecus/<ecu>/reproduce.sh (regenerable)
+ecus/*/analysis/_logs/
+ecus/*/analysis/_rerun_logs/
+# derived diagnostics from the coverage / orphan-claim steps (regenerable)
+ecus/*/analysis/unaccounted_runs.csv
+ecus/*/analysis/orphan_entries*.txt
+ecus/*/analysis/gapwalk_entries.txt

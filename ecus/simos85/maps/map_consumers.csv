@@ -1,0 +1,50 @@
+diff_block,block_len,stages_changed,map_addr,kind,consumer_func,callee,arg_idx,preview
+0x80040940,54,S2-only,0x8004093e,data,FUN_8013273c,kl_interp_u16,1,"[-1, -31334, -31498, -31744, 0, 0, 0, 0]"
+0x80040940,54,S2-only,0x80040946,data,FUN_8013273c,kl_interp_u16,1,"[0, 0, 0, 0, 22182, 18900, 17000, 6600]"
+0x80040940,54,S2-only,0x8004094e,data,FUN_800bf3d0,lookup_kennlinie_800a2cd0,1,"[22182, 18900, 17000, 6600, 257, 0, 1, 256]"
+0x80040940,54,S2-only,0x8004093a,data,FUN_8017b70c,lookup_kennlinie_800a2cd0,1,"[1206, 13869, -1, -31334, -31498, -31744, 0, 0]"
+0x80040940,54,S2-only,0x8004093a,data,FUN_801a2c18,lookup_kennlinie_800a2cd0,1,"[1206, 13869, -1, -31334, -31498, -31744, 0, 0]"
+0x80040abc,2,S2-only,,,,,,no map-call resolved into block
+0x8004119e,32,S1=S2,,,,,,no map-call resolved into block
+0x800423ce,2,S2-only,,,,,,no map-call resolved into block
+0x80043c2c,18,S1&S2,,,,,,no map-call resolved into block
+0x8004449e,126,S1&S2,0x800444ce,axis,FUN_8017a1e0,process_ecu_data_800a2e3c,1,"[-13365, -13365, -13365, -13365, -9253, -9253, -9253, -9253]"
+0x8004449e,126,S1&S2,0x800444a6,axis,FUN_8017a1e0,process_ecu_data_800a2e3c,1,"[-12080, -12080, -12080, -12080, -7711, -7711, -7711, -7711]"
+0x8004449e,126,S1&S2,0x8004449e,data,FUN_8017a1e0,process_ecu_data_800a2e3c,1,"[-11823, -13103, -13108, -13108, -12080, -12080, -12080, -12080]"
+0x8004449e,126,S1&S2,0x800444ee,data,FUN_8017a1e0,process_ecu_data_800a2e3c,1,"[-120, -21332, 1433, 7710, 7710, 7710, -738, -31098]"
+0x8004449e,126,S1&S2,0x8004450f,data,FUN_8017a1e0,process_ecu_data_800a2c98,1,"[-25753, -7833, -7711, -7711, -7711, -7711, 481, 1024]"
+0x8004449e,126,S1&S2,0x800444f3,data,FUN_8017a1e0,process_ecu_data_800a2e3c,1,"[7685, 7710, 7710, 7710, -30979, -31354, 17027, 12063]"
+0x8004449e,126,S1&S2,0x80044518,data,FUN_8017a1e0,process_sensor_data_800a2c7c,1,"[-7711, -7711, 1, 260, 3277, 655, -1, -2]"
+0x8004449e,126,S1&S2,0x80044512,data,FUN_8017a1e0,process_sensor_data_800a2c7c,1,"[-7711, -7711, -7711, -7711, -7711, 1, 260, 3277]"
+0x8004449e,126,S1&S2,0x80044505,data,FUN_8017a1e0,process_sensor_data_800a2c7c,1,"[-7711, -7711, -7711, 11039, -10795, -25753, -7833, -7711]"
+0x8004449e,126,S1&S2,0x80044501,data,FUN_8017a1e0,process_ecu_data_800a2c98,1,"[12063, 12079, -7711, -7711, -7711, 11039, -10795, -25753]"
+0x8004449e,126,S1&S2,0x8004450b,data,FUN_8017a1e0,process_ecu_data_800a2c98,1,"[11039, -10795, -25753, -7833, -7711, -7711, -7711, -7711]"
+0x8004449e,126,S1&S2,0x800444fb,data,FUN_801175f4,process_sensor_data_800a2c7c,1,"[-30979, -31354, 17027, 12063, 12079, -7711, -7711, -7711]"
+0x800449fc,36,S1&S2,,,,,,no map-call resolved into block
+0x80048c18,244,S1&S2,,,,,,no map-call resolved into block
+0x80048dde,22,S1&S2,0x80048ddc,data,FUN_8014fe88,kl_interp_u16,1,"[-27791, -23073, -21657, -21185, -21185, -20950, -20714, -20242]"
+0x80048e2c,24,S1&S2,0x80048e2c,axis,FUN_800faef8,kl_interp_u16,1,"[24120, 24120, 24120, 24120, 24120, 24120, -29355, -29355]"
+0x80048e2c,24,S1&S2,0x80048e38,axis,FUN_8013273c,kl_interp_u16,1,"[-29355, -29355, -29355, -29355, -29355, -29355, 4221, 4221]"
+0x80049114,168,S1=S2,0x80049114,axis,FUN_800faef8,kf_interp_u16,1,"[9175, 9175, 9175, 9175, 9175, 9175, 9175, 9175]"
+0x8004925c,24,S1=S2,0x8004925c,axis,FUN_8014fe88,kl_interp_u16,1,"[11819, 11796, 11785, 11773, 11762, 11733, 11704, 11675]"
+0x8004eb6c,24,S2-only,0x8004eb78,data,FUN_8012df54,kl_interp_u16,1,"[9427, 4482, 4435, 4341, 4105, 3758, 8000, 4800]"
+0x8004eb6c,24,S2-only,0x8004eb6c,data,FUN_8012df54,kl_interp_u16,1,"[21232, 21939, 22883, 24534, 25478, 25950, 9427, 4482]"
+0x80053235,75,S1&S2,,,,,,no map-call resolved into block
+0x800532f5,75,S1=S2,,,,,,no map-call resolved into block
+0x80055e64,32,S1=S2,,,,,,no map-call resolved into block
+0x80055f04,12,S1-only,,,,,,no map-call resolved into block
+0x800560f5,1599,S1&S2,0x8005650c,axis,FUN_800fed30,lookup_kennfeld_map_800a2e0c,1,"[16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000]"
+0x800560f5,1599,S1&S2,0x800564c4,axis,FUN_800fed30,lookup_kennfeld_map_800a2e0c,1,"[16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000]"
+0x800560f5,1599,S1&S2,0x800564b4,data,FUN_800fed30,lookup_kennlinie_800a2cd0,1,"[13248, 13248, 12880, 12848, 12624, 12080, 11040, 8512]"
+0x80056764,688,S1&S2,0x800568b4,data,FUN_800fed30,lookup_kennlinie_800a2cd0,1,"[12752, 12704, 12688, 13008, 12880, 12080, 11040, 9456]"
+0x80057620,191,S1=S2,0x80057620,axis,FUN_8014e668,lookup_kennfeld_map_800a2ddc,1,"[973, 973, 973, 973, 973, 973, 973, 973]"
+0x8005774e,21,S1=S2,,,,,,no map-call resolved into block
+0x80057be8,364,S1=S2,,,,,,no map-call resolved into block
+0x8005ef0c,64,S1=S2,,,,,,no map-call resolved into block
+0x8006567a,166,S2-only,,,,,,no map-call resolved into block
+0x8006d3ac,152,S2-only,,,,,,no map-call resolved into block
+0x80074084,128,S1=S2,,,,,,no map-call resolved into block
+0x8007865b,129,S1=S2,,,,,,no map-call resolved into block
+0x8007870e,142,S1=S2,,,,,,no map-call resolved into block
+0x800787c2,154,S1=S2,,,,,,no map-call resolved into block
+0x8007a38c,7,S1&S2,,,,,,no map-call resolved into block

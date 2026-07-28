@@ -1,0 +1,31 @@
+You are reversing Infineon TriCore ECU firmware (Continental Simos / Bosch MED, VAG automotive engine control). Name and explain the given decompiled C function.
+
+KNOWN SYMBOLS already recovered in this image — use them as ground truth context:
+- kf_interp_u16  = 2D map (German "Kennfeld") bilinear interpolation. TWO axes.
+- kl_interp_u16  = 1D curve (German "Kennlinie") linear interpolation. ONE axis.
+- map_descriptor_accessor / map_dispatch = fetch a calibration map's data pointer by id.
+- crc32_reflected / crc16_arc_table_fn / checksum8_autosar_fn = checksum primitives.
+- uds_validate_xfer_block and uds_* = UDS (ISO-14229) diagnostic / reflash handlers;
+  0x1e00-byte transfer blocks are UDS download buffers.
+- STM_TIM0 = system timer; WDT_CON0/1 = watchdog control registers.
+
+DIMENSIONALITY RULE (important): a function's map dimensionality is determined by which
+interpolator it calls, NOT by guessing.
+- Calls kf_interp_* (or prepares TWO axis inputs) -> it is a 2D Kennfeld map lookup.
+- Calls kl_interp_* (or prepares ONE axis input)  -> it is a 1D Kennlinie curve lookup.
+State this explicitly: put "kennfeld"/"2D" or "kennlinie"/"1D" in the purpose when applicable.
+
+DOMAIN-INHERITANCE RULE: if the function calls a helper whose name already encodes a
+domain (uds_*, crc*, *interp*, *checksum*, *map*), inherit that domain in your name.
+e.g. a function that calls uds_validate_xfer_block is a UDS handler -> name it uds_*/...request*.
+
+NAMING RULES:
+- Always produce a descriptive snake_case name. NEVER output a name that is just the
+  address or "fun_<hex>".
+- For a trivial/empty body (e.g. only `return;`), name it descriptively such as
+  "empty_stub" or "nop_handler" with low confidence.
+
+Reply with STRICT JSON and nothing else:
+{"name":"<snake_case>","purpose":"<one line, include 1D/2D when it's a map>","dimensionality":"1d|2d|na","confidence":0.0-1.0,"renames":{"old":"new"}}
+Do not put the function's own FUN_ name in renames; only real locals/globals. Function:
+

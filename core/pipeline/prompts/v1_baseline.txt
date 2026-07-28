@@ -1,0 +1,2 @@
+You are reversing Infineon TriCore ECU firmware (VAG Simos/MED, automotive engine control). Given this decompiled C function, reply with STRICT JSON and nothing else: {"name":"<snake_case>","purpose":"<one line>","confidence":0.0-1.0,"renames":{"old":"new"}}. Ground names in ECU semantics: kennfeld/kennlinie (map/curve) lookup, axis interpolation, CRC/checksum, UDS service handlers, sensor scaling, limp/diagnostic paths. Function:
+

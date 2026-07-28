@@ -1,0 +1,21 @@
+# addr      expected_dim   note
+800a2dac    2d    wraps kf_interp_u16
+800a2ddc    2d    wraps kf_interp_u16
+800a2e0c    2d    wraps kf_interp_u16
+800b0a98    2d    wraps kf_interp_u16
+8018eaa0    2d    wraps kf_interp_u16
+800a2cb4    1d    wraps kl_interp_u16
+800a2cd0    1d    wraps kl_interp_u16
+8010375c    na    indirect (FUN_800a2d4c, 2 axis inputs) - ambiguous
+801d1ebe    na    uds validate xfer block
+801d2002    na    uds crc16 caller
+801d283c    na    uds crc16 caller
+801d22a0    na    uds crc16 caller
+801d1050    na    uds request processing
+801dce30    na    crc32 integrity check
+80021660    na    scheduler / main loop
+80020ae8    na    bitfield helper
+80021188    na    misc
+80021370    na    misc
+80021214    na    misc
+80021206    na    misc

@@ -1,0 +1,24 @@
+cal_vaddr,n_refs,functions
+0x80040400,7,800323a4:handle_flash_operation; 801f2224:handle_flash_operation; 801f3d76:flash_write_status_handler; 801f3db4:update_status_flag; 801f3e08:update_flash_status; 801f40de:update_flash_status; 801f4216:handle_uds_transfer
+0x80045738,1,8009ffd0:FUN_8009ffd0
+0x80045d30,1,8009ffd0:FUN_8009ffd0
+0x80046188,1,801a171c:update_control_value
+0x8004cf24,1,8019571c:update_ecu_state
+0x8004d180,1,8019571c:update_ecu_state
+0x80051e60,1,8019d72c:update_map_descriptor
+0x80051e6c,1,8019d82c:update_map_descriptor
+0x80051e78,1,8019d72c:update_map_descriptor
+0x80051e84,1,8019d82c:update_map_descriptor
+0x8005852c,1,8010375c:process_sensor_data
+0x80058540,1,8010375c:process_sensor_data
+0x8005854c,1,8010375c:process_sensor_data
+0x8005855c,1,8010375c:process_sensor_data
+0x8005856c,1,8010375c:process_sensor_data
+0x8005b2d4,1,801b5900:FUN_801b5900
+0x8005b2dc,1,801b5900:FUN_801b5900
+0x8005b2e4,1,801b5900:FUN_801b5900
+0x8005b2ec,1,801b5900:FUN_801b5900
+0x8005b2f4,1,801b5900:FUN_801b5900
+0x8006cee4,1,8018eaa0:update_engine_control
+0x8006cef0,1,8018eaa0:update_engine_control
+0x8006cf64,1,8018eaa0:update_engine_control

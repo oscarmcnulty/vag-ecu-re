@@ -1,0 +1,48 @@
+MIT License
+
+Copyright (c) 2026 Oscar McNulty
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+SCOPE NOTE — what this license does and does not cover
+
+This MIT grant covers the ORIGINAL WORK in this repository: the analysis
+tooling (core/), the pipeline scripts, and the documentation authored here.
+
+It does NOT and CANNOT grant any rights in third-party material that this
+project analyzes or references but does not contain:
+
+  - ECU firmware images are copyrighted works of their manufacturers
+    (Continental, Bosch, Volkswagen AG). They are NOT included in this
+    repository (see .gitignore) and must be supplied by the user from a
+    vehicle they own.
+
+  - Decompiled/disassembled C is a DERIVED WORK of that firmware. It is never
+    committed; it is regenerated locally by reproduce.sh. The MIT grant here
+    does not extend to it.
+
+  - Manufacturer calibration documentation (Funktionsrahmen / A2L / DAMOS) is
+    the property of its authors. Indexes or excerpts derived from such
+    documents are not redistributed here.
+
+For research and personal-vehicle use only. Nothing here is authorization to
+modify a vehicle you do not own or to operate one in a manner that violates
+applicable safety or emissions regulations.

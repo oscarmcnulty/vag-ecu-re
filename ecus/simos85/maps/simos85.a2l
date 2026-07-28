@@ -1,0 +1,420 @@
+ASAP2_VERSION 1 71
+/begin PROJECT SIMOS85 "VAG Simos8.5 recovered calibration"
+  /begin MODULE SIMOS85 ""
+    /begin MOD_COMMON ""
+      BYTE_ORDER MSB_LAST
+      ALIGNMENT_BYTE 1
+      ALIGNMENT_WORD 2
+    /end MOD_COMMON
+    /begin COMPU_METHOD CM_IDENTITY "1:1" RAT_FUNC "%.3f" "-"
+      COEFFS 0 1 0 0 0 1
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L0 "phys=0.390625*x+0" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 0.390625 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L1 "phys=1*x+0" LINEAR "%.5f" "km/h"
+      COEFFS_LINEAR 1 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L2 "phys=0.01*x+0" LINEAR "%.5f" "km/h"
+      COEFFS_LINEAR 0.01 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L3 "phys=0.0078125*x+0" LINEAR "%.5f" "km/h"
+      COEFFS_LINEAR 0.0078125 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L4 "phys=0.001*x+0" LINEAR "%.5f" "m/s^2"
+      COEFFS_LINEAR 0.001 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L5 "phys=0.005*x+0" LINEAR "%.5f" "m/s^2"
+      COEFFS_LINEAR 0.005 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L6 "phys=2*x+0" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 2 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L7 "phys=32*x+0" LINEAR "%.5f" "RPM"
+      COEFFS_LINEAR 32 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L8 "phys=1*x-40" LINEAR "%.5f" "C"
+      COEFFS_LINEAR 1 -40
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L9 "phys=0.75*x-48" LINEAR "%.5f" "C"
+      COEFFS_LINEAR 0.75 -48
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L10 "phys=0.004*x+0" LINEAR "%.5f" "ms"
+      COEFFS_LINEAR 0.004 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L11 "phys=5.44706*x+0" LINEAR "%.5f" "mg/stk"
+      COEFFS_LINEAR 5.44706 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L12 "phys=0.03125*x-1024" LINEAR "%.5f" "Nm"
+      COEFFS_LINEAR 0.03125 -1024
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L13 "phys=1*x+0" LINEAR "%.5f" "Gear"
+      COEFFS_LINEAR 1 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L14 "phys=1*x+0" LINEAR "%.5f" "RPM"
+      COEFFS_LINEAR 1 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L15 "phys=0.03125*x+0" LINEAR "%.5f" "Nm"
+      COEFFS_LINEAR 0.03125 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L16 "phys=0.0211948*x+0" LINEAR "%.5f" "Engine Air Charge"
+      COEFFS_LINEAR 0.0211948 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L17 "phys=3.05176e-05*x+0" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 3.05176e-05 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L18 "phys=0.0423896*x+0" LINEAR "%.5f" "mg/stk"
+      COEFFS_LINEAR 0.0423896 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L19 "phys=0.03125*x-1024" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 0.03125 -1024
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L20 "phys=0.03125*x+0" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 0.03125 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L21 "phys=0.000265336*x+0" LINEAR "%.5f" "MPa"
+      COEFFS_LINEAR 0.000265336 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L22 "phys=0.0211948*x+0" LINEAR "%.5f" "mg/stk"
+      COEFFS_LINEAR 0.0211948 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L23 "phys=0.000265*x+0" LINEAR "%.5f" "MPa"
+      COEFFS_LINEAR 0.000265 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L24 "phys=0.375*x+0" LINEAR "%.5f" "Deg CR"
+      COEFFS_LINEAR 0.375 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L25 "phys=0.00085*x-27.8528" LINEAR "%.5f" "m/s^2"
+      COEFFS_LINEAR 0.00085 -27.8528
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L26 "phys=1.5259e-05*x+0" LINEAR "%.5f" "norm"
+      COEFFS_LINEAR 1.5259e-05 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD CM_L27 "phys=0.000976563*x+0 (unity=1024)" LINEAR "%.5f" "-"
+      COEFFS_LINEAR 0.000976563 0
+    /end COMPU_METHOD
+    /begin RECORD_LAYOUT RL_V_UBYTE
+      FNC_VALUES 1 UBYTE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_V_UWORD
+      FNC_VALUES 1 UWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_V_SWORD
+      FNC_VALUES 1 SWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_AX_UBYTE
+      AXIS_PTS_X 1 UBYTE INDEX_INCR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_AX_UWORD
+      AXIS_PTS_X 1 UWORD INDEX_INCR DIRECT
+    /end RECORD_LAYOUT
+    /begin AXIS_PTS AP_80042285 "" 0x80042285 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L13 7 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8004447f "" 0x8004447f NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L9 6 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8004448d "" 0x8004448d NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L8 4 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8005577d "" 0x8005577d NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L13 10 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80055882 "" 0x80055882 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L14 8 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80055896 "" 0x80055896 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L14 12 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_800558c6 "" 0x800558c6 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L13 8 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80055946 "" 0x80055946 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_IDENTITY 12 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80055982 "" 0x80055982 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_IDENTITY 8 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80056dd2 "" 0x80056dd2 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L16 12 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80056e31 "" 0x80056e31 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 16 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80059cf9 "" 0x80059cf9 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 12 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8005a4c6 "" 0x8005a4c6 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L2 6 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8005a4f6 "" 0x8005a4f6 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L26 6 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8005a782 "" 0x8005a782 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L22 10 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8005a811 "" 0x8005a811 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 8 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8006fa62 "" 0x8006fa62 NO_INPUT_QUANTITY RL_AX_UWORD 0 CM_L18 12 0 65535
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_8006fae5 "" 0x8006fae5 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 16 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80073bd5 "" 0x80073bd5 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L11 10 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80073c35 "" 0x80073c35 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 8 0 255
+    /end AXIS_PTS
+    /begin AXIS_PTS AP_80073e69 "" 0x80073e69 NO_INPUT_QUANTITY RL_AX_UBYTE 0 CM_L7 8 0 255
+    /end AXIS_PTS
+    /begin CHARACTERISTIC lpfp_max_duty "Maximum Fuel Pump Duty Cycle (lpfp_max_duty)"
+      VALUE 0x80043256 RL_V_UBYTE 0 CM_L0 0 99.6094
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_EGAS_monitor_twin "15 km/h; verified (can-trace). EGAS-L2-monitor twin (referenced by egas_l2_monitor_cal_init@800a0c9c) -- NOT the operative cruise-speed floor (that is the u8 pair at file 0x794ef/0x794f2). EGAS-L2 monitor speed gate VS_MON < C_VS_MIN_CRU_MON; loaded by 0x800a0c9c (egas_l2_monitor_cal_init) with ^0xff ASIL verify; FR fig.14.16.5 p2202; stock-clean in Stage1/2."
+      VALUE 0x800456c0 RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_alt_EGAS_monitor_twin "15 km/h; verified (can-trace). EGAS-L2-monitor twin -- NOT the operative cruise-speed floor (u8 pair at file 0x794ef/0x794f2). Co-equal alternate to 0x456c0 (same L2 initializer); the separating literal compare runs in the non-decompiled monitor layer. FR fig.14.16.6 p2203."
+      VALUE 0x800456bd RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_OFF "13 km/h; medium confidence. Likely MON-2 hysteresis/clear threshold (15-2); read indexed by monitor code, not by 0x800a0c9c; FR p2351."
+      VALUE 0x800456be RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_OFF_alt "13 km/h; medium. Second 13-valued hysteresis partner in the L2 monitor cal block 0x456bd..0x456c5."
+      VALUE 0x800456c3 RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_functional "3.0 km/h (raw 384, u16 LE); verified. C_VS_MIN_CRU functional low-speed gate: read at cruise_torque_pi_controller 0x801e9b86:301 as DAT_d000d644 < *(u16)(0xa007a204+0x66) (flash 0x8007a26a; 0xa0 alias). Below this ego speed the cruise torque PI controller takes its near-standstill branch (sets DAT_d000e2c5, feeds integrator reset gate). SCALE = 1/128 km/h (0.0078125) -- forced by the direct compare to DAT_d000d644 (=1/128 km/h); 384/128 = 3.0. Supersedes the earlier 0.01->3.84 reading. Distinct from the 15 km/h L2-monitor floor C_VS_MIN_CRU_MON @0x794ef/0x794f2; co-equal with the 3.0 km/h creep gate @0x80079536. = FR C_VS_MIN_CRU (p.12415, 'minimal vehicle speed for cruise activation'); FR lists res 0.01 (->3.84) but the in-code raw compare to the 1/128 signal makes 1/128 (->3.0) operative. See cruise_control_flow.md."
+      VALUE 0x8007a26a RL_V_UWORD 0 CM_L3 0 511.992
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_feature_enable_bitfield_0x7a247 "0x01 stock; verified. ACC sub-feature enable bits read by 0x801e9b86 as *(byte)(0xa007a204+0x43) = flash file 0x7a247. bit4 = desired-accel (ACC_Sollbeschleunigung) shaping path; bits1/3 = active-decel paths; bits5/6/7 = alt setpoint/threshold selects. All off at 0x01 => torque-shaping disabled. Bitfield/hex."
+      VALUE 0x8007a247 RL_V_UBYTE 0 CM_IDENTITY 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC c_vs_max_aeb_act "c_vs_max_aeb_act"
+      VALUE 0x80043c38 RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_operative_0x794ef "15 km/h; verified (firmware u8=15). OPERATIVE cruise-speed floor: cal(0x800793a0+0x14f)=flash 0x800794ef, compared da54 <= cal*0x80 (<=15 km/h) at 80102f60:1583 -> debounce d000d79a -> d88b bit5. FR ch.14.16.5. This is the real 15 km/h floor (see acc_flow.md sec.3); distinct from the EGAS-L2 monitor twin at 0x456c0. = FR C_VS_MIN_CRU_MON (p.2196, 'Minimum threshold for vehicle speed control active', = C_VS_MIN_CRU_OFF-2 per p.2351). Move with 0x794f2."
+      VALUE 0x800794ef RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_operative_0x794f2 "15 km/h; verified (firmware u8=15). OPERATIVE cruise-speed floor twin: cal(0x800793a0+0x152)=flash 0x800794f2, compared da54 <= cal*0x80 (DCC-masked) at 80102f60:1645 -> d000d8ab -> d7a7. Move together with 0x794ef to shift the 15 km/h floor."
+      VALUE 0x800794f2 RL_V_UBYTE 0 CM_L1 0 255
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_creep_enable_speed_gate_C_VS_MIN_CRU_path "3.0 km/h; verified (firmware u16=384). cal(0x800793a0+0x196)=flash 0x80079536, compared 384 <= da54 at 80102f60:725 -> d88c bit4 = 'moving >= 3 km/h' discriminator (switches ACC status branches standstill<->driving; one AND-term of the dead fatal-deactivation path). Scale 1/128 km/h (X/128). = FR C_VS_MIN_AC_CTL_CRU (p.12502, 'Lower limit of vehicle speed for acceleration control'; candidate). Old 0x180=384 immediate = 3 km/h under confirmed 1/128 scale (NOT 15). See cruise_control_flow.md."
+      VALUE 0x80079536 RL_V_UWORD 0 CM_L3 0 511.992
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC AC_DCRU_PLAUS_L2_min_3_0 "-3.0 m/s2; verified (firmware s16=-3000). L2 plausibility decel-band minimum at flash 0x80043514, scale 0.001 m/s2. Used by L2 plausibility monitor 800c553c; DTC-isolated (NOT the status/functional decel path). If lowering the functional -3.0 clamp, move this L2 twin too or the L2 monitor faults."
+      VALUE 0x80043514 RL_V_SWORD 0 CM_L4 -32.768 32.767
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC AC_DCRU_PLAUS_L2_max_2_0 "+2.0 m/s2; verified (firmware s16=2000). L2 plausibility decel-band maximum at flash 0x80043512, scale 0.001 m/s2."
+      VALUE 0x80043512 RL_V_SWORD 0 CM_L4 -32.768 32.767
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC AC_DCRU_PLAUS_L2_rate "32; verified (firmware s16=32). L2 plausibility rate term at flash 0x80043510 (raw, scale unconfirmed)."
+      VALUE 0x80043510 RL_V_UWORD 0 CM_IDENTITY 0 65535
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_engine_torque_decel_limit_0_82 "-0.82 m/s2; verified (firmware s16=-164, signed). Engine-torque ACC decel FLOOR at flash 0x80079982 (BESCH_SOLLWERTBEGRENZUNG struct 0x80079940 +0x42), scale 0.005 m/s2. Engine caps its OWN ACC engine-braking authority here; harder decel is delegated to ESP brakes. Read by 801e6df0. More negative = harder engine-side decel. SECONDARY lever -- the primary -3.0 ESP-brake cap is the 0x5b71c curve."
+      VALUE 0x80079982 RL_V_SWORD 0 CM_L5 -163.84 163.835
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_engine_torque_accel_limit_1_64 "+1.64 m/s2; verified (firmware s16=+328, signed). Engine-torque ACC accel CEILING at flash 0x80079980 (BESCH_SOLLWERTBEGRENZUNG struct 0x80079940 +0x40), scale 0.005 m/s2. Accel-side companion that bounds the engine-torque ACC setpoint to [-0.82,+1.64] together with the 0x80079982 floor. NOT a decel lever -- added for pair completeness."
+      VALUE 0x80079980 RL_V_SWORD 0 CM_L5 -163.84 163.835
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC Cruise_torque_RISING_rate_limit_clutch_close_re_engage_smoothness "ACC/cruise engine-torque rising slope limiter (80141904); lower=smoother brake->drive torque pickup. NOT indexed by ACC_Dynamik (fixed). Cand C_TQ_GRD_NORM_CLU_CLOSE. RESULTS U62."
+      VALUE 0x80043652 RL_V_UWORD 0 CM_L6 0 131070
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC Cruise_torque_FALLING_rate_limit_clutch_open_release "ACC/cruise engine-torque falling slope limiter (80141904). Cand C_TQ_GRD_CLU_OPEN. RESULTS U62."
+      VALUE 0x80043650 RL_V_UWORD 0 CM_L6 0 131070
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_Dynamik_torque_scale_INERT_all_4_modes_500 "Value the ACC_Dynamik 4-way switch (8013e47c) selects; all 4 branches = this (0x43a96/aa2/aa4), so ACC_Dynamik has no effect. Edit to change the shared torque-rate scale. RESULTS U62."
+      VALUE 0x80043a96 RL_V_UWORD 0 CM_IDENTITY 0 65535
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC Max_RPM_for_Engine_Oil_Temp "Max RPM for Engine Oil Temp"
+      CURVE 0x80044518 RL_V_UBYTE 0 CM_L7 0 8160
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L8 4 0 255
+        AXIS_PTS_REF AP_8004448d
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC Max_RPM_for_Engine_Coolant_Temp "Max RPM for Engine Coolant Temp"
+      CURVE 0x80044512 RL_V_UBYTE 0 CM_L7 0 8160
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L9 6 0 255
+        AXIS_PTS_REF AP_8004447f
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC Ignition_Dwell_Time "Ignition Dwell Time"
+      MAP 0x80073dac RL_V_UWORD 0 CM_L10 0 262.14
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 8 0 255
+        AXIS_PTS_REF AP_80073c35
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L11 10 0 255
+        AXIS_PTS_REF AP_80073bd5
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_at_0 "Maximum allowed torque at clutch due to torque limitation depending on gear ratio by AT (ip_tq_pow_max_at[0])"
+      MAP 0x800560f4 RL_V_UWORD 0 CM_L12 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 10 0 255
+        AXIS_PTS_REF AP_8005577d
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L14 12 0 65535
+        AXIS_PTS_REF AP_80055896
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_eco_0 "Target torque limitation at clutch during active efficiency mode (ip_tq_pow_max_eco[0])"
+      MAP 0x80056554 RL_V_UWORD 0 CM_L12 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 10 0 255
+        AXIS_PTS_REF AP_8005577d
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L14 12 0 65535
+        AXIS_PTS_REF AP_80055896
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_eco_1 "Target torque limitation at clutch during active efficiency mode (ip_tq_pow_max_eco[1])"
+      MAP 0x80056644 RL_V_UWORD 0 CM_L12 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 10 0 255
+        AXIS_PTS_REF AP_8005577d
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L14 12 0 65535
+        AXIS_PTS_REF AP_80055896
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tqi_ref "Indicated engine torque at reference conditions (ip_tqi_ref)"
+      MAP 0x80057bd4 RL_V_UWORD 0 CM_L15 0 2047.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L16 12 0 65535
+        AXIS_PTS_REF AP_80056dd2
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 16 0 255
+        AXIS_PTS_REF AP_80056e31
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_mff_cor_1 "Operating point correction for the injected fuel mass (ip_mff_cor_1)"
+      MAP 0x800711e4 RL_V_UWORD 0 CM_L17 0 1.99997
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 16 0 255
+        AXIS_PTS_REF AP_8006fae5
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L18 12 0 65535
+        AXIS_PTS_REF AP_8006fa62
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_mff_cor_2 "Operating point correction for the injected fuel mass (ip_mff_cor_2)"
+      MAP 0x80071c24 RL_V_UWORD 0 CM_L17 0 1.99997
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 16 0 255
+        AXIS_PTS_REF AP_8006fae5
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L18 12 0 65535
+        AXIS_PTS_REF AP_8006fa62
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_at_1 "Maximum allowed torque at clutch due to torque limitation depending on gear ratio by AT (ip_tq_pow_max_at[1])"
+      MAP 0x800561e4 RL_V_UWORD 0 CM_L12 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 10 0 255
+        AXIS_PTS_REF AP_8005577d
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L14 12 0 65535
+        AXIS_PTS_REF AP_80055896
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_mt_4wd_0 "Maximum allowed torque at clutch due to torque limitation depending on gear ratio by MT_4WD (ip_tq_pow_max_mt_4wd[0])"
+      CURVE 0x800568b4 RL_V_UWORD 0 CM_L12 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 8 0 65535
+        AXIS_PTS_REF AP_800558c6
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_ef "Maximum torque at clutch due to erroneous exhaust flap "
+      CURVE 0x80056734 RL_V_UWORD 0 CM_L19 -1024 1023.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_IDENTITY 8 0 65535
+        AXIS_PTS_REF AP_80055982
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_cam_in "Maximum torque at clutch due to erroneous inlet cam position "
+      CURVE 0x800564b4 RL_V_UWORD 0 CM_L20 0 2047.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L14 8 0 65535
+        AXIS_PTS_REF AP_80055882
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_mt_0 "Maximum allowed torque at clutch due to torque limitation depending on gear ratio by MT (ip_tq_pow_max_mt[0])"
+      MAP 0x80056764 RL_V_UWORD 0 CM_L20 0 2047.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 7 0 255
+        AXIS_PTS_REF AP_80042285
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_IDENTITY 12 0 65535
+        AXIS_PTS_REF AP_80055946
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_tq_pow_max_mt_1 "Maximum allowed torque at clutch due to torque limitation depending on gear ratio by MT (ip_tq_pow_max_mt[1])"
+      MAP 0x8005680c RL_V_UWORD 0 CM_L20 0 2047.97
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L13 7 0 255
+        AXIS_PTS_REF AP_80042285
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_IDENTITY 12 0 65535
+        AXIS_PTS_REF AP_80055946
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_fup_sp_dui "Fuel pressure setpoint for double injection mode (ip_fup_sp_dui)"
+      MAP 0x8005edbc RL_V_UWORD 0 CM_L21 0 17.3888
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L22 10 0 65535
+        AXIS_PTS_REF AP_8005a782
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 8 0 255
+        AXIS_PTS_REF AP_8005a811
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_fup_sp_pu "Fuel pressure setpoint for PU and PUC engine operation (ip_fup_sp_pu)"
+      MAP 0x8005ef4c RL_V_UWORD 0 CM_L23 0 17.3668
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L22 10 0 65535
+        AXIS_PTS_REF AP_8005a782
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 8 0 255
+        AXIS_PTS_REF AP_8005a811
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_fup_sp_hom "Fuel pressure setpoint for homogenous engine operation (ip_fup_sp_hom)"
+      MAP 0x8005ee5c RL_V_UWORD 0 CM_L21 0 17.3888
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L22 10 0 65535
+        AXIS_PTS_REF AP_8005a782
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 12 0 255
+        AXIS_PTS_REF AP_80059cf9
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_iga_ad_1_inc_knk "Increasing value of knock integrated correction when knock is detected (ip_iga_ad_1_inc_knk)"
+      CURVE 0x80044fc9 RL_V_UBYTE 0 CM_L24 0 95.625
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 8 0 255
+        AXIS_PTS_REF AP_80073e69
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_iga_inc_knk "Increasing value of knock integrated correction when knock is detected (ip_iga_inc_knk)"
+      CURVE 0x80044fd1 RL_V_UBYTE 0 CM_L24 0 95.625
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L7 8 0 255
+        AXIS_PTS_REF AP_80073e69
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_decel_limit_curve_3_0_clamp_C_AC_SP_LIM_NEG_path "THE -3.0 m/s2 brake-decel clamp (openpilot decel lever). Values @file 0x5b71c (6x u16), axis @file 0x5a4c6 (6x u16). Read at 8013c5d4:220 (acc_brake_request_formation); input = filtered vehicle-speed class (Ramd0007ce8). All 6 cells = 0x7237 = -3.000 m/s2 (FLAT). z-encoding OFFSET-BINARY u16 LE: phys=(X-32768)*0.00085; 0x6db1=-3.984 (packer floor), 0x8000=0. Lowering cells (0x7237->0x6db1) RELAXES the cap (allows harder braking) since 8013c5d4:418 does max(request,cell). x-axis scale 0.01 km/h (=10/20/50/80/120/180 km/h) INFERRED from filtered d5618 vehicle-speed class -- see acc_flow.md. Recompute cal checksum after edit."
+      CURVE 0x8005b71c RL_V_UWORD 0 CM_L25 -27.8528 27.8519
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L2 6 0 65535
+        AXIS_PTS_REF AP_8005a4c6
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ACC_decel_limit_curve_ALT_mode_3_0_d000a757_path "Alt-mode variant of the -3.0 decel clamp, selected when d000a757!=0. Values @file 0x5b728 (6x u16, =5x -3.0 then 0), axis @file 0x5a4f6 (6x u16 = 0..65535 normalized). First value cell overlaps the primary curve -> contiguous 11x 0x7237 cluster at file 0x5b71c-0x5b730. z-encoding same OFFSET-BINARY: phys=(X-32768)*0.00085. x-axis is a normalized 0..1 input (X/65535) -- exact input signal not pinned; edit values, treat axis as raw fraction."
+      CURVE 0x8005b728 RL_V_UWORD 0 CM_L25 -27.8528 27.8519
+      /begin AXIS_DESCR COM_AXIS NO_INPUT_QUANTITY CM_L26 6 0 65535
+        AXIS_PTS_REF AP_8005a4f6
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC speed_limiter_setpoint_table_43c2c "ROLE (VERIFIED, code): vehicle-speed (Vmax) limiter setpoint table. 5x u16 @0x43c2c indexed by DAT_d000b3bb (0-4; [0-3]=full, [4]=reduced), read as *(u16*)(sel*2 + 0x80043c2c) in 800dd3a4.c:70-74 and 8017338c.c:33-46. The value is consumed IN VEHICLE-SPEED UNITS -- speed error = clamp(Ramd0005618 - setpoint) -> limiter flag UNK_d0001711 + PI governor -> limiting torque Ramd0007fec (8017338c.c:456-533). A quantity subtracted from road speed to form an error MUST be a speed => not torque/rpm/temp/load. FR-NAME (CANDIDATE): V_PVS_MAX / VHSL ch.71 (def p.11385) -- right chapter+role, but FR carries no addresses so the exact token is unproven. SCALING (CANDIDATE): 1/128 km/h => 32000=250.0, stock 20300~159. TUNE: [0-3] 20300->30000->32000."
+      VAL_BLK 0x80043c2c RL_V_UWORD 0 CM_L3 0 511.99
+      MATRIX_DIM 5
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC tq_factor_block_55e64_unattributed "Factor block (unity=0x8000=>1.0), 16x u16 @file 0x55e64, stock 0.60-0.77; BOTH tunes overwrite to unity (a torque/charge reduction removed). CONSUMER UNRESOLVED: 0x55e64 is read nowhere in the decompiles (consumed via an unresolved base+index). The adjacent POW/MAX factor chain in FUN_800fed30 that writes max-torque Ramd0007a84 via *0x8000 reads 0x55e84/0x55da4/0x55e24/0x55d44, NOT this block -- the earlier FAC_TQI_POW_MAX/FUN_800fed30 attribution was a +16B window artefact and is WITHDRAWN. Confidence LOW."
+      VAL_BLK 0x80055e64 RL_V_UWORD 0 CM_L17 0 2
+      MATRIX_DIM 16
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC curve_55f04_factor "1-D factor curve (unity=0x8000), 6x u16 @file 0x55f04, stock 31949 (0.975); STAGE1 ONLY -> 0x7FFF, Stage2 stock. Consumer FUN_801647c0 (lookup_kennlinie 0x55f04 over axis 0x422f2); role not yet pinned. NOTE the min-torque reserve mechanism (scales Ramd0007b14-Ramd0009e18 -> min-torque limit Ramd0007a80 in FUN_801006d0) belongs to the ADJACENT curve 0x55f10, NOT this block -- earlier FUN_801006d0 attribution WITHDRAWN. Confidence LOW."
+      VAL_BLK 0x80055f04 RL_V_UWORD 0 CM_L17 0 2
+      MATRIX_DIM 6
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC tq_upper_limit_57620 "Upper torque-limit value (torque units, raw). 12x u16 @file 0x57620 read by FUN_8014e668 (lookup_kennfeld_map 0x57620, axes 0x56d20/0x56e60) and slew/hysteresis-limited into Ramd0007af8; FUN_8011a6ac then applies it as a DIRECT upper clamp min(torque, Ramd0007af8*16) (8011a6ac.c:143-155). Lowering 973->922 (Stage1=Stage2; companion @0x5774e 922->891) therefore TIGHTENS this torque cap slightly -- the earlier EFF_TQI_COR_CUS '/1024 reference, biases torque up' reading is WITHDRAWN (it is a torque value, not a factor); FUN_8011c128 is NOT a consumer (it reads 0x576e0). Confidence LOW (role); raw scaling."
+      VAL_BLK 0x80057620 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 12
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC monitor_load_window_4eb6c "ROLE (VERIFIED, code): rpm-indexed upper/lower window (per bank) that a modeled load/charge signal must fall within to ENABLE a diagnostic. FUN_8012df54: upper = kl_interp(0x4eb6c)+tol, lower = kl_interp(0x4eb78)-tol over rpm axis 0x4148d; if lower<=DAT_d000753a<=upper set the enable bit, else 0; the bit is AND-ed into a monitor-enable (never modifies a signal) => a condition gate, not a limit. 2-bank loop. FR-NAME (CANDIDATE): ABC_INC_LOAD_* family -- windowed signal is a modeled load (float charge model FUN_800bc788), exact FR token not pinned. TUNE: STAGE2 -> 0x002f (first 6) + 0xffff (next 6) = empty window => monitor never enables (defeated); Stage1 stock. Load-signal scaling not pinned -> raw."
+      VAL_BLK 0x8004eb6c RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 12
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC block_6d3ac_consumer_unresolved "Correction/threshold block (unity=1024), 12x u16 @0x6d3ac (1014,968,916,894,1024...; non-monotonic = data, not an axis). CONSUMER UNRESOLVED: no map-call resolves INTO [0x6d3ac,0x6d444). The injection-monitor FUN_8017ecb8 reads grids at 0x6d444/0x6d504/0x6d5c4/0x6d684/0x6d8a4 -- all AT or PAST this block's end -- so the earlier ip_mff_mon_thresh/FUN_8017ecb8 binding was an adjacency artefact and is WITHDRAWN (same trap as 0x55e64). Fuel/injection region (near ip_mff_cor@0x711e4). STAGE2 ONLY reshapes (1014->993, tail 1017->956); Stage1 stock. Confidence LOW; binding unverified."
+      VAL_BLK 0x8006d3ac RL_V_UWORD 0 CM_L27 0 64
+      MATRIX_DIM 12
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC torque_monitor_permissible_dev_40940 "ROLE (VERIFIED, code): engine-torque monitor two-sided permissible-deviation curves. FUN_8013273c builds deviation = min(torque_model@0x49174, Ramd0007616) - ref, tests it vs kl_interp curves 0x4093e (positive/upper) and 0x40946 (negative/lower), offset-binary (thr-0x8000); exceedance -> debounce -> fault 0x10/0x11 -> DTC latch update_control_flags_800a8b20 (DAT_d0009fbc..). The ONLY consequence is a fault/DTC (no torque/actuator output on this path) => a MONITOR, not a control clamp. Larger cell => harder to trip. FR-NAME (CANDIDATE): Momentenueberwachung / EGAS L2 -- role-accurate, but the specific FR characteristic token is not pinned (several torque monitors exist). TUNE: STAGE2 first cells @0x40940 -> 0xFFFF => over-torque can never assert (monitor defeated); Stage1 stock. Raw internal torque unit."
+      VAL_BLK 0x80040940 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 3
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC redundant_estimate_dev_tol_40abc "ROLE (VERIFIED, code): max-allowed |deviation| between two redundant filtered estimates in a rationality monitor. FUN_80163528 forms pairwise clamped-subtracts (800a5798) of {d0007600, d00075be, d00075c4}; iVar20 = abs(d00075be - d00075c4); if sRam80040abc < iVar20 -> debounce -> fault UNK_d0001f6f. Compared DIRECTLY against an absolute difference to raise a fault => a deviation tolerance, not a setpoint/gain. FR-NAME: UNKNOWN -- the physical signal d00075be/c4 is not identified, so no FR token is assigned. TUNE: STAGE2 1508->2412 (+60%, looser); Stage1 stock. ROLE verified; which-signal identity unproven."
+      VALUE 0x80040abc RL_V_UWORD 0 CM_IDENTITY 0 65535
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC thermal_permissive_gate_thresh "Thermal permissive-gate threshold (EGTR/BTS family). 1x u16 @file 0x423ce. FUN_800ffba8:614 compares (<=) it to the MEAN of the two offset-corrected per-bank modeled temps ((DAT_d0009814-0x1112)+(DAT_d0009816-0x1112))>>1; when the mean REACHES the threshold the permissive flag DAT_d0000fa1 is CLEARED (high temp inhibits the enable) -- it gates a permissive, NOT a limit-request assert (earlier 'half the max / protection engages' wording corrected: it is a SUM>>1=mean, and polarity is inverted). STAGE2 ONLY 13600->14400 (+5.9%) => inhibit engages later. Confidence MEDIUM (role)."
+      VALUE 0x800423ce RL_V_UWORD 0 CM_IDENTITY 0 65535
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ip_iga_spark_correction_bank "Ignition spark-advance (IGA/Zuendwinkel) map bank, diff-caught region 0x7865b (+ sibling maps @0x7870e, @0x787c2). FUN_8011d2b4/800cea0c/800d559c interpolate the bank (process_calibration_data_800a5b80 / calculate_adjusted_value_800a5d40) into OFFSET-BINARY per-bank corrections d000b805/d000b808 (=cVar-0x80, signed) that are ADDED into the per-cylinder spark-correction chain (80099e38 -> DAT_d0001821; 800fdb6c -> UNK_d000af8d). Stage1=Stage2 +1..2 raw = more advance (directional). NOTE 0x7865b is odd-aligned, most plausibly the bank AXIS (Stuetzstellen) not the data grid; exact 0x7865b->consumer binding unproven. It is an additive bidirectional correction, not the absolute base angle. Confidence MEDIUM (=ignition domain); raw scaling. MATRIX_DIM = diff extent."
+      VAL_BLK 0x8007865b RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 129
+    /end CHARACTERISTIC
+  /end MODULE
+/end PROJECT

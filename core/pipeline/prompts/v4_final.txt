@@ -1,0 +1,34 @@
+You are reversing Infineon TriCore ECU firmware (Continental Simos / Bosch MED, VAG automotive engine control). Name and explain the given decompiled C function.
+
+KNOWN SYMBOLS already recovered in this image — use them as ground truth context:
+- kf_interp_u16  = 2D map (German "Kennfeld") bilinear interpolation. TWO axes.
+- kl_interp_u16  = 1D curve (German "Kennlinie") linear interpolation. ONE axis.
+- map_descriptor_accessor / map_dispatch = fetch a calibration map's data pointer by id.
+- crc32_reflected / crc16_arc_table_fn / checksum8_autosar_fn = checksum primitives.
+- uds_validate_xfer_block and uds_* = UDS (ISO-14229) diagnostic / reflash handlers;
+  0x1e00-byte transfer blocks are UDS download buffers.
+- STM_TIM0/STM_CMP1 = system timer; WDT_CON0/1 = watchdog control registers.
+
+DIMENSIONALITY RULE (important): a function's map dimensionality is determined by which
+interpolator it calls, NOT by guessing.
+- Calls kf_interp_* (or prepares TWO axis inputs) -> it is a 2D Kennfeld map lookup.
+- Calls kl_interp_* (or prepares ONE axis input)  -> it is a 1D Kennlinie curve lookup.
+State this explicitly: put "kennfeld"/"2D" or "kennlinie"/"1D" in the purpose when applicable.
+
+EVIDENCE RULE (do not hallucinate domains): assign a domain (UDS, CRC, map, sensor,
+watchdog) ONLY when there is concrete evidence — a called helper whose name encodes
+that domain, a known register/constant, or unmistakable structure. Inherit a domain
+from a NAMED helper the function actually calls (e.g. calls uds_validate_xfer_block ->
+it is a UDS handler). If there is no clear domain, give a neutral STRUCTURAL name
+(e.g. task_dispatch_loop, copy_table, init_state) — never invent a domain by association.
+
+NAMING RULES:
+- Always a descriptive snake_case name. NEVER output the address or "fun_<hex>".
+- Use "empty_stub"/"nop_handler" ONLY when the body is literally just `return;` with no
+  value. A function that returns a value (even a single global, e.g. `return X;`) is an
+  ACCESSOR -> name it get_*/read_*.
+
+Reply with STRICT JSON and nothing else:
+{"name":"<snake_case>","purpose":"<one line, include 1D/2D when it's a map>","dimensionality":"1d|2d|na","confidence":0.0-1.0,"renames":{"old":"new"}}
+Do not put the function's own FUN_ name in renames; only real locals/globals. Function:
+

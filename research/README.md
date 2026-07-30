@@ -1,7 +1,9 @@
 # research/ — exploration scripts (not maintained, not on the reproduce path)
 
 These produced findings recorded in the `ecus/*/maps/RESULTS.md` logs but are **not**
-part of the reproducible pipeline. `ecus/<ecu>/reproduce.sh` never calls anything here.
+part of the reproducible pipeline. Any corpus figure quoted in these files (function counts,
+coverage percentages) is a snapshot from when it was written and was not updated afterwards —
+treat `ecus/<ecu>/analysis/` as the authority for current numbers. `ecus/<ecu>/reproduce.sh` never calls anything here.
 They are kept for provenance — so a reader can see *how* a result was reached — and because
 several are a useful starting point for anyone doing TriCore RE. Expect rough edges:
 hardcoded addresses, one-shot assumptions, no argument validation. Nothing here is covered
@@ -11,8 +13,8 @@ by the reproducibility contract; `core/` is the supported surface.
 
 Ghidra `EmulatorHelper`-driven boot/trace experiments used to pin down dynamic behaviour
 the static decompile could not (which function writes a CAN output shadow, where a decel
-clamp actually fires, etc.). Fourteen variants that grew one from another and share a lot
-of copy-pasted scaffolding (`A`/`zero`/`w32`/`enc`/`rU32` helpers, a boot-to-run-mode
+clamp actually fires, etc.). A family of variants that grew one from another and share a
+lot of copy-pasted scaffolding (`A`/`zero`/`w32`/`enc`/`rU32` helpers, a boot-to-run-mode
 bridge). If you revive this, collapse them into one parameterized emulator first.
 
 ## discovery/
@@ -45,6 +47,14 @@ Small, single-purpose probes used interactively while reversing: range disassemb
 `DecompileAddrs`). Most are one screen of code; several are subsumed by supported tools
 (e.g. `CheckManifest` by `DecompileAll`'s manifest reconciliation, `FindCalXrefs` by
 `core/maps/extract_cal_xrefs.py`).
+
+## handoffs/
+
+Task briefs written to hand a specific investigation to a fresh session — each states what
+was already established, what to build on, and which addresses to start from. They are
+historical working documents, not current documentation: the state they describe is the
+state at the time of writing, and none was revised afterwards. Useful as a record of how a
+line of investigation was framed; read `ecus/<ecu>/maps/RESULTS.md` for where it landed.
 
 ## openpilot/
 

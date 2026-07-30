@@ -78,10 +78,11 @@ python3 core/diff/diff3.py \
 Two disclosures the repo makes up front, because taking a number here at face
 value would be a mistake:
 
-- **Most function names are machine-proposed.** `symbols_merged.csv` carries a
-  `source` column; on Simos 8.5 the split is ~2,515 `llm` vs ~40 `verified` and
-  ~90 traced. An `llm` name is a hypothesis, not a finding. Filter on `source`
-  before citing a name as ground truth.
+- **Most function names are machine-proposed.** `ecus/simos85/analysis/symbols_merged.csv`
+  carries a `source` column (`llm`, `verified`, `re-trace`, `fr-trace`) and the
+  overwhelming majority of rows are `llm`. An `llm` name is a hypothesis, not a
+  finding. Filter on `source` before citing a name as ground truth — that column is
+  the authority, so count it there rather than trusting a figure quoted in prose.
 - **The MED17 image is not a virgin OEM read.** It is a WinOLS export tagged
   `ACC_ENABLE` with checksum correction off — the cal area may already be
   modified, precisely in the ACC/cruise bytes under study. Every MED17 cal

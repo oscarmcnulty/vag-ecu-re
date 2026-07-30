@@ -1,8 +1,8 @@
 # LLM backends for annotation
 
 `core/pipeline/annotate.py` supports two backends. Recommended flow is **hybrid**:
-local model first-passes all ~2069 functions for free, Claude refines the
-high-value subset.
+the local model first-passes the whole corpus for free (one entry per line in
+`ecus/<ecu>/analysis/function_entries.txt`), Claude refines the high-value subset.
 
 ## A. Claude Max via the local CLI (`--backend claude-cli`)
 
@@ -12,7 +12,7 @@ Code headless mode. Highest quality. Mind Max rate limits, so prioritize:
 ```bash
 # annotate only a curated high-value list (one address per line, e.g. 801dc544)
 python3 core/pipeline/annotate.py \
-  --input ecus/simos85/analysis/decompiles \
+  --input ecus/simos85/analysis/decompiles_r \
   --out   ecus/simos85/analysis/annotations \
   --backend claude-cli --addr-list ecus/simos85/analysis/priority.txt
 ```
@@ -34,7 +34,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5-coder:14b
 # serves an OpenAI-compatible API on :11434/v1
 python3 core/pipeline/annotate.py \
-  --input ecus/simos85/analysis/decompiles \
+  --input ecus/simos85/analysis/decompiles_r \
   --out   ecus/simos85/analysis/annotations \
   --backend openai --endpoint http://<gpu-host>:11434/v1 \
   --model qwen2.5-coder:14b
@@ -51,11 +51,11 @@ vllm serve Qwen/Qwen2.5-Coder-14B-Instruct-AWQ --port 8000
 
 ```bash
 # 1) local pass over everything (free)
-python3 core/pipeline/annotate.py --input .../decompiles --out .../annotations \
+python3 core/pipeline/annotate.py --input .../decompiles_r --out .../annotations \
   --backend openai --endpoint http://gpu:11434/v1 --model qwen2.5-coder:14b
 
 # 2) Claude refines the important ones, overwriting their sidecars
-python3 core/pipeline/annotate.py --input .../decompiles --out .../annotations \
+python3 core/pipeline/annotate.py --input .../decompiles_r --out .../annotations \
   --backend claude-cli --addr-list .../priority.txt
 
 # 3) feed merged symbols.csv back into the Ghidra project

@@ -3,7 +3,8 @@
 ECU: Audi Q5 3.0 TFSI, Continental/Siemens **SIMOS 8.5**, project **S859300C**
 MCU: Infineon **TC1796** (TriCore v1.3), little-endian
 Analyzed image: `8R0907551F_Original.bin` (2 MB), load base **0x80000000**
-Tooling: Ghidra 12.1.2 (`tricore:LE:32:tc176x`) + pyghidra, auto-analysis = **2069 functions**
+Tooling: Ghidra 12.1.2 (`tricore:LE:32:tc176x`) + pyghidra. The corpus has grown well past
+what bare auto-analysis finds; `analysis/function_entries.txt` is the current entry set.
 
 ---
 
@@ -124,18 +125,18 @@ during the UDS reflash — not a field persisted in the image.
 
 ---
 
-## 5. Reusable artifacts (in /tmp/opencode/re)
+## 5. Where this now lives
 
-- **Canonical LABELED Ghidra project**: `proj_named/Simos85` — 61 functions named +
-  26 map labels + CRC table labels (90 symbols), verified.
-- Base analyzed project: `proj/Simos85` (2069 functions)
-- Function naming: `track_a_function_names.csv`, `track_a_pdf_glossary.csv`,
-  `track_a_label_xrefs.csv`, `track_a_report.md`
-- Calibration maps: `track_b_maps.csv` (594 objects), `track_b_known_maps.csv` (26
-  tuner-modified maps fully characterized), `track_b_lookup_routines.csv`, `track_b_report.md`
-- Checksum analysis: `track_c_checksum_report.md`, `track_c_results.csv`
-- Applied symbols: `track_d_export_symbols.csv` (90 rows), `track_d_apply_report.md`
-- `pdf_hits.json` (599 Funktionsrahmen pages mentioning checksum/CRC/security)
+The scratch `track_*` CSVs and `proj_named/Simos85` this section used to list were
+one-off outputs under `/tmp` and are gone. Their content was folded into the committed
+store, which is what to read instead:
+
+- Labeled Ghidra project — rebuild with `ecus/simos85/reproduce.sh` (nothing is committed
+  pre-built; the project is regenerated from the metadata below).
+- Function names/comments — `analysis/symbols_merged.csv` (check the `source` column).
+- Function entry points — `analysis/function_entries.txt`.
+- Calibration objects — `maps/simos85.a2l`, the canonical store, with per-object evidence
+  and confidence in each `<description>`.
 
 ## 6. Calibration map engine (for map work)
 

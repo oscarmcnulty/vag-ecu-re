@@ -75,10 +75,11 @@ regenerable). Standalone: `analyzeHeadless ghidra_proj Simos85 -process <bin> -n
 Aggregate to a consumer view with a one-liner, e.g.:
 `awk -F, 'NR>1&&$3!="P"{a[$1]=a[$1]" "$4} END{for(f in a)print f, a[f]}' analysis/cal_reads.csv`
 
-**Image-wide result: 1742 accesses, 293 functions, 395 distinct cal scalars — all in
-0x40718..0x48000 (a1-NEGATIVE offsets).** Hottest scalar 0x80043bc6 is read by 161 functions
-(a global config/state byte). Top consumers e.g. `update_control_flags_800dc00c` (28),
-`process_ecu_data_800f800e` (27).
+**Image-wide result: every folded cal scalar lands in 0x40718..0x48000 (a1-NEGATIVE
+offsets)** — run the command above over `analysis/cal_reads.csv` for the current access /
+function / scalar counts. The hottest scalar is 0x80043bc6, a global config/state byte read
+across a large share of the corpus. Top consumers e.g. `update_control_flags_800dc00c`,
+`process_ecu_data_800f800e`.
 
 **What this reveals — cal is split into two regimes:**
 - **0x40000–0x48000 (Path A, "hot scalars")**: read `a1`+negative-immediate. Fully mapped by the
@@ -120,7 +121,7 @@ stays non-analyzed. See `../maps/decel_limit_flow.md` (2026-07-05 CORRECTION).
 register a0..a15 resolving to a constant in a target window (catches runtime-*indexed* bases formed
 by `addsc.a/add.a`+variable index, which `ResolveCalReads` misses because it only inspects the ld/st
 operand base) — and **IMM** — any instruction carrying a signature immediate (a1-offset 0x5d90/…,
-absolute 0xdd90/…). Image-wide over 3375 fns, **both `0x80` and `0xa0` aliases**, window ±0xe00 around
+absolute 0xdd90/…). Image-wide over the whole corpus, **both `0x80` and `0xa0` aliases**, window ±0xe00 around
 the table: REG(0x80)=0, IMM=0; REG(0xa0) hits only `update_ecu_state_8019571c` forming `0xa004cf24/
 0xa004d180` — a *different* curve, not the decel table. So no analyzed function names the table by
 constant/immediate/indexed-base in either alias, and it's in none of the 13 pointer tables and has no

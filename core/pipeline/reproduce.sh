@@ -8,7 +8,7 @@
 #
 # Every step is conditional on the config declaring the inputs it needs, and SKIPS LOUDLY
 # rather than silently faking a result. That is what makes one driver serve a mature pack
-# (simos85: 3375 named functions, an A2L, a map-lookup framework) and a cold-start pack
+# (simos85: a large named corpus, an A2L, a map-lookup framework) and a cold-start pack
 # (a fresh ECU with nothing but a firmware image) without divergence.
 #
 # --- ecu.conf keys ------------------------------------------------------------------

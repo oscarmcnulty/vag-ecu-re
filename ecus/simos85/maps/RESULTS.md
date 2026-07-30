@@ -28,11 +28,12 @@ controller owns hold). See `FINDINGS.md` for the doc index and the retraction ma
 | 8 | Flash / checksum integrity model | **RESOLVED** — no static cal CRC; integrity at flash-write time | §8, `analysis/RE_findings_checksum.md` |
 | 9 | Cal / map engine | **DOCUMENTED** | §9 |
 
-**Decompilation corpus:** base-register unlock + iterative call-harvest + gap recovery brought the Ghidra
-project to **~7573 functions (manifest) / ~7693 live**; **~76.7 % defined instructions, ~14.4 % defined data,
-~8.9 % undefined** (the residual is genuine cal data + inter-bank padding). **Actual CODE coverage is
+**Decompilation corpus:** base-register unlock + iterative call-harvest + gap recovery grew the Ghidra
+project several-fold over bare auto-analysis; the residual undefined bytes are genuine cal data +
+inter-bank padding. Current entry count is `analysis/function_entries.txt`, and `reproduce.sh` prints
+live coverage percentages at the end of its run. **Actual CODE coverage is
 effectively complete** — nothing in the image linear-decodes as function-calling code outside a defined
-function. Rebuilt deterministically by `ecus/simos85/reproduce.sh` (7 steps) from `analysis/function_entries.txt`.
+function. Rebuilt deterministically by `ecus/simos85/reproduce.sh` from `analysis/function_entries.txt`.
 
 ---
 

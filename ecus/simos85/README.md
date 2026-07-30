@@ -15,7 +15,7 @@ First and reference ECU pack. The `core/` tooling is built against this target.
 |---|---|---|
 | 0x00000–0x20000 | 0x80000000 | Bootloader (SBOOT/CBOOT) — **blank in OBD read** |
 | 0x20000–0x30000 | 0x80020000 | Init/vector pointers |
-| 0x40000–0x70000 | 0x80040000 | **Calibration / maps** (Stage1/2 differ here) |
+| 0x40000–0x80000 | 0x80040000 | **Calibration / maps** (Stage1/2 differ here) — `CAL_LO`/`CAL_HI` in `ecu.conf` |
 | 0x90000–0x1F0000 | 0x80090000 | Main ECU-SW code |
 
 ## Integrity model (solved — see analysis/RE_findings_checksum.md)

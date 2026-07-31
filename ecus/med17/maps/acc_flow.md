@@ -3,8 +3,8 @@
 End-to-end map of the Bosch engine ECU's ACC/cruise longitudinal path — from the received ACC request
 (**ACC_01, 0x109, RX**) through the ACC/decel coordinator to the deceleration + status transmitted to the
 brake/gateway (**TSK_01 0x10a, TSK_02 0x10c, TSK_04 0x10e, all TX**). The MED17 counterpart of the Simos8.5
-`acc_flow.md`. Built 2026-07-24 from the decompiled corpus (`analysis/decompiles_r/`) + firmware reads +
-a 4-agent + main-trace investigation. Load base `0x80000000`; `0xa00xxxxx` = uncached mirror; file off =
+`acc_flow.md`. Built from the decompiled corpus (`analysis/decompiles_r/`) + firmware reads.
+Load base `0x80000000`; `0xa00xxxxx` = uncached mirror; file off =
 `addr & 0x1FFFFFFF`; RAM = `0xd00xxxxx`. Read `can_signal_map.md` first for the CAN infrastructure.
 
 Confidence tags: **[C]** = read the decompile & verified · **[I]** = inferred / architecture-consistent ·
@@ -16,10 +16,10 @@ Confidence tags: **[C]** = read the decompile & verified · **[I]** = inferred /
 > Two structural consequences dominate this whole document:
 > 1. **The byte↔signal wire layout is in flash descriptor tables, not in code** — so exact per-signal bit
 >    offsets are read from the dbc + shadow semantics, not from a readable packer. **[G]**
-> 2. **The ACC controllers address their calibration through base register `a9` — now RESOLVED**
+> 2. **The ACC controllers address their calibration through base register `a9`**
 >    (`a9 = 0xa0103464` = the cal-object table `0x80103464`; `*(a9+off)` = cal object `off/4`). It's in
 >    `ecu.conf` `BASEREGS`, so `reproduce.sh` folds every ACC `*(a9+off)` to a concrete `0x803b_xxxx` cal
->    address. This was the Simos8.5 `a1`-unlock analog; cracked by boot emulation. See `maps/a9_resolution.md`.
+>    address. This is the Simos8.5 `a1`-unlock analog; resolved by boot emulation. See `maps/a9_resolution.md`.
 >    (The `*(a9+0x3ec)` "RX-request struct" is actually a cal object, not a RAM buffer.) **[C]**
 
 ## Block diagram
@@ -186,7 +186,7 @@ TSK_01 (24-bit status view) and TSK_02 (2-bit status view) **share the same stat
 (`80140922` `a343/a344/a346/a349`) — one status word, two projections.
 
 ## 7. Editable levers (openpilot) — `a9` RESOLVED, cals now addressable
-**`a9` is solved** (2026-07-26, boot emulation `research/emulation/EmulA9.java`): `a9 = 0xa0103464` = uncached
+**`a9` is solved** (boot emulation `research/emulation/EmulA9.java`): `a9 = 0xa0103464` = uncached
 alias of the **cal-object table `0x80103464`**, so the ACC code indexes that table (`*(a9+off)` = cal object
 `off/4`). It's now in `ecu.conf` `BASEREGS`; `reproduce.sh` folds every ACC `*(a9+off)` to a concrete cal
 address. Full detail: `maps/a9_resolution.md`. Min-speed + creep detail: `maps/min_speed_l2.md`.
@@ -194,7 +194,7 @@ address. Full detail: `maps/a9_resolution.md`. Min-speed + creep detail: `maps/m
 | goal | lever (where) | status |
 |---|---|---|
 | **raise the brake decel floor** | decel-shaping maps in `FUN_801418ea` = cal obj **#247 `0x803b4834`** (via `a9+0x3dc`), fields to `+0x6e4`; internal rail `−500000` in `FUN_801434de` (`d0005cf4`); on-wire floor = `TSK_Verzoeg_Anf` 8-bit range (−3.984) in Com config | **addressable** (cal obj #247 / kennlinie block #269 `0x803b5bfc` via `a9+0x434`) |
-| **ACC min-speed floor (the sub-15 lockout)** | **cal #208 EGAS-L2 permit floor `0x80389809`=15 + `0x8038980e`=7 (both →0)** — the ONE genuine ACC min-speed monitor, gated on cruise-active; empirically the non-volatile lockout. Functional L1 cells are behavioural, NOT partners to move with it. | **SOLVED**; see `maps/l2_monitors.md` (8-agent, 2026-07-27) |
+| **ACC min-speed permit (self-recovering)** | **cal #208 EGAS-L2 permit floor `0x80389809`=15 + `0x8038980e`=7 (both →0)** — the ONE genuine ACC min-speed gate, gated on cruise-active. SELF-RECOVERING: below the floor the ECU withholds the ACC command (no fault), resumes at speed>15 (MED17 field-confirmed). NOT a key-off-on lockout (that was the Simos). Functional L1 cells are behavioural, NOT partners. | **SOLVED**; see `maps/l2_monitors.md` |
 | **3 km/h creep gate** | `0x803b88ae` / 3.01 km/h literal | **leave stock — diagnostic flags (`d000f73c`/`d0002a14`), not control gates; no hardcoded low-speed barrier exists (unlike Simos8.5's `8013ef46:258`=7.81 km/h). See §6 + `min_speed_l2.md` Q1b** |
 | ACC/GRA mode | `d000a3c1`→`d000a454` (`FUN_802c806e`) | runtime state, not a cal |
 | hold/standstill | `TSK_Anhalten` ← `d000a35c` → standstill req `d000a365` (`801434de:85-93`, gated `d000a361∈{1,5}`, hold from `ACC_Anhalten`) | openpilot commands hold via ACC_01; drive-off/anfahren `801405d4` follows commanded accel (stock OK) |
@@ -205,12 +205,11 @@ hardcoded floor, hold is the `ACC_Anhalten`→`TSK_Anhalten` relay openpilot dri
 on the EGAS-L2 monitor floor + openpilot supplying its own request, not the creep gate (`min_speed_l2.md` Q1b).
 
 ## 8. Open threads / uncertainties
-1. ~~**`a9` base register**~~ — **RESOLVED** (`0xa0103464` = cal-object table; see §7 + `a9_resolution.md`).
-   ~~engage precondition table-driven via `800accac`~~ — **DECODED** (`maps/engage_state.md`): it's a generic
-   state-vector engine; `a3c1` (master ACC mode) = pass-through of condition field `0x1c` of a validated
-   condition vector (`d0009b63` runtime / `803def94` flash). **No speed floor lives in it** (mode arbitration
-   only: off/GRA/ACC/ACC-ext). Remaining sub-item: the upstream inputs that pack `cond[0x1c]=2` (ACC-enable
-   arbitration, one hop above the vector) — [G].
+1. **Upstream ACC-enable arbitration.** The engage precondition (`800accac`) is a generic state-vector engine;
+   `a3c1` (master ACC mode) = pass-through of condition field `0x1c` of a validated condition vector
+   (`d0009b63` runtime / `803def94` flash), with **no speed floor** (mode arbitration only: off/GRA/ACC/ACC-ext;
+   see `maps/engage_state.md`). Open: the upstream inputs that pack `cond[0x1c]=2` (ACC-enable arbitration, one
+   hop above the vector) — [G]. (`a9` base = `0xa0103464` cal-object table; see §7 + `a9_resolution.md`.)
 2. **Wire byte↔signal offsets** — in the flash Com PDU/signal-descriptor tables (`DAT_800441f8`,
    `DAT_d0006e48`, decoder tables `DAT_800455a0`/`8003debc`), not in code. A table-decode job, not a
    decompile job.

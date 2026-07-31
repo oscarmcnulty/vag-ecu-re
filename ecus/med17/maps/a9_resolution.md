@@ -1,7 +1,7 @@
 # Resolving the `a9` base register (MED17.1.1) — mechanism SOLVED, numeric value pending emulation
 
 `a9` gates the ACC path's RX signal structs and calibration (`*(a9+0x3ec)`, `*(a9+0x3dc)`, …). This is the
-execution log of the resolution plan (2026-07-24). **Phases 1–2 are complete and definitive about *what* `a9`
+record of how `a9` was resolved. **Phases 1–2 are complete and definitive about *what* `a9`
 is; Phase 3 (emulation) is required for the concrete number and is now precisely targeted.**
 
 ## Phase 1 — static scans (DONE)
@@ -57,7 +57,7 @@ non-trivial and may need several iterations of peripheral stubbing. Fallback if 
 RAM read on the bench** — the table is at the fixed address `0xd0014c7c`, and `a9` for a task is one 32-bit read
 from it; the openport/VW_Flash chain can dump that RAM word directly, sidestepping emulation entirely.
 
-### Phase-3 emulation execution log (2026-07-24)
+### Phase 3 — emulation
 Harness: **`research/emulation/EmulA9.java`** (Ghidra pcode emulation; MED17 base regs/CSA/mem map; a generic
 spin-breaker jumps past peripheral wait-loops; hooks `FUN_8009624e` and computes the value it assigns as
 `a9 = *(DAT_d0014cb4 + 0x1c + param_1*4)`, aliased). Iterations:
@@ -137,7 +137,7 @@ python3 core/maps/find_a9_base.py ecus/med17/firmware/8R0907115N_0006.bin \
     --decompiles ecus/med17/analysis/decompiles_r   # (tool to be committed; logic in this doc)
 ```
 
-## RESOLVED (2026-07-26) — a9 = 0xa0103464 (the cal-object table)
+## Result — a9 = 0xa0103464 (the cal-object table)
 
 The bypass strategy worked. With every flash→PSPR call no-op'd (return `d2=0`), the module-init `8006fa8e`
 ran to completion, and chaining into the OS inits (`FUN_800960fe(0/1)` core contexts, then `FUN_800966ea`
@@ -179,7 +179,7 @@ calibration objects, not RAM buffers.
    pointer in the decompiles → re-decompile makes all ACC cal reads directly visible (like the a1 unlock did on
    Simos8.5). (Both core contexts use the same value, so a global set is safe here.)
 
-## Fold applied + verified (2026-07-26)
+## Fold applied + verified
 `reproduce.sh` re-run with `a9=0x80103464` in `BASEREGS` regenerated the corpus. The ACC decompiles now fold
 `*(a9+off)` to concrete cal objects (no `a9 +` remains):
 - `FUN_801418ea`: `a9 = &PTR_DAT_80103464`; decel-shaping maps read from `*(0x80103840) = 0x803b4834`

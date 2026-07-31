@@ -179,22 +179,24 @@ What is different here, and why this ECU may be the easier target:
   ACC-related calibration — a stock diff would point straight at it.
 
 Status: pipeline up, corpus decompiled, cal region pinned. The **ACC longitudinal path
-`ACC_01 → TSK_01/02/04` is now traced** (2026-07-24, CAN-anchor plan) — see
+`ACC_01 → TSK_01/02/04` is traced** via the CAN anchor — see
 `maps/acc_flow.md` and `maps/can_signal_map.md`. The ACC/decel coordinator
 (`FUN_801455ae`), the TSK_02 handler (`FUN_80140922`) and the mode/state machine are
 identified; the decel authority (internal ±500000 rail) and status enums are pinned.
-The base register **`a9`** — which the ACC path uses to reach its calibration — is now
-**resolved** (boot emulation, `research/emulation/EmulA9.java`, 2026-07-26): `a9 = 0xa0103464`
+The base register **`a9`** — which the ACC path uses to reach its calibration — is
+resolved by boot emulation (`research/emulation/EmulA9.java`): `a9 = 0xa0103464`
 = the uncached alias of the **cal-object table `0x80103464`**, so the ACC code indexes that table
 (`*(a9+off)` = cal object `off/4`). This pins the ACC calibration directly — the decel-shaping maps
-are cal object #247 @ `0x803b4834` (read by `FUN_801418ea`) and #269 @ `0x803b5bfc`. `a9` is now in
+are cal object #247 @ `0x803b4834` (read by `FUN_801418ea`) and #269 @ `0x803b5bfc`. `a9` is in
 `ecu.conf` `BASEREGS`; re-running `reproduce.sh` folds every ACC cal read to a concrete address.
 See `maps/a9_resolution.md` and `maps/RESULTS.md §③`.
 
-**Goal SOLVED (2026-07-27):** the ACC min-speed floor is the **EGAS-L2 cal #208 permit-floor pair
-`0x80389809`=15 (SET) + `0x8038980e`=7 (CLEAR)** in `FUN_800f006c`/`800f027c` (gated on cruise-active) →
-latch → stored Dem DTC = the **empirically-confirmed** non-volatile sub-15 ACC lockout (key-off-on to clear).
-openpilot edit: set both →0. An 8-subagent pass characterised every EGAS-L2 monitor and proved the rest are
-general torque/speed supervision, not ACC; ACC *engagement* itself is a table-driven state machine with **no
-speed gate** (`maps/engage_state.md`). Authoritative writeup: **`maps/l2_monitors.md`**; ready-to-flash cal
-set: **`maps/med17_openpilot_lowspeed.a2l`**.
+**The ACC min-speed gate** is the **EGAS-L2 cal #208 permit-floor pair `0x80389809`=15 (SET) +
+`0x8038980e`=7 (CLEAR)** in `FUN_800f006c`/`800f027c` (gated on cruise-active) → the persistent permit
+memory `dc87`. It is a **self-recovering, speed-gated permit**: below the floor the ECU withholds the ACC
+command (no fault), and ACC resumes the moment speed exceeds 15 — a MED17 openpilot user observes re-enable
+at ~15 = the SET edge. There is **no key-off-on lockout on MED17** (the MED17 corpus has no non-volatile store
+in this path). openpilot edit: set both cells →0. Only #208 gates ACC; the other EGAS-L2 monitors are general
+torque/speed supervision, not ACC. ACC *engagement* itself is a table-driven state machine with **no speed gate**
+(`maps/engage_state.md`). Authoritative writeup: **`maps/l2_monitors.md`**; ready-to-flash cal set:
+**`maps/med17_openpilot_lowspeed.a2l`**.

@@ -1,7 +1,7 @@
 # ACC mode / engage state machine — the table-driven precondition (MED17.1.1)
 
-Resolves the open item "the ACC master-engage precondition is table-driven via `800accac` / descriptor
-`0x8003f374`" (acc_flow.md §8). Investigated 2026-07-27. Tags: [C]=read code/bytes, [I]=inferred, [G]=gap.
+Documents the ACC master-engage precondition: the table-driven state machine `800accac` / descriptor
+`0x8003f374` (referenced from acc_flow.md §8). Tags: [C]=read code/bytes, [I]=inferred, [G]=gap.
 
 ## What `800accac` actually is [C]
 Not bespoke ACC logic — it's a generic **Bosch state-vector engine** ("Zustandsautomat"): it validates a
@@ -47,7 +47,7 @@ pure INPUT — no table record writes out_idx 0x1c from ACC logic (the only reco
 ## Bottom line for openpilot / the min-speed question
 - **This state machine imposes NO speed floor.** Its 40 condition indices are abstract packed booleans; none is
   a `speed < X` compare (verified: no speed variable or cal appears in `800accac`/the table). The ACC min-speed
-  lockout is the **EGAS-L2 cal #208 permit floor `0x80389809`=15 + `0x8038980e`=7** (see `maps/l2_monitors.md`),
+  gate is the **EGAS-L2 cal #208 permit floor `0x80389809`=15 + `0x8038980e`=7** (see `maps/l2_monitors.md`),
   NOT this table and NOT the functional low-speed cells (those are behavioural only).
 - **The "engage precondition" here = mode arbitration** (OFF / GRA / ACC / ACC-ext), gated on the condition
   vector being valid. For openpilot: the car must be in ACC mode (`a454==2`), i.e. driver ACC enabled + coded

@@ -1,6 +1,6 @@
 # ACC_Anhalten / TSK_Anhalten — Simos8.5 vs MED17.1.1, and the "L2 monitor = 0" question
 
-Comparative study (2026-07-27). Both ECUs sit on the same MLB powertrain CAN, RX **ACC_01 (0x109)** and TX
+Comparative study. Both ECUs sit on the same MLB powertrain CAN, RX **ACC_01 (0x109)** and TX
 **TSK_02 (0x10C)** with identical wire layout (`ACC_Anhalten` = ACC_01 57|1; `TSK_Anhalten` = TSK_02 12|1).
 Tags: [C]=read code/bytes, [I]=inferred, [G]=gap.
 
@@ -24,13 +24,13 @@ Tags: [C]=read code/bytes, [I]=inferred, [G]=gap.
 - **`d0000195.4` is a received bit**: `800b0e94:89-96` (ACC-cluster decoder, sub-frames param `0x29`/`0x2a`)
   sets `d0000195 |= 0x10` iff `d000a59a.0 == 1`, where `d000a59a` is an unpacked ACC-cluster shadow. So the
   chain is **received `a59a.0` → `d0000195.4` → (coding `#780[0x13]`) → `d000a35c` → TSK_Anhalten (12|1)**.
-- **`a59a` is an INTERNALLY-ROUTED signal, not the raw ACC_01 wire bit** (traced 2026-07-27): `a59a` =
+- **`a59a` is an INTERNALLY-ROUTED signal, not the raw ACC_01 wire bit**: `a59a` =
   byte[2] of a 12-byte block at `d000a598` that the Com signal-routing layer copies in (descriptor
   `@0x800349b4`: `{src-handle 0x800286c6, dest 0xd000a598, len 0x0c}`). The source `0x800286c6` is a handle
   table of **internal PDU/signal IDs in the `0x38x–0x39x` range — NOT CAN IDs (`0x10x`)**. So `a59a.0` is a
   bit of an *internal ACC-subsystem signal* (routed/processed through the signal layer), **not** a direct copy
   of `ACC_01` byte7·bit1. `801434de`/`8008b17c` only clear `a598`; the wire value arrives via this routing copy.
-- **RESOLVED — it is a RECEIVED ACC signal, not internally derived [C].** The whole decoded-shadow block
+- **It is a RECEIVED ACC signal, not internally derived [C].** The whole decoded-shadow block
   `d000a590..a5a4` (which contains `a59a`) has **zero app-computed writers** — every byte is populated only by
   the generic Com RX/routing copy. The processor `800b0e94` is dispatched by `800b13ce` over the ACC message
   set (internal signal handles **`0x1c0..0x1c9`**, gated by presence bits `d000a652/a657/a65b` and validity
@@ -69,10 +69,9 @@ ACC-cluster bit (`a59a.0`→`d0000195.4`) gated by a **coding constant** (cal#78
    a `1000`≈7.81 km/h launch latch → `d000118a`; a `d0007e84` hysteresis → `uRamc0001118`). MED17's hold/decel
    path is **cal-map driven with no such CRUC creep state machine and no hardcoded speed literal**. So the two
    diverge in low-speed behaviour by construction, and zeroing the L2 monitor does not make them equivalent.
-   *(Correction: an earlier version claimed the `1000` literal is a "hardcoded barrier that truncates Simos below
-   7.81 km/h, firmware-patch-only"; that overstated it — see acc_flow.md/RESULTS.md 2026-07-27. The literal is
-   one permission input to the CRUC state, not a direct cutoff; whether Simos brakes to true 0 is decided by the
-   CRUC state machine as a whole, which is untraced.)* **[C mechanism differs / G on exact Simos engaged-to-0]**
+   The `1000`≈7.81 km/h literal is one permission input to the CRUC state, not a direct cutoff; whether Simos
+   brakes to true 0 is decided by the CRUC state machine as a whole, which is untraced. **[C mechanism differs /
+   G on exact Simos engaged-to-0]**
 
 2. **The Anhalten signal itself is derived differently.** Simos = direct pass-through of `ACC_01.ACC_Anhalten`
    (byte7·bit1); MED17 = a *different* received ACC-cluster bit (`a59a.0`→`d0000195.4`) AND a coding constant.
@@ -88,8 +87,9 @@ cal-map to 0). Whether Simos actually reaches true standstill is decided by its 
 
 ## To make them match (if that's the goal)
 - MED17: zero the #208 L2 permit floor `0x80389809`=15 **and** its CLEAR edge `0x8038980e`=7 (both →0; see
-  `maps/l2_monitors.md`). No code patch needed (cal-map driven). No L1 cell needs to move with it (the L1/L2
-  "move together" idea was refuted 2026-07-27). Confirm `a59a.0` is the intended stop bit and `cal#780[0x13]` stays 1.
+  `maps/l2_monitors.md`). No code patch needed (cal-map driven). No L1 cell needs to move with it — the
+  functional L1 cells and the L2 monitor are independent. Confirm `a59a.0` is the intended stop bit and
+  `cal#780[0x13]` stays 1.
 - Simos: zero `C_VS_MIN_CRU_MON`; the sub-15 CRUC creep/permission flags (2.34 km/h cal, the `1000` launch
   latch, the `d0007e84` hysteresis) feed the state machine rather than acting as a single removable floor, so
   matching Simos's engaged-to-0 behaviour requires understanding the CRUC state machine (`8013e8aa`/`8013e47c`),

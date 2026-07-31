@@ -1,31 +1,18 @@
 # ACC/cruise minimum-speed floor + EGAS-L2 monitor twin (MED17.1.1 8R0907115N_0006)
 
 Answer to the two min-speed questions, built on the resolved `a9 = cal-object table` (see `a9_resolution.md`)
-so every `*(a9+off)` folds to a concrete cal object. Built 2026-07-26 from the folded corpus
+so every `*(a9+off)` folds to a concrete cal object. Built from the folded corpus
 (`analysis/decompiles_r/`) + firmware reads. Load base `0x80000000`; file off = `addr & 0x1FFFFFFF`;
 `0xa00xxxxx` = uncached alias; RAM = `0xd00xxxxx`.
 
 Confidence tags: **[C]** read the code/bytes · **[I]** inferred · **[G]** gap.
 
-> ## ⚠ UPDATE 2026-07-27 — read `maps/l2_monitors.md` (this doc's §Q2 is superseded)
-> An 8-subagent characterisation of every EGAS-L2 monitor, plus the **empirical** result (openpilot below
-> 15 km/h latches a non-volatile ACC lockout, key-off-on to clear), corrected the picture:
-> - **The operative ACC min-speed lockout is ONE hysteresis pair in cal #208: `0x80389809`=15 (SET) and
->   `0x8038980e`=7 (CLEAR)** → `MON_cru_permit_flags` bit7 → latch `d00148be` → `d00000e1.b4` → stored Dem DTC.
->   It is gated on `cru_acc_active_flag` (d000a113), i.e. it only faults when cruise/ACC is the active
->   controller — that is what makes it the ACC monitor. **Both edges are live:** `dc87` (the permit memory)
->   is persistent (never reset), SET at 15 / CLEAR at 7. 15 = arm-from-scratch; 7 = re-arm floor (once armed
->   you can re-engage down to 7). The lockout is engaging with `dc87`=0 below 15. Set **15→0 and 7→0** (arm
->   at any speed + never clear the memory). See `maps/l2_monitors.md` "The fault mechanism".
-> - **The other cells in the §Q2 table are NOT the ACC floor.** #148 (`0x80384760/61`, `800d5828`) is a general
->   torque monitor that **provably self-disables below ~12 km/h**; #215 (`0x8038a5c6/c9/ca`, `800f5d68`) is a
->   crawl monitor whose trip runs only in a **failsafe branch** (signal 0x3fc stale). Neither is the lockout.
-> - **The "move L1/L2 together" premise (§Q1b verdict, §Q2 "Move both", Summary Q2) is WRONG.** The functional
->   L1 cells and the L2 monitor are independent; the lockout is #208's 15/7 alone. The functional decel/hold
->   path is cal-map-driven to standstill and engagement is a table-driven state machine with **no speed gate**
->   (`maps/engage_state.md`), so the L1 cells are behavioural, not required. **Edit only #208 `0x80389809`+`0x8038980e`→0.**
->
-> §0, §Q1 (functional cell inventory), and §Q1b (creep gate = leave stock) below remain valid.
+The ACC min-speed gate is EGAS-L2 cal #208 (`FUN_800f006c`/`800f027c`), gated on cruise-active
+(`d000a113`). It is a **self-recovering, speed-gated permit**: below the floor the ECU simply withholds the
+ACC command (no fault) and resumes when speed exceeds 15. There is no key-off-on lockout on MED17 — all
+state is volatile RAM and no non-volatile store exists in the corpus for this path. The functional L1 cells
+(§Q1) and the L2 monitor (§Q2) are independent; the ACC floor is #208's 15/7 pair alone. See
+`maps/l2_monitors.md` for the full L2-monitor detail.
 
 ---
 
@@ -80,17 +67,15 @@ cal-block checksum recompute (`core/checksum`).
 
 ## Q1b — the 3 km/h creep gate: **stock value is fine, no modification needed** [C]
 
-Investigated 2026-07-27 (does the creep gate block openpilot's low-speed/standstill control?). **It does not.**
+Does the creep gate block openpilot's low-speed/standstill control? **It does not.**
 - The two 3 km/h "creep gate" cells are **diagnostic, not control gates**:
   - `0x803b88ae` (3.0 km/h, `8030347a:276`) sets `DAT_d000f737/738/f73c` — and **`d000f73c` has zero readers
     in the control path** (`8030347a` is in the `0x8030_xxxx` diagnostic/observer block). Dead measurement flag.
   - the 3.01 km/h literal (`802c23b8:120`) sets `DAT_d0002a14`, used only *locally* inside that `0x802C`
     status function (`:153/:194`). Neither cell gates ACC availability nor touches the accel/decel setpoint.
-- **No hardcoded low-speed barrier in the hold/decel path** — the decisive contrast with Simos8.5, whose
-  sub-15 barrier was a hardcoded `1000` (7.81 km/h) literal at `8013ef46:258` needing a firmware patch.
-  MED17's decel controller `801434de` uses vehicle speed (`d0008f5e`) **only as the X-axis input to cal maps**
-  (`func_0xc0000638`/`func_0xc00004ca` over cal `*(a9+0x3e4)`=#249 / `*(a9+0x3d8)`), no hardcoded speed compare;
-  the map axes reach to standstill.
+- **No hardcoded low-speed barrier in the hold/decel path.** MED17's decel controller `801434de` uses vehicle
+  speed (`d0008f5e`) **only as the X-axis input to cal maps** (`func_0xc0000638`/`func_0xc00004ca` over cal
+  `*(a9+0x3e4)`=#249 / `*(a9+0x3d8)`), with no hardcoded speed compare; the map axes reach to standstill.
 - **openpilot's control flows through the stock creep/anfahren logic:** the standstill/hold `DAT_d000a365`
   (`801434de:85-93`) is gated on the hold bit `DAT_d000a35c` = the **`ACC_Anhalten` bit openpilot sets in
   ACC_01**; the drive-off/anfahren (`801405d4` → `DAT_d000ab00`, read by `80140922`/`801418ea`) is gated on ACC
@@ -103,11 +88,11 @@ Investigated 2026-07-27 (does the creep gate block openpilot's low-speed/standst
 
 **Verdict:** leave the creep-gate cells stock. Sub-floor operation depends on lowering the EGAS-L2 monitor
 permit floor **`0x80389809`=15 + `0x8038980e`=7 (both →0)** and openpilot supplying its own request — not on
-the creep gate, and not on the functional L1 cells (see the UPDATE banner + `maps/l2_monitors.md`).
+the creep gate, and not on the functional L1 cells (see §Q2 + `maps/l2_monitors.md`).
 
 ---
 
-## Q2 — EGAS Level-2 monitor twin  ⭐ — **YES, present and architecturally separate** [C]
+## Q2 — EGAS Level-2 monitor twin  ⭐ — **present and architecturally separate** [C]
 
 There is a full **EGAS L2 monitor cluster (~20 functions at `0x800d_xxxx … 0x8010_xxxx`)** — the Bosch
 "Überwachung" level — that:
@@ -123,34 +108,43 @@ There is a full **EGAS L2 monitor cluster (~20 functions at `0x800d_xxxx … 0x8
 3. Compares speed with the tell-tale `d0007b8a </<= cal·0x80` form (u8 km/h × 128), all resolving to clean
    integer km/h — the direct analog of Simos `da54 <= C_VS_MIN_CRU_MON·0x80`.
 
-Representative monitor speed floors (u8, km/h) that were read out of flash and confirmed. **⚠ SUPERSEDED
-classification — see the UPDATE banner + `maps/l2_monitors.md`: of the cells below, ONLY `0x80389809`=15 (and
-its CLEAR twin `0x8038980e`=7, missing from this table) is the genuine ACC lockout. `0x80384760/61` (#148)
-and `0x8038a5c6` (#215) are general/failsafe EGAS monitors, NOT the ACC floor. `0x8038980a`=17 is a *separate*
-band's set-edge, not the 15-floor's hysteresis.**
+**The ACC min-speed gate is cal #208's 15/7 hysteresis pair — and only that.** The operative floor is:
+`0x80389809`=15 (SET/arm) and `0x8038980e`=7 (re-arm/clear), driving the persistent permit memory `d000dc87`
+→ `MON_cru_permit_flags` bit7. It is gated on `cru_acc_active_flag` (`d000a113`), i.e. it acts only when
+cruise/ACC is the active controller — that is what makes it the ACC monitor. Both edges are live: `dc87` (the
+permit memory) is persistent, SET at 15 / CLEAR at 7. 15 = arm-from-scratch; 7 = re-arm floor (once armed you
+can re-engage down to 7). Behaviour is a self-recovering, speed-gated permit: below the floor the ECU
+withholds the ACC command (no fault) and resumes when speed exceeds 15. For openpilot, set **`0x80389809`=15→0
+and `0x8038980e`=7→0** (arm at any speed + never clear the memory), then recompute the cal checksum. See
+`maps/l2_monitors.md` "The fault mechanism".
+
+The following table is a **raw catalogue of L2 monitor-speed cells** read out of flash — useful for reference,
+but note that these are general/failsafe EGAS supervision cells and, apart from #208, are **not** the ACC
+floor. #148 (`0x80384760/61`, `800d5828`) is a general torque monitor that provably self-disables below
+~12 km/h; #215 (`0x8038a5c6/c9/ca`, `800f5d68`) is a crawl monitor whose trip runs only in a failsafe branch
+(signal 0x3fc stale). `0x8038980a`=17 is a separate band's set-edge, not the 15-floor's hysteresis.
 
 | flash addr | cal obj | value | function : line → latch | note |
 |---|---|---|---|---|
-| **`0x80389809`** | #208 `0x803896ec` +0x11d | **15 km/h** | `800f027c` / `800f006c:729` → `d000dc87`→`d000d7d1.b7` | **exact Simos `C_VS_MIN_CRU_MON`=15 analog** |
-| `0x8038980a` | #208 +0x11e | 17 km/h | `800f006c:130` → `d000dc78` | hyst upper |
+| **`0x80389809`** | #208 `0x803896ec` +0x11d | **15 km/h** | `800f027c` / `800f006c:729` → `d000dc87`→`d000d7d1.b7` | **ACC gate — SET/arm edge (Simos `C_VS_MIN_CRU_MON`=15 analog)** |
+| **`0x8038980e`** | #208 +0x122 | **7 km/h** | `800f006c` → `d000dc87` | **ACC gate — re-arm/clear edge** |
+| `0x8038980a` | #208 +0x11e | 17 km/h | `800f006c:130` → `d000dc78` | separate band set-edge |
 | `0x80389808` | #208 +0x11c | 2 km/h | `800f006c:135` | hyst band |
 | `0x80389812` / `0x80389813` | #208 +0x126/+0x127 | 17 / 14 km/h | `800f006c` → `d000dc88` | window |
 | `0x80389810` / `0x80389811` | #208 +0x124/+0x125 | 65 / 10 km/h | `800f006c:1499` | monitor band |
-| `0x80384761` / `0x80384760` | #148 `0x8038436a` +0x3f7/+0x3f6 | 5 / +7 | `800d5828:191` → `d000d867` | low-speed monitor |
-| `0x8038a5c6` | #215 `0x8038a568` +0x5e | 20 km/h | `800f5d68` | monitor floor |
+| `0x80384761` / `0x80384760` | #148 `0x8038436a` +0x3f7/+0x3f6 | 5 / +7 | `800d5828:191` → `d000d867` | general torque monitor (self-disables <~12 km/h) |
+| `0x8038a5c6` | #215 `0x8038a568` +0x5e | 20 km/h | `800f5d68` | failsafe crawl monitor |
 | (literal) | — | 3.01 km/h (`< 0x181`) | `800dc570:30` | hardcoded monitor creep |
 
 **Is there an exact numeric TWIN of a functional floor?** The L2 monitor is **value-independent** of the
 functional path (it recomputes its own speed and thresholds), so it is not a byte-for-byte mirror of one
 functional cell. The closest correspondence is the **15 km/h monitor floor `0x80389809`** ↔ the functional
 10–20 km/h low-speed thresholds. There is **no L2 copy of a "35 km/h"** (that functional value was excluded
-as CAN-plausibility, not a floor). **[C on separateness; I on which pairs are the intended L1/L2 partners]**
+as CAN-plausibility, not a floor). **[C on separateness; I on which pairs correspond]**
 
-**"Move both" caveat — ⚠ SUPERSEDED (see UPDATE banner):** this doc originally inferred you must move a
-functional L1 cell together with a matching L2 monitor cell. The 8-agent investigation refuted that: the
-monitors are independent of the functional path, and the ACC lockout is the #208 **15/7 permit pair alone**
-(`0x80389809`+`0x8038980e`), gated on cruise-active. You do **not** need to move functional L1 cells with it.
-The retained truth: lower **both** #208 permit edges (15 and 7) together, or the permit flips at standstill.
+The functional L1 cells (§Q1) and the L2 monitor are **independent** — there is no requirement to move an L1
+cell together with an L2 cell. The ACC gate is #208's 15/7 permit pair alone, and both edges must be lowered
+together (15 and 7 → 0) or the permit flips at standstill.
 
 ---
 
@@ -163,6 +157,6 @@ The retained truth: lower **both** #208 permit edges (15 and 7) together, or the
 - **L2 monitor cells (0x8038 region, separate cal base):** `0x80389809` (15 km/h, cal#208) + the 17/14/10/65/
   20/5 km/h family; monitor speed `d0007b8a`.
 - **Q1 verdict:** no single `C_VS_MIN_CRU` cell; layered thresholds + radar-hardware 30 km/h floor. [C/I/G]
-- **Q2 verdict (CORRECTED 2026-07-27):** the EGAS-L2 monitor cluster is present + separate, but only **cal #208
-  (`0x80389809`=15 / `0x8038980e`=7)** is the genuine ACC lockout (gated on cruise-active). Most other cells in
-  the §Q2 table are general EGAS torque/speed monitors, NOT ACC. **Edit #208's 15+7 →0.** See `maps/l2_monitors.md`.
+- **Q2 verdict:** the EGAS-L2 monitor cluster is present + separate, and only **cal #208 (`0x80389809`=15 /
+  `0x8038980e`=7)** is the ACC gate (gated on cruise-active, self-recovering permit). The other cells in the
+  §Q2 table are general EGAS torque/speed monitors, not ACC. **Edit #208's 15+7 →0.** See `maps/l2_monitors.md`.

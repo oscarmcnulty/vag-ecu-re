@@ -43,9 +43,9 @@ The tool locates the table generically (longest run of 4-byte pointers that both
 target the cal window and increase monotonically), so it should transfer to other
 MED17 variants; it rediscovered this table independently of the xref route.
 
-## ③ ACC longitudinal path ACC_01 → TSK — TRACED (CAN-anchor plan, 2026-07-24)
+## ③ ACC longitudinal path ACC_01 → TSK — TRACED
 
-Next-step #2 below (locate the cruise/ACC function via the CAN anchor) is **done**. Full
+The cruise/ACC function is located via the CAN anchor. Full
 write-ups: **`maps/acc_flow.md`** (the ACC_01→TSK longitudinal trace) and
 **`maps/can_signal_map.md`** (the CAN infrastructure). Headlines:
 
@@ -68,7 +68,7 @@ in the un-decompiled task dispatcher), so those cal cells and RX shadows stay sy
 the direct analog of Simos8.5's `a1` unlock. **This is the one blocker between the traced
 path and editable decel/min-speed flash addresses.**
 
-**`a9` RESOLVED by boot emulation (2026-07-26) — see `maps/a9_resolution.md`.**
+**`a9` is resolved by boot emulation — see `maps/a9_resolution.md`.**
 `a9` is the running task's data base, loaded per-context by `FUN_8009624e` as
 `a9 = *(0xd0014c7c + core*4)` (uncached-aliased if flash). For the application context it =
 **`0xa0103464`** = the uncached-flash alias of the **cal-object table `0x80103464`** (this section, #1).
@@ -89,24 +89,27 @@ ACC `*(a9+off)` cal read to a concrete cal-object address in the decompiles (the
 The **decel / min-speed lever** is a field within cal object #247 (0x803b4834) / #269 (0x803b5bfc) —
 the openpilot edit target, now addressable with object boundaries from `cal_objects.csv`.
 
-## ② ACC / cruise minimum speed — **SOLVED** (2026-07-27)
+## ② ACC / cruise minimum speed
 
-Status: **SOLVED.** The ACC min-speed lockout is the **EGAS-L2 cal #208 permit-floor hysteresis pair
+The ACC min-speed gate is the **EGAS-L2 cal #208 permit-floor hysteresis pair
 `0x80389809`=15 (SET) + `0x8038980e`=7 (CLEAR)** in `FUN_800f006c`/`FUN_800f027c` (gated on cruise-active
-`d000a113`) → latch `d00148be` → `d00000e1.b4` → stored Dem DTC = the empirically-confirmed non-volatile
-sub-15 lockout (key-off-on to clear). openpilot edit: set both →0. An 8-subagent pass characterised every
-EGAS-L2 monitor and proved the rest are general torque/speed supervision, not ACC. See **`maps/l2_monitors.md`**
-(authoritative) + `maps/min_speed_l2.md` (functional-cell inventory) + `maps/med17_openpilot_lowspeed.a2l`.
+`d000a113`) → the persistent permit memory `dc87` → `MON_cru_permit_flags` bit7. It is a **self-recovering,
+speed-gated permit**: below the floor the ECU withholds the ACC command (no fault) and re-arms/resumes the
+moment speed exceeds 15 (a MED17 openpilot user sees ACC re-enable at ~15 = the SET edge). There is **no
+key-off-on lockout on MED17** — the MED17 corpus has no non-volatile store in this path (all volatile RAM).
+openpilot edit: set both cells →0. Only #208 gates ACC; the other EGAS-L2 monitors are general torque/speed
+supervision, not ACC. ACC *engagement* itself is a table-driven state machine with no speed gate. See
+**`maps/l2_monitors.md`** (authoritative) + `maps/min_speed_l2.md` (functional-cell inventory) +
+`maps/med17_openpilot_lowspeed.a2l`.
 
-The original value-range scan below (kept for the record) was a dead end — the floor is not a stray scalar
-but the code-identified #208 permit pair:
+The floor is code-identified as the #208 permit pair, not a stray scalar — a raw value-range scan of the
+catalogued cal objects does not find it:
 
-- Scanned the 971 catalogued objects for a scalar encoding a 15–45 km/h threshold
-  (u8, u16 in km/h, u16 in 0.01 km/h). Only 4 candidates: `0x803C3382` (26),
+- Scanning the 971 catalogued objects for a scalar encoding a 15–45 km/h threshold
+  (u8, u16 in km/h, u16 in 0.01 km/h) yields only 4 candidates: `0x803C3382` (26),
   `0x803CC36C` (3300 = 33.0), `0x803E1C92` and `0x803E1CAA` (35).
-- **All four are read only by the object table itself, not by code.** So this is a
-  weak shortlist, not a lead — the same dead end reached on simos85, where
-  value-range shortlisting produced init/copy sites rather than the speed gate.
+- **All four are read only by the object table itself, not by code**, so a value-range
+  shortlist is not a lead to the speed gate.
 - No embedded label strings: the image contains no calibration label table
   (132 alpha strings total, all version/ID banners). Bosch keeps labels in the
   external DAMOS, so there is nothing in-binary to bridge label→address.
@@ -127,8 +130,8 @@ but the code-identified #208 permit pair:
    export tagged `ACC_ENABLE` with checksums off — someone already modified the
    ACC calibration in it. The diff would point straight at the ACC bytes. Highest
    value by far, and it is an input problem, not an RE problem.
-2. ~~**Locate the cruise/ACC function via the CAN anchor**~~ — **DONE 2026-07-24** (see ③
-   and `maps/acc_flow.md` / `maps/can_signal_map.md`). The ACC_01→TSK path is traced to the
-   `FUN_801455ae`/`FUN_80140922` cluster; the remaining gap is the `a9` pointer that gates
-   the cal cells (see ③'s refined next step).
+2. **The cruise/ACC function is located via the CAN anchor** (see ③ and `maps/acc_flow.md` /
+   `maps/can_signal_map.md`). The ACC_01→TSK path is traced to the
+   `FUN_801455ae`/`FUN_80140922` cluster; the `a9` pointer that gates the cal cells is
+   resolved (see ③).
 3. **Align a public MED17.1.1 label list to `cal_objects.csv` by index.**

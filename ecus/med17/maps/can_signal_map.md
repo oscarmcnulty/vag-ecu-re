@@ -2,7 +2,7 @@
 
 Companion to `acc_flow.md` (the ACC_01→TSK longitudinal trace). This file documents the **CAN
 infrastructure** the trace sits on. Built from the decompiled corpus
-(`analysis/decompiles_r/<vaddr>.c`) + raw firmware reads (2026-07-24, 4-agent investigation). Load base
+(`analysis/decompiles_r/<vaddr>.c`) + raw firmware reads. Load base
 `0x80000000`; `0xa00xxxxx` = uncached mirror; file offset = `addr & 0x1FFFFFFF`; RAM = `0xd00xxxxx`.
 
 > **Architecture headline — this is NOT Simos8.5.** MED17.1.1 runs a **generic table-driven Vector
@@ -58,7 +58,7 @@ Small descending list of **TX signal handles**. The TSK producers deposit values
 - **TSK_02** (`FUN_80140922`): handles 8/9/10 (`DAT_800295f2/f0/ee`) + status 1/2 (`DAT_80029600/fe`).
 - **TSK_04** (`FUN_801455ae`): handles 5/6/7 (`DAT_800295f8/f6/f4`).
 
-## The validity accessor `FUN_800981cc` @ `0x800981cc` — CONFIRMED (polarity corrected)
+## The validity accessor `FUN_800981cc` @ `0x800981cc` — CONFIRMED
 ```c
 byte FUN_800981cc(uint id){
   id &= 0xffff;
@@ -102,9 +102,8 @@ Dispatch is by the **top nibble of the handle** (`handle>>12`) through the 16-en
   handle* (class 0) it routes to **`FUN_800bffba` = Com_SendSignal / bit-packer**, which writes the value
   into the packed frame buffer using signal descriptor `DAT_d0006e48[handle]` (bit offset/length) + flash
   table `DAT_800441f8`. For a *message handle* (class 8, `0x84xx`) it requests the MO transmit.
-  *(One earlier read mislabeled this as Dem diagnostic reporting — it is not; the `PTR_FUN_8003e0d8`
-  dispatch + the `0x800bffba` bit-packer are the Com signal path. Some calls set a status/quality signal
-  to `0`/`0xf`, which is why the misread happened.)*
+  (The `PTR_FUN_8003e0d8` dispatch + the `0x800bffba` bit-packer are the Com signal path; some calls
+  set a status/quality signal to `0`/`0xf`.)
 - **`FUN_8009ca3c(id, …)` @ `0x8009ca3c`** = per-id **TX-request state machine** (control nibble
   `DAT_d00142c5[id]`, pending bitmap `DAT_d0009386`) → hands to **`FUN_800be052`**.
 - **`FUN_800be052(id, …)` @ `0x800be052`** = the **CANbedded TX slot engine**: looks up the internal TX

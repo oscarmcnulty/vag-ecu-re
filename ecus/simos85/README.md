@@ -31,12 +31,16 @@ First and reference ECU pack. The `core/` tooling is built against this target.
 
 ## External read paths (bench SBOOT vs OBD) — see analysis/obd_read_feasibility.md
 
-Why 8.5 is *virtual read* over OBD, not a real dump: the SBOOT boot-password
-exploit ([fastboatster/Simos8_SBOOT]) is **bench-only** (entry is a PWM-on-boot-pins
-timing gate, not a bus message) but is the only route to the boot sector
-`0x0–0x20000`; a Simos18-style **OBD** read needs an unsigned-code-write primitive
-(RSA-signature bypass) that is unbroken on the 8.5 loader — so no OBD full-flash
-read exists. Full reasoning + how a Door-2 OBD read could be built in
+Why 8.5 is *virtual read* over OBD, not a real dump — three doors, all shut over OBD:
+**Door 1** the SBOOT boot-password exploit ([fastboatster/Simos8_SBOOT]) is **bench-only**
+(entry is a PWM-on-boot-pins timing gate, not a bus message) but is the only route to the
+boot sector `0x0–0x20000`; **Door 2** a Simos18-style patch-and-read OBD unlock needs an
+unsigned-code-write primitive (RSA-signature bypass) unbroken on the 8.5 loader; **Door 3**
+a CCP/XCP `UPLOAD` (the AL551 vector) would need a measurement slave — and a **static pass
+over the reproduced decompiles finds none**: no CCP/XCP anywhere, and the UDS stack has **no
+`0x23` ReadMemoryByAddress and no `0x35` upload** — only a session+security-gated write/
+reflash path and fixed-DID `0x22` reads (the identify-for-virtual-read surface). Full
+reasoning, the door-by-door analysis, and the per-service evidence table in
 `analysis/obd_read_feasibility.md`.
 
 [fastboatster/Simos8_SBOOT]: https://github.com/fastboatster/Simos8_SBOOT

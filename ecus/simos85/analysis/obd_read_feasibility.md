@@ -221,18 +221,19 @@ The diagnostic stack is a Continental generic **table-driven** implementation: s
 dispatch through function-pointer tables (`handle_diagnostic_request`@`800b3e6e`, gate
 `8002c3c4`) whose SID→handler map and per-service session/security bytes live in **RAM/RODATA
 config not present in the function decompiles** — Ghidra reports "Could not recover jumptable
-… Too many branches." So the master SID list can't be read directly; the findings below rest
-on the **absence of any handler body** implementing a service across all 7265 functions, plus
-the transfer module being write-only.
+… Too many branches." The findings below originally rested on the **absence of any handler
+body** plus the write-only transfer module — but the **SID table has since been recovered
+directly** (`uds_dispatch.md`, base `0x80085e58`), which confirms them at the table level:
+`0x23` is declared with a **NULL handler**, and `0x35`/`0x3d` are **not in the table at all**.
 
 | UDS service | On 8.5? | Reads memory? | Gating | Evidence (fn addr) |
 |---|---|---|---|---|
-| `0x23` ReadMemoryByAddress | **absent** | — | — | no handler in 7265 fns; all `==0x23` are string/state/map indices |
-| `0x35` RequestUpload | **absent** | — | — | no handler; transfer module is write-direction only |
+| `0x23` ReadMemoryByAddress | **declared, unimplemented** | — | — | in SID table `@0x80085e70` with **handler = NULL** (`uds_dispatch.md`) |
+| `0x35` RequestUpload / `0x3d` WriteMemoryByAddress | **absent** | — | — | **not in the SID table**; no handler in 7265 fns |
 | `0x34/0x36/0x37` Download/TransferData/TransferExit | present | **writes only** | programming session + security (NRC `0x33`) | `801d1ebe` (validates 0x1e00-byte block: `crc16(data+4,len,0xABCD)==word[0x1dfa]`), `801d22a0`, `800a59f0` (verified), flash driver `801f13b8` (staging buf `0xc03fd3d0`), `801f3b5e` (req→RAM→flash), `801d371c` (programming executor) |
 | `0x22` ReadDataByIdentifier | present | **fixed DIDs only** | session-gated | `8011fc40…`→`801dbd84`; DIDs `0x2e0,0x2ed,0x2ee,0x2ef,0x2f9,0x2ff` (versions/CRCs/part-ids) |
 | `0x2e` WriteDataByIdentifier | present | writes whitelisted DIDs | NRC `0x33` if unsecured, NRC `0x31` off-list | `801229b4` (whitelist `0x2e1,0x310,0x319,0x4fc,0x4fe,0x600,0x927,0x937,0x444b,0xf198,0xf19e,0xf1a2,0xf1f0,0xf1f1`) |
-| `0x27` SecurityAccess | present (the gate) | n/a | — | access gate `8002c3c4` (NRC `0x11` unless session/security bits); per-service byte `entry[3]` @`8002c65e`; **seed/key algorithm + level table in RODATA — unresolved** |
+| `0x27` SecurityAccess | present, **condition-gated (not seed/key)** | n/a | vehicle-state + cal bytes | `$27` aux sub-table `@0x80085e38` → 6 subfn handlers; `80122758` unlocks on speed/ACC state + cal enables `DAT_80043f7d/e40/e88`; **no crypto seed/key** (`uds_dispatch.md`) |
 
 Key structural facts:
 - **The only "arbitrary" data motion is INTO flash, never OUT.** TransferData lands in a
@@ -246,25 +247,29 @@ Key structural facts:
   session/security bitmask `& 0xf == 0`).
 
 ### 6c. Two naming corrections surfaced by this pass (fix in `symbols_merged.csv` when tracing)
-- `handle_uds_command`@`800aa922` is **not** UDS — it is a **GPTA/PCP timer-channel
-  dispatcher** (`DAT_d0000580` is filled with GPTA0 timer config by `801cd388`). `param & 0x3f`
-  is a timer channel, not a SID. The real diagnostic router is `800b3e6e`/`8002c3c4`.
-- `read_memory_value`@`800a2c54` is a **2-D calibration-table indexer** (`base + row*width +
-  col`), not an address-based memory read.
+- `handle_uds_command`@`800aa922`, `handle_diagnostic_request`@`800b3e6e`, and `800b3f40` are
+  **not** UDS — they are **GPTA/PCP timer-channel / injection-timing** code (the LLM "uds"/
+  "diagnostic" names are wrong). `read_memory_value`@`800a2c54` is a **2-D cal indexer**, not a
+  memory read. The real UDS service table is the flat 12-byte-record grid at `0x80085e58`
+  (`uds_dispatch.md`), found by image-searching for a confirmed handler pointer — not via any
+  name.
 
-### 6d. What remains in RODATA (honest static limit)
-Not resolvable from the function set alone, and where a determined analyst would go next:
-the **SID→handler dispatch table** and **per-service security-level bytes** (behind
-`DAT_d00005c8` / the `param_1[7]` diagnostic context), the **`0x27` seed/key algorithm,
-level list, and attempt/delay limiter**, and the **`0x27` seed/key algorithm,
-level list, and attempt/delay limiter**. (The **writable flash window is now recovered** — see
-`uds_dispatch.md`: the reflash descriptor `@0x800826c0` programs **calibration + DFLASH/EEPROM
-only**, the boot sector is in no descriptor, and the ASW code banks are in the geometry map but
-not the reflash window — an independent code-level confirmation of §3b.) The remaining RAM/RODATA
-items are reachable by decoding the diagnostic-init that populates them or by resolving the
-recovered-jumptable targets. **The step-by-step recovery plan (anchors, techniques, new
-`ResolveDispatchTables` pass, sequencing) is in `uds_dispatch_recovery.md`.** None of this changes the read conclusion:
-**no `0x23`, no `0x35`, no CCP/XCP → no CAN path returns arbitrary flash → VR, not RD.**
+### 6d. RESOLVED — the RODATA structures are now recovered
+The three items §6d originally left open have been closed statically (`uds_dispatch.md`):
+- **SID→handler + per-service access table** — recovered at `0x80085e58` (23 services). `0x23`
+  is declared with a **NULL handler**; `0x35`/`0x3d` are **absent**.
+- **`0x27` SecurityAccess** — recovered (aux sub-table `0x80085e38`): it is a **condition/
+  calibration-gated state machine, not a crypto seed/key**, so there is no key to recover and
+  nothing readable to unlock.
+- **Writable flash window** — recovered: the reflash descriptor `@0x800826c0` programs
+  **calibration + DFLASH/EEPROM only**; the boot sector is in no descriptor; the ASW banks are
+  in the geometry map but not the reflash window (independent confirmation of §3b).
+
+None of it changes the conclusion — it hardens it to the dispatch-table level: **no `0x23`, no
+`0x35`, no `0x3d`, no CCP/XCP; `$27` gates nothing readable; the only write window is cal+EEPROM
+→ no CAN path returns arbitrary flash → VR, not RD.** (`ResolveDispatchTables`, the general
+jumptable pass in `uds_dispatch_recovery.md`, was not needed for these but remains for the
+GPTA/Com tables and to name the NULL-handler routing at full fidelity.)
 
 ---
 

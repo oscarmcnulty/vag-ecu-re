@@ -91,11 +91,17 @@ way to observe the RAM tables as actually constructed.
 
 ## Per-target playbook
 
-| Target | Route | Concrete output |
-|---|---|---|
-| **1. SID→handler+level** | B (pin `DAT_d00005c8` base) → A (decode `0x44`/`0x1c` records) → C (create refs, recover handler fns) | `{SID, handlerA, handlerB, session, security_level}` per service; confirm `$23`/`$35` truly absent from the table (upgrades §6b from "no handler body found" to "not in the SID table") |
-| **2. `$27` seed/key** | C (recover the `$27` handler body) → read seed source (RNG/STM/counter), key compare, attempt counter/delay | seed algorithm, key transform, level→capability map, limiter |
-| **3. Flash window** | A (decode `0x800826c0` + `0x80082654` linked records) | list of `{bank_addr, size, flags}` programmable segments; the exact addresses `$34/$36` accept |
+| Target | Route | Concrete output | Status |
+|---|---|---|---|
+| **1. SID→handler+level** | image-search for a confirmed handler ptr (`801229b4`@`0x80085f04`) → decode the 12-byte record grid @`0x80085e58` | 23-service SID→handler+attr table; `0x23`=NULL, `0x35`/`0x3d` absent | ✅ **DONE** → `uds_dispatch.md` |
+| **2. `$27` seed/key** | decode `0x27` aux sub-table @`0x80085e38` → read the 6 subfn handlers | **not a seed/key** — condition/cal-gated state machine; nothing readable to unlock | ✅ **DONE** → `uds_dispatch.md` |
+| **3. Flash window** | A (decode `0x800826c0` + `0x80082654` records) | cal + DFLASH/EEPROM; boot excluded; ASW not in reflash descriptor | ✅ **DONE** → `uds_dispatch.md` |
+
+> Note: Technique B's name-led first attempt (`DAT_d00005c8` via `801d8590`) landed in a
+> **GPTA** table (mislabelled `handle_diagnostic_request`), not UDS. The reliable route was
+> searching the image for a pointer to a **behaviourally-confirmed** handler, bypassing the
+> LLM names. `ResolveDispatchTables` (Technique C) was ultimately **not needed** for these
+> targets, but is retained below as the general pass for the remaining GPTA/Com jumptables.
 
 ## New tooling to add
 - `core/ghidra/ResolveDispatchTables.java` — the technique-C pass (parameterized by the

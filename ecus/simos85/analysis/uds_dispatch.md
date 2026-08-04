@@ -6,9 +6,18 @@ edge-resolution, D = emulation) and CONFIRMED (read from the bin) vs **inference
 
 | Target | Technique | Status |
 |---|---|---|
-| 3. Writable flash window | **A** | **DONE** (below) |
-| 1. SID → handler + level | B→A→C | pending |
-| 2. `$27` seed/key | C | pending |
+| 3. Writable flash window | **A** | **DONE** (§ below) |
+| 1. SID → handler + level | **A/B** | **DONE** (§ below) |
+| 2. `$27` seed/key | **A/B** | **DONE** (§ below) — and it isn't a seed/key |
+
+> Method note: Targets 1 & 2 were closed **statically** without the `ResolveDispatchTables`
+> Ghidra pass. Technique B's first trace (`DAT_d00005c8`←`0x8008eab0` via `801d8590`) led into
+> a **GPTA/injection-timing** table, not UDS — another LLM-name mislabel (`800b3e6e`
+> "handle_diagnostic_request" and `800b3f40` are GPTA, joining `800aa922`/`800a2c54` in §6c).
+> The real table was found by **searching the image for a pointer to a behaviourally-confirmed
+> handler** (`801229b4`, found at `0x80085f04`) — an approach that sidesteps the unreliable
+> names entirely. `ResolveDispatchTables` is therefore not needed for these two, though it
+> remains the general tool for the many other GPTA/Com jumptables.
 
 ---
 
@@ -73,8 +82,72 @@ records, or dump `0x80030258…` and `0x800825c0…0x800826c0`. Regenerable from
 
 ---
 
-## Targets 1 & 2 — pending (Techniques B/C/D)
-The SID→handler+level table (`DAT_d00005c8` 2-level `0x44`/`0x1c` records via `801d8590`) and
-the `$27` seed/key still need the `ResolveDispatchTables` edge-resolution pass and/or
-emulation, per `uds_dispatch_recovery.md`. Nothing here changes the read conclusion: the write
-window is cal+EEPROM, and there is still no `$23`/`$35`/CCP/XCP read path.
+## Target 1 — the UDS SID → handler + access table (CONFIRMED from the bin)
+
+**Table base `0x80085e58`**, 23 records of **12 bytes** `{key, handler, aux}` where
+`key = 0x00·attr·00·SID` (attr = session/security class), `handler` = service handler (or
+`0` = declared-but-no-handler), `aux` = pointer to a subfunction sub-table. Located by
+searching the image for a pointer to the behaviourally-confirmed handler `801229b4`
+(at `0x80085f04`), then reading the record grid outward.
+
+| SID | service | attr | handler | note |
+|---|---|---|---|---|
+| `0x10` | DiagnosticSessionControl | `0x31` | `8011ef88` | |
+| `0x11` | ECUReset | `0x30` | `80122580` | |
+| **`0x23`** | **ReadMemoryByAddress** | `0x30` | **`00000000`** | **declared, NULL handler → not implemented** |
+| `0x27` | SecurityAccess | `0x30` | `00000000` | → subfn sub-table `0x80085e38` (Target 2) |
+| `0x28` | CommunicationControl | `0x31` | `80123a28` | |
+| `0x01`–`0x0a` | (subfunction slots) | `0x30/70` | `80123a28` | secondary key space, shared handler |
+| `0x22` | ReadDataByIdentifier | `0x70` | `801229b4` | fixed-DID reads (the identify-for-VR surface) |
+| `0x2e` | WriteDataByIdentifier | `0x30` | `00000000` | → DID sub-table `0x80085e4c` |
+| `0x85` | ControlDTCSetting | `0x31` | `00000000` | → sub-table `0x80085e40` |
+| `0x31` | RoutineControl | `0x30` | `00000000` | routine sub-dispatch |
+| **`0x34`** | **RequestDownload** | `0x30` | **`00000000`** | write path via programming-session machinery |
+| **`0x36`** | **TransferData** | `0x30` | **`00000000`** | ″ (into fixed RAM buffer → CRC-16 blocks) |
+| `0x37` | RequestTransferExit | `0x30` | `8011efcc` | |
+| `0x19` | ReadDTCInformation | `0x70` | `801227ec` | |
+| `0x2f` | InputOutputControlByID | `0x30` | `00000000` | |
+| `0x3e` | TesterPresent | `0x71` | *(boundary)* | session-timing block follows the table |
+
+**Decisive, table-level read-surface verdict** (upgrades §6b from "no handler body found"):
+- **`0x23` ReadMemoryByAddress is declared with a NULL handler** — recognised, but returns a
+  negative response; there is no memory-read implementation.
+- **`0x35` RequestUpload and `0x3d` WriteMemoryByAddress are NOT in the table at all** — the
+  read/upload and arbitrary-write services simply do not exist on this ECU.
+- `0x34`/`0x36` have NULL handlers *here* but are implemented via the programming-session
+  reflash/transfer machinery (§3b: write-only, fixed staging buffer, cal+EEPROM window).
+- So the entire CAN service surface returns **no arbitrary flash**: reads are `0x22` fixed
+  DIDs only (identify-for-VR), writes are the scoped signed reflash. Confirms §6 end to end.
+
+## Target 2 — `$27` SecurityAccess: it is *condition-gated*, not a seed/key (CONFIRMED)
+
+`$27` has no primary handler; it dispatches through the aux sub-table at **`0x80085e38`** into
+six subfunction handlers: `8012272c, 80122758, 80123074, 80123660, 80123828, 801238c8`.
+Reading their bodies:
+
+- **There is no cryptographic seed/key here** — no seed generated from an RNG/timer and no
+  `key == f(seed)` comparison. Instead the levels are a **state machine gated by vehicle state
+  and calibration bytes**:
+  - `80122758` grants unlock (`DAT_d000ad76 = 1`, status bit `|= 0x40`) only when a set of
+    conditions hold — road speed `DAT_d00082a2 == 0`, engine/ACC state, and **calibration
+    enable bytes `DAT_80043f7d` / `DAT_80043e40` / `DAT_80043e88` (all in the `0x40000–0x80000`
+    cal region → the security behaviour is *calibratable*)**; otherwise NRC `0x22`
+    conditionsNotCorrect.
+  - `80123074` / `80123660` are a routine-style state machine keyed by IDs `0x203/0x210/0x311/
+    0x315/0x317/0x32e`, using NRC `0x13` (invalidKey) / `0x21` / `0x22`, setting state flags
+    `DAT_d000ad5a/ad5c` and the current-routine register `_DAT_c000215e`.
+  - `80123828` is a stub (always NRC `0x31`); `801238c8` (shared with the `0x2e` aux) is another
+    conditions check.
+  - The unlock flag `DAT_d000ad76` is consumed at `80106ed8`.
+- **Implication:** there is no `$27` seed/key to recover or brute-force for a *read*, because
+  there is no read service to unlock (Target 1). A cryptographic key for the *reprogramming*
+  level, if one exists, is not in this app-level table — consistent with reflash being secured
+  by the **RSA signature at the loader** (`RE_findings_checksum.md`), not an app `$27` challenge.
+  (**inference** on the last point.)
+
+## Net
+Targets 1–3 all closed statically. The recovered tables confirm, at the dispatch-table level,
+the §6 conclusion: **no `0x23`/`0x35`/`0x3d`, no CCP/XCP, `$27` gates nothing readable, and the
+only write window is cal+EEPROM** → VR, not RD. The `ResolveDispatchTables` pass
+(`uds_dispatch_recovery.md` Technique C) was not required here but is still the general tool for
+the remaining GPTA/Com jumptables and for naming the NULL-handler routing at full fidelity.

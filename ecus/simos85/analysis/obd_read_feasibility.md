@@ -259,8 +259,9 @@ the **SID→handler dispatch table** and **per-service security-level bytes** (b
 level list, and attempt/delay limiter**, and the **`0x800826c0` flash-config table's exact
 writable window**. These live in const/RAM tables, reachable by decoding the diagnostic-init
 that populates them or by resolving the recovered-jumptable targets in the raw image — not by
-reading more C. None of this changes the read conclusion: **no `0x23`, no `0x35`, no CCP/XCP →
-no CAN path returns arbitrary flash → VR, not RD.**
+reading more C. **The step-by-step recovery plan (anchors, techniques, new `ResolveDispatchTables`
+pass, sequencing) is in `uds_dispatch_recovery.md`.** None of this changes the read conclusion:
+**no `0x23`, no `0x35`, no CCP/XCP → no CAN path returns arbitrary flash → VR, not RD.**
 
 ---
 

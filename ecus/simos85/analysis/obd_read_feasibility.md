@@ -143,25 +143,62 @@ market reality (8.5 listed `VR`, not `RD`).
 
 ---
 
-## 4. Could Door 2 be built for 8.5? (the only OBD-read route, and its chicken-and-egg)
+## 4. Could Door 2 be built for 8.5 with a bench ECU? (patch-and-read, revisited)
 
-To create a genuine OBD read for 8.5 you would reproduce bri3d's Simos18 Door-2 chain
-against the 8.5 loader (all **inference**):
+This is the "if we had a bench ECU, could we find the right decompiled code and patch it over
+OBD?" question, answered with this session's code-level findings (§6, `uds_dispatch.md`).
 
-1. **Get the boot sector first — via the bench SBOOT exploit (§1).** You cannot look for a
-   signature-verifier flaw in code you don't have, and `0x0–0x20000` is blank in every OBD
-   read. This is the repo's standing TODO and the unavoidable first step.
-2. **Reverse the OBD reflash authentication + RSA/CRC verifier** in that boot code and find a
-   *logic* bug that admits unsigned/patched ASW over UDS. May not exist — the 8.5 loader is
-   an older, different (Continental/TC1796) codebase, not Simos18.
-3. **Install a reader stub over OBD** and stream flash back.
+**The load-bearing fact: over OBD you can't run your own code, so you can't read.** Patch-and-
+read means *installing a reader* and running it — that requires writing attacker code (ASW),
+and on 8.5 the OBD write path can't do it, now confirmed two independent ways:
+- **No native read to piggyback on.** The SID table has `0x23` = NULL and no `0x35`/`0x3d`
+  (§6b) — unlike Simos18, whose ASW exposes `$23` for the `simos_hsl` logger. There is nothing
+  to redirect.
+- **The OBD write path writes cal + EEPROM only, and signed.** The reflash descriptor
+  `@0x800826c0` targets calibration + DFLASH (§3b/`uds_dispatch.md`) — **not the ASW code
+  banks** — and ASW/boot are RSA-1024 signed (keys `0x73/0x6E/0x74`) by the loader in the boot
+  sector. Calibration is *data* (maps/curves/scalars — `cal_read_method.md`), not code, so a
+  cal write — even accepted — yields no code execution.
 
-**Why it "can't currently be done":** step 2 is gated on step 1's bench dump, which is only a
-partial/unproven port for 8.5; and no signature-verifier break for the 8.5 OBD path is
-published. Until both land: **OBD read of 8.5 = not available; bench SBOOT is the only route
-to a full image.** (Pcmflash's 8.6 "unlock in BSL" is a *fourth* mechanism — rewriting an
-external SPI **EEPROM** lock bit on the bench — closed, not a signature break, no help to
-8.5.)
+So a real OBD read still reduces to **defeating the ASW signature so the loader accepts your
+patched code**, exactly as in §2/§3. The bench ECU changes *what you can research*, not that
+requirement.
+
+**What a bench ECU actually unlocks (why it's the right lab):**
+1. **The boot-sector dump — the only way to get the code you'd patch.** The RSA verifier and
+   the reflash-acceptance logic live in `0x0–0x20000`, blank in every OBD read. A bench
+   ECU + the SBOOT/BSL exploit (§1) is the *only* route to that region (and the repo's standing
+   TODO). **Until you have it you cannot even locate the check to bypass** — "find the right
+   decompiled code" is literally gated on the bench read.
+2. **Safe iteration.** Patch → flash → brick → recover via BSL → repeat, on a donor, never the
+   car (see the donor-validation reasoning in the read-paths thread).
+3. **Ground truth.** A bench full-flash read to diff every OBD experiment against.
+
+**The workflow, concretely (all inference):**
+1. Bench SBOOT/BSL → dump `0x0–0x20000` + full ASW.
+2. Decompile **CBOOT/the flash loader** (now that you have it) → find the RSA-signature
+   verification and the `RequestDownload`/`TransferData` acceptance path — *this* is "the right
+   decompiled code."
+3. Hunt for a **logic flaw** (TOCTOU / bounds / partial-verify / a seed-key weakness — the
+   bri3d class) that lets an unsigned or modified ASW image be accepted over UDS, and that
+   lets writes reach the ASW banks (not just the cal+EEPROM descriptor). Patch/exploit it over
+   OBD, install a small reader stub, stream flash back.
+
+**Honest verdict:** a bench ECU makes the research *possible* — it is the prerequisite — but it
+does **not guarantee** an OBD read. Success hinges on such a flaw *existing* in the 8.5 loader,
+an older Continental/TC1796 codebase unrelated to Simos18; that it exists is unknown until the
+boot code is dumped and read, and the fact that no public 8.5 OBD read exists *despite* the
+SBOOT bench exploit being available is weak evidence it isn't easy. (Two asides from this
+session: `$27` unlock is gated by **calibration** bytes `DAT_80043f7d/e40/e88` — writable over
+OBD — so you could flip the app-level security state via a cal patch, but it still opens only
+the cal+EEPROM signed-write path, no read and no ASW code write; and Pcmflash's 8.6 "unlock in
+BSL" is a *separate* bench EEPROM-lock trick, not a signature break, so it doesn't transfer.)
+
+**Bottom line:** bench ECU = the lab you need to *attempt* Door 2 and to get the boot code that
+"finding the right code to patch" depends on. Whether it yields an OBD read is contingent on an
+unproven loader flaw — so the realistic near-term outcome of getting a bench ECU is the
+**boot-sector dump** (high value on its own, closes the repo's open TODO), with an OBD read as
+a research bet on top, not a given.
 
 ---
 

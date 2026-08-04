@@ -78,11 +78,14 @@ python3 core/diff/diff3.py \
 Two disclosures the repo makes up front, because taking a number here at face
 value would be a mistake:
 
-- **Most function names are machine-proposed.** `ecus/simos85/analysis/symbols_merged.csv`
-  carries a `source` column (`llm`, `verified`, `re-trace`, `fr-trace`) and the
-  overwhelming majority of rows are `llm`. An `llm` name is a hypothesis, not a
-  finding. Filter on `source` before citing a name as ground truth — that column is
-  the authority, so count it there rather than trusting a figure quoted in prose.
+- **`symbols_merged.csv` now holds only confirmed names.** A 20-sample audit found the
+  machine-proposed (`llm`) names were 20% actively *wrong* — misleading in the way that
+  misdirects analysis (see `ecus/simos85/analysis/symbol_name_audit.md`), so they were
+  retired from the canonical store. It now carries only `source ∈ {verified, re-trace,
+  fr-trace}`; everything else is `FUN_<addr>` (honest "unknown"). The ~2500 retired guesses
+  live in `analysis/llm_name_hints.csv` as an explicitly-**unverified** hypothesis pool
+  (not applied by the pipeline) — grep it for a lead, but confirm against the code before
+  trusting it.
 - **The MED17 image is not a virgin OEM read.** It is a WinOLS export tagged
   `ACC_ENABLE` with checksum correction off — the cal area may already be
   modified, precisely in the ACC/cruise bytes under study. Every MED17 cal

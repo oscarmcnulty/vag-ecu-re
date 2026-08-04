@@ -70,7 +70,8 @@ Functions are a separate store — the A2L describes calibration data, not code.
 | Store | Role | Holds | Provenance |
 |---|---|---|---|
 | `maps/simos85.a2l` | **canonical (hand-edited)** | ASAP2 model of every cal object; the INCA/CANape/WinOLS-native source | each CHARACTERISTIC's description string |
-| `analysis/symbols_merged.csv` | **canonical** | function names (addr,name,type,comment,**source**) | `source` = `verified` or `llm` |
+| `analysis/symbols_merged.csv` | **canonical** | **confirmed** function names (addr,name,type,comment,**source**) | `source` ∈ {`verified`,`re-trace`,`fr-trace`} |
+| `analysis/llm_name_hints.csv` | hypothesis pool | ~2500 retired `llm` guesses (**unverified**, not applied) | machine-proposed; see `symbol_name_audit.md` |
 | `maps/a2l_symbols.csv` | generated | cal labels for Ghidra `ApplySymbols` (address,name,type,comment) | from the A2L (`core/maps/a2l_to_symbols.py`) |
 | `maps/a2l_catalog.csv` | generated | flat CSV index (name, dims, axes, scaling, unit; `--bin` monotonic check) | from the A2L (`core/maps/a2l_catalog.py`) |
 
@@ -123,9 +124,10 @@ Canonical version-controlled inputs (RE metadata, not firmware code):
 | `core/ghidra/*.java`, `core/pipeline/reproduce.sh` | the shared pipeline |
 | `maps/RESULTS.md` | findings/addresses not yet pinned to a labeled object |
 
-> **Symbol provenance:** most function names in `symbols_merged.csv` are LLM-proposed
-> (`source=llm`) — hypotheses, not verified findings. Only `source` ∈ {`verified`,
-> `re-trace`, `fr-trace`} has been confirmed against the code or the Funktionsrahmen.
+> **Symbol provenance:** `symbols_merged.csv` contains only names confirmed against the code
+> or the Funktionsrahmen (`source` ∈ {`verified`, `re-trace`, `fr-trace`}). The machine-proposed
+> `llm` names were audited (20% actively wrong) and retired to `llm_name_hints.csv` — an
+> unverified hypothesis pool the pipeline does not apply. See `analysis/symbol_name_audit.md`.
 
 ## TODO / open items
 

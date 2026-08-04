@@ -1,0 +1,51 @@
+vaddr,len,stages,new,a2l_objects
+0x80040940,6,S2-only,no,torque_monitor_permissible_dev_40940
+0x80040956,32,S2-only,yes,Mom_ueberw_L2_config_flags_40956
+0x80040abc,2,S2-only,no,redundant_estimate_dev_tol_40abc
+0x8004119e,32,S1=S2,yes,monitor_thresh_egtr_bts_4119e
+0x800423ce,2,S2-only,no,thermal_permissive_gate_thresh
+0x80043c2c,18,S1&S2,no,c_vs_max_aeb_act; speed_limiter_setpoint_table_43c2c
+0x8004449e,85,S1&S2,yes,N_MAX_rev_limiter_curve_bank_4449e
+0x80044505,23,S1=S2,no,Max_RPM_for_Engine_Coolant_Temp; Max_RPM_for_Engine_Oil_Temp; N_MAX_rev_limiter_curve_bank_4449e
+0x800449fc,36,S1&S2,yes,thermal_prot_tq_limiter_params_449fc
+0x80048c18,244,S1&S2,yes,eff_tqi_cor_struct_48c18
+0x80048dde,22,S1&S2,yes,charge_tq_ref_curve_48dde
+0x80048e2c,24,S1&S2,yes,eff_tq_bank_axis_48e2c
+0x80049114,168,S1=S2,yes,eff_tqi_max_ceiling_49114
+0x8004925c,24,S1=S2,yes,eff_rpm_fill_curve_4925c
+0x8004eb6c,24,S2-only,no,monitor_load_window_4eb6c
+0x80053235,75,S1&S2,yes,charge_boost_gate_bank0_53235
+0x800532f5,75,S1=S2,yes,charge_boost_gate_bank1_532f5
+0x80055e64,32,S1=S2,no,tq_factor_block_55e64_unattributed
+0x80055f04,12,S1-only,no,curve_55f04_factor
+0x800560f5,959,S1&S2,no,ip_tq_pow_max_at_0; ip_tq_pow_max_at_1
+0x800564c4,624,S1&S2,no,ip_tq_pow_max_eco_0; ip_tq_pow_max_eco_1
+0x80056764,688,S1&S2,no,ip_tq_pow_max_mt_0; ip_tq_pow_max_mt_1; ip_tq_pow_max_mt_4wd_0
+0x80057620,191,S1=S2,no,tq_upper_limit_57620
+0x8005774e,21,S1=S2,yes,tq_upper_limit_companion_5774e
+0x80057be8,4,S1=S2,no,ip_tqi_ref
+0x80057c00,4,S1=S2,no,ip_tqi_ref
+0x80057c18,4,S1=S2,no,ip_tqi_ref
+0x80057c30,4,S1=S2,no,ip_tqi_ref
+0x80057c48,4,S1=S2,no,ip_tqi_ref
+0x80057c60,4,S1=S2,no,ip_tqi_ref
+0x80057c78,4,S1=S2,no,ip_tqi_ref
+0x80057c90,4,S1=S2,no,ip_tqi_ref
+0x80057ca8,4,S1=S2,no,ip_tqi_ref
+0x80057cc0,4,S1=S2,no,ip_tqi_ref
+0x80057cd8,4,S1=S2,no,ip_tqi_ref
+0x80057cf0,4,S1=S2,no,ip_tqi_ref
+0x80057d08,4,S1=S2,no,ip_tqi_ref
+0x80057d20,4,S1=S2,no,ip_tqi_ref
+0x80057d38,4,S1=S2,no,ip_tqi_ref
+0x80057d50,4,S1=S2,no,ip_tqi_ref
+0x8005ef0c,4,S1=S2,no,ip_fup_sp_hom
+0x8005ef20,44,S1=S2,no,ip_fup_sp_hom
+0x8006567a,166,S2-only,yes,limiter_monitor_table_6567a
+0x8006d3ac,5,S2-only,no,block_6d3ac_consumer_unresolved
+0x8006d3c2,130,S2-only,no,block_6d3ac_consumer_unresolved; block_6d3c4_mff_factor_cont
+0x80074084,128,S1=S2,yes,ign_charge_time_corr_74084
+0x8007865b,129,S1=S2,no,ip_iga_spark_correction_bank
+0x8007870e,142,S1=S2,yes,ip_iga_spark_correction_bank2_7870e
+0x800787c2,154,S1=S2,yes,ip_iga_spark_correction_bank3_787c2
+0x8007a38c,7,S1&S2,yes,acc_accel_profile_curve_7a38c

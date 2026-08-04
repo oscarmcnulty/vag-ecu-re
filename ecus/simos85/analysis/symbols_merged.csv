@@ -2640,3 +2640,21 @@ address,name,type,comment,source
 0x800435e2,cal_acc05_creep_to_moving_thd,DATA,"ACC_05-path creep->moving speed threshold (u16=1004=7.84 km/h at 1/128), 80141528:174-178. The ACC_05/Momentenanf equivalent of the 8013ef46 creep cal 0x800439f8 (same value) but FULLY CALIBRATABLE (no hardcoded 1000 literal). Feeds status a5ae (TSK packers), not a hard disengage. See RESULTS UPDATE 66 Q3-followup.",re-trace
 0x800435e6,cal_acc05_moving_to_creep_thd,DATA,"ACC_05-path moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 80141528:176. Hysteresis partner of 0x800435e2. ACC_05 equivalent of 8013ef46 cal 0x800439fa. See RESULTS UPDATE 66 Q3-followup.",re-trace
 0xd000a5ae,acc05_creep_status_tsk,DATA,"ACC_05-path creep/low-speed status (80141528:187), from ego-speed vs cals 0x800435e2/e6. Read by TSK packers 8011101c/80137d0c/80137f2c. A status bit, NOT a hard speed floor. (a5ad sibling is dead - no readers.) See RESULTS UPDATE 66 Q3-followup.",re-trace
+0x80040956,Mom_ueberw_L2_config_flags_40956,DATA,Calibration object (32x u8); changed by tune (S2-only). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8004119e,monitor_thresh_egtr_bts_4119e,DATA,Calibration object (16x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8004449e,N_MAX_rev_limiter_curve_bank_4449e,DATA,Calibration object (58x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x800449fc,thermal_prot_tq_limiter_params_449fc,DATA,Calibration object (18x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x80048c18,eff_tqi_cor_struct_48c18,DATA,Calibration object (122x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x80048dde,charge_tq_ref_curve_48dde,DATA,Calibration object (11x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80048e2c,eff_tq_bank_axis_48e2c,DATA,Calibration object (12x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80049114,eff_tqi_max_ceiling_49114,DATA,Calibration object (84x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x8004925c,eff_rpm_fill_curve_4925c,DATA,Calibration object (12x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80053235,charge_boost_gate_bank0_53235,DATA,Calibration object (75x u8); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x800532f5,charge_boost_gate_bank1_532f5,DATA,Calibration object (75x u8); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8005774e,tq_upper_limit_companion_5774e,DATA,Calibration object (10x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8006567a,limiter_monitor_table_6567a,DATA,Calibration object (83x u16); changed by tune (S2-only). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8006d3c4,block_6d3c4_mff_factor_cont,DATA,Calibration object (64x u16); changed by tune (S2-only). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x80074084,ign_charge_time_corr_74084,DATA,Calibration object (64x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8007870e,ip_iga_spark_correction_bank2_7870e,DATA,Calibration object (142x u8); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x800787c2,ip_iga_spark_correction_bank3_787c2,DATA,Calibration object (154x u8); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm
+0x8007a38c,acc_accel_profile_curve_7a38c,DATA,Calibration object (7x u8); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,llm

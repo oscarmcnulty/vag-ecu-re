@@ -29,6 +29,18 @@ First and reference ECU pack. The `core/` tooling is built against this target.
   - CRC16/ARC table @ `0x800808ec` (init 0xABCD; UDS download buffers)
   - CRC8/AUTOSAR table @ `0x80080aec` (no callers)
 
+## External read paths (bench SBOOT vs OBD) — see analysis/obd_read_feasibility.md
+
+Why 8.5 is *virtual read* over OBD, not a real dump: the SBOOT boot-password
+exploit ([fastboatster/Simos8_SBOOT]) is **bench-only** (entry is a PWM-on-boot-pins
+timing gate, not a bus message) but is the only route to the boot sector
+`0x0–0x20000`; a Simos18-style **OBD** read needs an unsigned-code-write primitive
+(RSA-signature bypass) that is unbroken on the 8.5 loader — so no OBD full-flash
+read exists. Full reasoning + how a Door-2 OBD read could be built in
+`analysis/obd_read_feasibility.md`.
+
+[fastboatster/Simos8_SBOOT]: https://github.com/fastboatster/Simos8_SBOOT
+
 ## Calibration map engine
 
 - 1D: `kl_interp_u16` @0x800a5f40 · 2D: `kf_interp_u16` @0x800a5fc0 (bilinear)

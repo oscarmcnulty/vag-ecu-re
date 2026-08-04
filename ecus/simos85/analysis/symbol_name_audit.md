@@ -2,10 +2,11 @@
 
 ## What changed
 `analysis/symbols_merged.csv` now holds **only confirmed names** (`source ∈ {verified,
-re-trace, fr-trace}`, 144 rows). The ~2509 `source=llm` machine-proposed names were moved to
-**`analysis/llm_name_hints.csv`** — same columns, explicitly **UNVERIFIED**, and **not applied
-by the pipeline** (`ApplySymbols` reads `symbols_merged.csv` only). Nothing is deleted; the
-hints remain greppable as starting hypotheses.
+re-trace, fr-trace}`, 144 rows). The ~2509 `source=llm` machine-proposed names were **removed**;
+`ApplySymbols` therefore applies only confirmed names and everything else stays `FUN_<addr>`.
+The retired guesses are not carried in the tree — they remain recoverable from **git history**
+(`git log --oneline -- ecus/simos85/analysis/symbols_merged.csv`) if a starting hypothesis is
+ever wanted, but they are not trusted or applied.
 
 ## Why (evidence)
 A 20-function random audit of `source=llm` rows (each judged against its actual decompiled C):
@@ -31,8 +32,8 @@ the whole `llm` set as untrusted, stop surfacing it in analysis, and let `FUN_<a
 "unknown" until a name is *earned* by tracing (→ `re-trace`) or matched to the Funktionsrahmen
 (→ `fr-trace`).
 
-## How to use the hints
-`llm_name_hints.csv` is a **hypothesis pool**, not ground truth. When working a function, you may
-grep it for a starting guess — but verify against the code before believing it, and when you
-confirm one, promote it into `symbols_merged.csv` with the right `source`
-(`verified`/`re-trace`/`fr-trace`) and a provenance note. That is how the canonical store grows.
+## Growing the canonical store
+Names are earned, not guessed: confirm a function against its decompiled code (→ `re-trace`)
+or match it to the Funktionsrahmen (→ `fr-trace`), then add it to `symbols_merged.csv` with a
+provenance note. Do not reintroduce unverified machine names. If you want the old guesses as a
+starting point, pull them from git history rather than trusting them in place.

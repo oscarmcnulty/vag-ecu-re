@@ -380,6 +380,16 @@ address,name,type,comment,source
 0x80033132,process_ecu_request,FUNCTION,Handles ECU request processing based on input parameters.,llm
 0x800337d0,task_dispatch_loop,FUNCTION,Infinite loop that dispatches tasks based on function pointers.,llm
 0x80040000,SW_ID_BLOCK,LABEL,software-ID block: 8R0907551F / S8500L2000000 / CTUC,verified
+0x800435e2,cal_acc05_creep_to_moving_thd,DATA,"ACC_05-path creep->moving speed threshold (u16=1004=7.84 km/h at 1/128), 80141528:174-178. The ACC_05/Momentenanf equivalent of the 8013ef46 creep cal 0x800439f8 (same value) but FULLY CALIBRATABLE (no hardcoded 1000 literal). Feeds status a5ae (TSK packers), not a hard disengage. See RESULTS UPDATE 66 Q3-followup.",re-trace
+0x800435e6,cal_acc05_moving_to_creep_thd,DATA,"ACC_05-path moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 80141528:176. Hysteresis partner of 0x800435e2. ACC_05 equivalent of 8013ef46 cal 0x800439fa. See RESULTS UPDATE 66 Q3-followup.",re-trace
+0x80043650,cal_cruise_torque_rate_falling,DATA,"Cruise/ACC engine-torque FALLING rate limit (clutch-open / torque release), 80141904 slope limiter. s16=20 (~40 Nm/s if res 2). Cand C_TQ_GRD_CLU_OPEN (MEDIUM conf). See UPDATE 62.",re-trace
+0x80043652,cal_cruise_torque_rate_rising,DATA,"Cruise/ACC engine-torque RISING rate limit (clutch-close / brake->drive re-engagement smoothness), in 80141904 asymmetric slope limiter on Ramd0007d06. s16=10 (~20 Nm/s if res 2). Lower=smoother/slower torque pickup. NOT indexed by ACC_Dynamik (fixed). Cand C_TQ_GRD_NORM_CLU_CLOSE (MEDIUM conf). See UPDATE 62.",re-trace
+0x800439f8,cal_creep_to_moving_thd,DATA,"Creep->moving speed threshold (u16=1004=7.84 km/h at 1/128), 8013ef46:755 sets uRamc0001118 bit0x40. Hysteresis partner of 0x800439fa (973=7.60). Lower toward 0 for sub-15 standstill (keep f8>fa). NOTE a hardcoded literal 1000 at 8013ef46:258 also enforces ~7.81 km/h (firmware patch). See RESULTS UPDATE 66.",re-trace
+0x800439fa,cal_moving_to_creep_thd,DATA,"Moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 8013ef46:808 clears uRamc0001118 bit0x80. Hysteresis partner of 0x800439f8 (1004). See RESULTS UPDATE 66.",re-trace
+0x80043bc6,cal_acc_frame_select,DATA,"CAL word selecting which ACC RX frame(s) the engine decodes (no runtime writer). &0x100=ACC_01/DCC_1(0x109) via 801383e8; &(0x200|0x400|0x1000)=ACC_05/DCC_5(0x10D) via 801383fc. This image=0x0900 => ACC_01 active (Q5), ACC_05 disabled (Macan would set the ACC_05 bits). Reflash to change, NOT VCDS. See RESULTS UPDATE 66.",re-trace
+0x80043caf,cal_acc_mode_tsk_packer_select,DATA,"CAL byte (=0x06). bit0 => a5a8 (801abf64): 0=ACC_01+TSK_02(80137a00,has Anhalten)+hold-relay; 1=ACC_05 Momentenanf drive-off+TSK_05(80137f2c). bit2 selects mass source. Q5=0x06 (bit0=0). See RESULTS UPDATE 64/66.",re-trace
+0x8005b71c,cal_acc_decel_limit_kennfeld_m3p0,DATA,"ACC brake decel-limit Kennfeld region: 11 consecutive u16 = 0x7237 = -3.000 m/s2 (850e-6 offset-binary, phys=(raw-0x8000)*850e-6). THE -3.0 brake-decel clamp (openpilot lever). Raise = set more negative (0x6db1=-3.984 floor). File offset 0x5b71c. Recompute cal checksum. +5 scattered cells 0x597f2/59836/598a2/598b2/5a546. See RESULTS UPDATE 57.",re-trace
+0x800793a0,cal_acc_l2monitor_struct,DATA,"ACC/cruise L2-monitor + diagnosis cal struct (base ptr *0x80090f80, used by 80102f60). Speed floors (u8 km/h, compared da54<=cal*0x80, da54=1/128 km/h): +0x14f=15 & +0x152=15 = C_VS_MIN_CRU_MON (15km/h, flash 0x800794ef/0x800794f2); +0x196=384=3.0km/h creep gate. +0x16e=0x1fff diag enable, +0x178=0 fatal mask, +0x121=0xBF engage-inhibit mask. See acc_flow.md / UPDATE 58.",re-trace
 0x800808ec,CRC16_ARC_TABLE,LABEL,"256-entry CRC16/ARC table, refl 0xA001",verified
 0x80080aec,CRC8_AUTOSAR_TABLE,LABEL,"256-entry CRC-8/AUTOSAR table, poly 0x2F",verified
 0x8008a014,dispatch_handler,FUNCTION,Dispatches a handler based on the input parameters.,llm
@@ -422,7 +432,7 @@ address,name,type,comment,source
 0x800a2c04,find_index_in_array,FUNCTION,Finds the index of a value in an array and returns it along with the previous index.,llm
 0x800a2c40,read_byte_from_offset,FUNCTION,Reads a byte from an offset in memory.,llm
 0x800a2c48,read_map_descriptor,FUNCTION,Accesses a calibration map's data pointer by id.,llm
-0x800a2c54,read_memory_value,FUNCTION,Reads a value from memory based on given parameters.,llm
+0x800a2c54,cal_table_indexer_2d,FUNCTION,2-D cal-table indexer base+row*width+col; NOT a memory read (obd_read_feasibility.md 6c),re-trace
 0x800a2c68,read_value_from_table,FUNCTION,Reads a value from a table based on two indices.,llm
 0x800a2c7c,process_sensor_data,FUNCTION,Process sensor data using two separate functions,llm
 0x800a2c98,process_ecu_data,FUNCTION,Handles ECU data processing involving two separate operations on input parameters.,llm
@@ -463,6 +473,7 @@ address,name,type,comment,source
 0x800a4a00,calculate_checksum,FUNCTION,Calculates a checksum based on input parameters.,llm
 0x800a4ba4,min_u16,FUNCTION,Returns the minimum of two unsigned 16-bit integers.,llm
 0x800a4bbc,min_u16,FUNCTION,Returns the minimum of two unsigned 16-bit integers.,llm
+0x800a4bbc,max_u16_MISNAMED_min,FUNCTION,"Returns the MAX of two u16 (body p1*(p2<p1)+p2*(p2>=p1)) despite the Ghidra auto-name 'min_u16_800a4bbc'. Used at 8013c5d4:418 as Ramd0007c9a=max(request,0x7237) = the -3.0 decel TRUNCATION (offset-binary, larger raw=less braking). DISTINCT from plain min_u16 (0x800a4c..) which is a genuine min. See acc_flow.md / UPDATE 59.",re-trace
 0x800a4bc8,select_max,FUNCTION,Selects the maximum of two integers.,llm
 0x800a4c74,min_of_three,FUNCTION,Returns the minimum of three integers.,llm
 0x800a4c84,min_u8,FUNCTION,Returns the minimum of two unsigned 8-bit values.,llm
@@ -602,7 +613,7 @@ address,name,type,comment,source
 0x800a9d38,reset_calibration_data,FUNCTION,Resets calibration data based on input parameters.,llm
 0x800a9d64,reset_calibration_data,FUNCTION,Resets calibration data based on input parameters.,llm
 0x800a9e68,clear_uds_download_buffer,FUNCTION,Clears the UDS download buffer by setting all bytes to zero.,llm
-0x800aa018,task_dispatch_loop,FUNCTION,Dispatches tasks based on input parameter,llm
+0x800aa018,indirect_step_trampoline,FUNCTION,"generic {op_fn,arg} step dispatcher; walks the flash-op descriptor lists (uds_dispatch.md)",re-trace
 0x800aa024,update_status_flags,FUNCTION,Updates status flags based on input parameters and performs bitwise operations.,llm
 0x800aa104,update_bitmask,FUNCTION,Updates a bitmask based on input parameter,llm
 0x800aa222,empty_stub,FUNCTION,"No clear purpose, just a call to another function and returns.",llm
@@ -622,7 +633,7 @@ address,name,type,comment,source
 0x800aa736,init_state,FUNCTION,Initialize system state pointers and flags,llm
 0x800aa740,update_ecu_parameter,FUNCTION,Updates an ECU parameter based on the provided indices and value.,llm
 0x800aa7f2,update_ecu_state,FUNCTION,"Updates the ECU state based on input parameters and performs various operations including setting flags, calling other functions, and handling different states.",llm
-0x800aa922,handle_uds_command,FUNCTION,Handles UDS command based on input parameter and dispatches to appropriate handler.,llm
+0x800aa922,gpta_channel_service_dispatch,FUNCTION,GPTA/PCP timer-channel dispatcher (DAT_d0000580=GPTA cfg via 801cd388); NOT UDS (obd_read_feasibility.md 6c),re-trace
 0x800aa984,update_map_entry,FUNCTION,Updates an entry in a calibration map based on parameters.,llm
 0x800aa9e0,gpta_config_handler,FUNCTION,Handles configuration of GPTA (General Purpose Timer A) based on the provided parameters.,llm
 0x800aad3a,update_status_flag,FUNCTION,Updates a status flag based on input parameter and previous state.,llm
@@ -779,10 +790,10 @@ address,name,type,comment,source
 0x800b3c34,update_control_flags,FUNCTION,Updates control flags in a parameter based on the input condition.,llm
 0x800b3d22,jump_table_handler,FUNCTION,Handles a jump table based on the value of _DAT_c00028a0,llm
 0x800b3d2e,jump_table_handler,FUNCTION,Handles a jump table based on the value of _DAT_c00028a4,llm
-0x800b3e6e,handle_diagnostic_request,FUNCTION,Handles diagnostic requests based on input parameter.,llm
+0x800b3e6e,gpta_timing_dispatch_2level,FUNCTION,GPTA/injection-timing 2-level table dispatch via DAT_d00005c8/0x8008eab0; NOT UDS (uds_dispatch.md),re-trace
 0x800b3ea2,dispatch_handler,FUNCTION,Dispatches a handler based on the input parameter.,llm
 0x800b3ebc,dispatch_handler,FUNCTION,Dispatches a handler based on the input parameter.,llm
-0x800b3f40,update_ecu_parameter,FUNCTION,Updates an ECU parameter based on input values and performs related operations.,llm
+0x800b3f40,gpta_channel_update,FUNCTION,writes GPTA0_GTCCTR/GTCXR timer regs; NOT UDS,re-trace
 0x800b4094,update_ecu_state,FUNCTION,Updates the ECU state based on input parameters and performs related operations.,llm
 0x800b4138,configure_timer,FUNCTION,Configures a timer based on input parameters.,llm
 0x800b4220,update_sensor_value,FUNCTION,Updates a sensor value and possibly triggers related hardware actions.,llm
@@ -836,6 +847,7 @@ address,name,type,comment,source
 0x800b7660,state_machine_handler,FUNCTION,Handles state transitions and checks for specific conditions in a state machine.,llm
 0x800b76e4,handle_state_transition,FUNCTION,Handles state transitions based on the result of a function call.,llm
 0x800bb94c,update_ecu_parameters,FUNCTION,Updates ECU parameters based on input indices and conditions.,llm
+0x800c553c,ac_min_cru_plausibility_monitor,FUNCTION,"AC_DCRU_PLAUS/AC_MIN_CRU L2 monitor: faults when integrated accel setpoint c0001732 exits [cal 0x80043514=-3.0, cal 0x80043512=+2.0] m/s2 (0.001 scale); FR ch.70.6. FUNCTIONALLY ISOLATED (UPDATE 56): input c0001732 + all fault outputs (154b-f,1550,1551) read by NOTHING except this fn + resets 80172658/801b498c (FindRefsTo-verified); no callers (RAM-dispatched); reports to DTC framework only. Does NOT drive delivered decel / ACC deactivation / TSK status-3. Raising 0x80043514 = DTC threshold only.",fr-trace
 0x800cb83c,update_ecu_state,FUNCTION,Updates the ECU state based on input parameter and performs various internal operations.,llm
 0x800cf034,update_sensor_status,FUNCTION,Updates the status of a sensor based on input parameters.,llm
 0x800cf09c,process_ecu_state,FUNCTION,"Handles ECU state processing, including map lookups and state updates.",llm
@@ -872,6 +884,7 @@ address,name,type,comment,source
 0x800fc620,update_control_flags,FUNCTION,Updates control flags based on various conditions and map lookups.,llm
 0x800fc99c,update_status_flags,FUNCTION,Updates status flags based on certain conditions.,llm
 0x80102f5c,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
+0x80102f60,acc_status_error_aggregator,FUNCTION,"ACC diag coordinator: runs 13 cruise diagnoses via acc_diag_debounce_evaluator (desc d000d714-d740). 12 feeders are RELAYED 2-bit CAN/Com symptoms; only bit1(d62b<-80170fc0) is engine-computed (AC_DE_ORNG_ENG_CRU). bits10/11 stubbed(=0). Builds d000d8e0=error word((symptom==3)<<bit), d8d0(==1),d8da(==2). DEACTIVATION path d8e0 & cal(0x800793a0+0x178) is DEAD (fatal mask=0x0000; d746/d894 never latch). But STATUS path is LIVE: d744=debounce(d8e0!=0)(:719) -> d8e2 bit2=0(:792) -> 801eca44 maps to TSK status 3; d744->d8b4 latch gates recompute(:710,:722)=key-cycle latch. enable mask +0x16e=0x1fff. See RESULTS UPDATE 55.",fr-trace
 0x801030b4,task_dispatch_loop,FUNCTION,Dispatches various tasks based on conditions and state checks.,llm
 0x80103144,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80103150,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
@@ -906,6 +919,11 @@ address,name,type,comment,source
 0x80103a06,reset_uds_transfer_block,FUNCTION,Resets the UDS transfer block by clearing specific memory locations.,llm
 0x80103a1a,init_state,FUNCTION,Initialize system state by setting a value and calling three other functions.,llm
 0x80103a32,task_dispatch_loop,FUNCTION,Dispatches tasks in a loop,llm
+0x80106db8,canrx_ESP_05_106,FUNCTION,"RX decoder for ESP_05 (CAN id 0x106), MLB E2E seed 0x07 (=(0x01^0x06)) — the ESP->engine FEEDBACK frame (NOT an ACC command). Writes esp05_ESP_Bremsdruck(d0007c3e=(raw-100)*3 from 16|10) + the esp05_* status cluster (Verz_TSK_aktiv, Konsistenz_TSK, Autohold_Standby/_aktiv, StartStopp_Info, BKV_Unterdruck, Status_Bremsdruck a4f1, ...). Closes the engine<->ESP brake loop (TSK_02 out / ESP_05 in). Dispatched from 80108cc4 handle 0x600, gated by coding d000a753. ~20 exact bit-matches vs opendbc ESP_05 + FR TCS5. See RESULTS UPDATE 65.",re-trace
+0x80106ed8,can_tx_scheduler,FUNCTION,"CAN TX scheduler: per-slot dispatch that packs+transmits engine TX frames. TSK_02 (0x10C) at :739-753: when DAT_80043caf&1==0 (image=0x06) and Ramd0006988&0x8000, calls tsk_pack_verzoeg_anf_active(80137a00,&d00010f4) then writes HW mailbox handle 0x680. Alt packer 80137f2c (handle 0x8c0) is the caf&1==1 TSK_05 variant, not used here. See RESULTS UPDATE 64.",re-trace
+0x80108cc4,canrx_poll_dispatch_acc_esp,FUNCTION,"RX poll+dispatch loop: reads message objects by HAL handle (FUN_800b15b8/800b15d6 vtable read) and dispatches ACC/ESP decoders. handle 0x240->canrx_ACC_01_DCC1_109, 0x8a0->canrx_ACC_05_DCC5_10D, 0x600->canrx_ESP_05_106. Handles are internal COM/mailbox handles, NOT CAN ids (id back-solved via E2E seed=(hi^lo)). Gated by coding DAT_80043bc6 + message-present DAT_d0006980. See RESULTS UPDATE 64/65.",re-trace
+0x8010a4fc,acc_driveoff_hold_diagnostics,FUNCTION,"Diagnostics for the ACC_05 drive-off/hold path: debounces a3b9(Freigabe_Momentenanf)/b057(Status)/a54d(hold-confirmed) into diag events 0xd1/0xd2/0xd3 (update_control_flags_800a8b20). Monitoring only, no control output. See RESULTS UPDATE 66.",re-trace
+0x8010a6ec,acc_epb_standstill_hold_statemachine,FUNCTION,"ACC_05/EPB stop-and-go standstill-HOLD state machine (gated a757 && ad0f && a5a8 && !a54c; DEAD on Q5 a5a8=0). Hold timer d0001325->uRamc0001062->a54d(hold-confirmed >= cal 80043828[5]); a54b(drive-off inhibit); a54c(EPB fault-inhibit, 16 conds masked by cal 80043ccc[0x14]). Uses b057==3(AKTIV) + a3ba(Betaetigung_EPB). This IS the in-binary 'hold control' (contra 'not implemented'); but engine does NOT originate hold on bus (no ACC_05 TX; TSK_Anhalten relay off when a5a8!=0) - EPB is radar-direct. See RESULTS UPDATE 66.",re-trace
 0x80112734,check_null_strings,FUNCTION,Checks if specific memory locations contain null strings and sets flags accordingly.,llm
 0x801130d0,set_flag_and_copy_value,FUNCTION,Sets a flag and copies a value to a specific location in memory.,llm
 0x80116e08,cruise_state_machine,FUNCTION,"cruise/ACC state machine; config DAT_800443e1, states DAT_d000a910-a929",verified
@@ -916,13 +934,26 @@ address,name,type,comment,source
 0x8011e94a,canmo_107_Motor_04,FUNCTION,"CAN message-object handler for Motor_04 (0x107, TX); dispatch @0x80082f18 -> descriptor -> this handler (sender Motor_EDC17_D4)",verified
 0x8011e98c,canmo_108_id108,FUNCTION,"CAN message-object handler for UNKNOWN (0x108, ?); dispatch @0x80082f18 -> descriptor -> this handler (sender ?)",verified
 0x8011e9ce,canmo_10e_TSK_04,FUNCTION,"CAN message-object handler for TSK_04 (0x10e, TX); dispatch @0x80082f18 -> descriptor -> this handler (sender Motor_EDC17_D4)",verified
+0x8011e9ce,canmo_10e_TSK_04,FUNCTION,TSK_04 (0x10e TX) packer: copies node(*d000d404)+8..+0xf to CAN. TSK_Status_GRA_ACC_02 = bits6-7 of byte *(d000d404)+0xf (LCAN_DT_MNG4_8_67); 3=Fehler_GRA_ACC_nicht_moeglich. Set 3 when LV_DCC_OFF_DC_EMS or LV_ERR_VAR_COD_CRU_PLAUS (FR p9049).,fr-trace
 0x8011ef50,task_dispatch_loop,FUNCTION,Dispatches tasks based on a function pointer table.,llm
 0x8011ef78,set_flag,FUNCTION,Sets a flag to indicate some state or event.,llm
+0x8011ef88,uds_svc_10_DiagnosticSessionControl,FUNCTION,UDS SID 0x10 handler (SID table 0x80085e58),re-trace
+0x8011efcc,uds_svc_37_RequestTransferExit,FUNCTION,UDS SID 0x37 handler (SID table),re-trace
+0x80122580,uds_svc_11_ECUReset,FUNCTION,UDS SID 0x11 handler (SID table),re-trace
+0x8012272c,uds_sa27_subfn_a,FUNCTION,$27 SecurityAccess subfn (aux 0x80085e38); sets DAT_d000ad76=0,re-trace
+0x80122758,uds_sa27_unlock_by_conditions,FUNCTION,$27 unlock: sets DAT_d000ad76=1 on vehicle-state + cal enables DAT_80043f7d/e40/e88; NOT a seed/key (uds_dispatch.md),re-trace
+0x801227ec,uds_svc_19_ReadDTCInformation,FUNCTION,UDS SID 0x19 handler (SID table),re-trace
 0x8012297c,reset_flag,FUNCTION,Resets a flag in memory.,llm
 0x801229b0,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
+0x801229b4,uds_svc_22_DataByIdentifier,FUNCTION,UDS SID-table handler for 0x22; dispatches a DID whitelist (uds_dispatch.md),re-trace
 0x80123030,reset_flag,FUNCTION,Resets a flag in memory.,llm
 0x8012303c,update_counter,FUNCTION,Updates a counter value based on a condition and returns an error code if the condition is not met.,llm
+0x80123074,uds_sa27_routine_sm,FUNCTION,$27 routine state machine (IDs 0x203/0x210/0x311...); NRC 0x13,re-trace
+0x80123660,uds_sa27_routine_stop,FUNCTION,$27 routine stop/reset counterpart,re-trace
+0x80123828,uds_sa27_stub_nrc31,FUNCTION,$27 subfn stub: always NRC 0x31,re-trace
 0x80123834,task_dispatch_loop,FUNCTION,Dispatches tasks based on null-terminated strings at specific offsets in memory.,llm
+0x801238c8,uds_conditions_check_shared,FUNCTION,conditions check shared by $27 and $2e aux tables,re-trace
+0x80123a28,uds_svc_28_CommunicationControl,FUNCTION,UDS SID 0x28 handler (SID table),re-trace
 0x80123b50,check_bit_flag,FUNCTION,Check if a specific bit flag is set in a global variable.,llm
 0x80123b60,empty_stub,FUNCTION,A no-operation handler that simply calls itself and returns.,llm
 0x80123b78,copy_table,FUNCTION,Copies data from one buffer to another,llm
@@ -948,6 +979,7 @@ address,name,type,comment,source
 0x80125ba0,handle_ecu_state,FUNCTION,Handles ECU state transitions and updates based on input parameters.,llm
 0x80130012,process_control_signal,FUNCTION,Processes a control signal and returns a result.,llm
 0x80136784,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
+0x80136794,dcc_state_builder_dt_mng5,FUNCTION,"DT_MNG_5 (TSK_05/0x111) status builder, twin of 801e3f26: writes STATE_DCC=UNK_d000d9c7 (=3 @:757,=4 @:706) + ACC permission block d9b0/d9b2/d9bc/d9ce. FR ch.48.7.19.",fr-trace
 0x801367e4,task_dispatch_loop,FUNCTION,Dispatches various tasks in a loop,llm
 0x80136838,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80136840,empty_stub,FUNCTION,"No operation, empty handler.",llm
@@ -969,6 +1001,14 @@ address,name,type,comment,source
 0x80136910,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80136914,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80136bac,reset_control_flags,FUNCTION,Resets various control flags based on specific conditions.,llm
+0x80137a00,tsk_pack_verzoeg_anf_active,FUNCTION,"ACTIVE TSK_02 (DT_MNG_2, 0x10c) packer (TX scheduler 80106ed8:747, DAT_80043caf&1=0). byte8(param_1[7])=TSK_Verzoeg_Anf from Ramd0007cb8 (=AC_SP_CRU_BRAKE_CTL, 850e-6 offbin), hard-clamp [0x6db1=-3.984,0x89b6=+2.112], 0.024 byte (0xA6=0). byte7.7=Freig_Verzoeg_Anf(enable,a58c), byte2.4=TSK_Anhalten(standstill,a58d), byte3.1-0=Status_GRA_ACC_01(b28d). checksum ^0x0d. See acc_flow.md / UPDATE 58.",re-trace
+0x80137f2c,tsk_pack_verzoeg_anf_altcoding,FUNCTION,"TSK_02(0x10c) decel packer ALT coding (checksum ^0x10, full layout) — NOT transmitted on this ECU (DAT_80043caf&1=0 selects 80137a00; also gated off by DAT_80043bc6=0x0900). Same source Ramd0007cb8 + same clamp [0x6db1=-3.984,0x89b6=+2.112] as the active 80137a00. See RESULTS UPDATE 58.",re-trace
+0x801383e8,canrx_ACC_01_DCC1_109,FUNCTION,"RX decoder for DCC_1 / ACC_01 (CAN id 0x109), MLB E2E seed 0x08 (=(0x01^0x09); validates XOR-all-8==8 + rolling counter byte1 low-nibble). On E2E-OK writes acc01_ACC_Sollbeschleunigung(d0007bac=(b4&7)<<8|b3), acc01_ACC_Anhalten(a7ae=(b7>>1)&1), acc01_ACC_Dynamik(b06a=(b7>>2)&3). Dispatched from canrx_poll_dispatch_acc_esp(80108cc4) handle 0x240. Triple-confirmed vs FR LCAN_DCC1 + opendbc ACC_01. See RESULTS UPDATE 62/64/65.",re-trace
+0x801383fc,canrx_ACC_05_DCC5_10D,FUNCTION,"RX decoder for DCC_5 / ACC_05 (CAN id 0x10D), MLB E2E seed 0x0C (=(0x01^0x0D)). Writes acc05_ACC_Momentenanforderung(d0007baa=min(b0d4*raw*16,0x7fff) from 16|10 torque req), acc05_ACC_Freigabe_Momentenanf(a3b9=bit12), acc05_ACC_limitierte_Anfahrdyn(a3bd=bit15), acc05_ACC_StartStopp_Info(b056=44|2), acc05_ACC_Betaetigung_EPB(a3ba=bit60), ACC_Status_ACC(b057=57|3). Dispatched from 80108cc4 handle 0x8a0. Gateway_D4C7 msg, likely dormant on B8. 6 exact bit-matches vs opendbc ACC_05 + FR DCC_5. See RESULTS UPDATE 65.",re-trace
+0x8013c5d4,acc_brake_request_formation,FUNCTION,ACC brake decel-request formation (CRUC_MG005): processes CAN 0x8a0 accel d0007baa via Kennfeld/Kennlinie lookups (line 249 lookup_kennfeld 0xa005b5e8/0xa0059890/0xa005abc0) + min/clamp cal chain -> writes Ramd0007c9a (line 419). The -3.0 decel limit lives in these decel-limit Kennfelds (0x7237 cells). See RESULTS UPDATE 57.,re-trace
+0x8013e47c,acc_dynamik_torque_switch_INERT,FUNCTION,CRUC_MG005: 4-way switch on ACC_Dynamik (d000b06a) selecting a torque-rate-scale cal for the cruise torque request Ramd0007caa. INERT: all 4 selectable cals = 500 (0x80043a96/aa2/aa4) so ACC_Dynamik has ZERO effect on this calibration. FR NORM/FAST/SLOW/TOUT gradients folded out (not live). See RESULTS UPDATE 62.,re-trace
+0x8013ef46,acc_brake_setpoint_statemachine,FUNCTION,"CRUC_MG005 brake-setpoint state machine: Ramd0007c9a/cae -> Ramd0007cb8 (=AC_SP_CRU_BRAKE_CTL, feeds TSK_Verzoeg_Anf packer 80137f2c). Applies decel-limit kennlinie lookups (line 957-960: 0xa005a26c/0xa005a238). See RESULTS UPDATE 57.",re-trace
+0x80141528,acc_driveoff_torque_momentenanf,FUNCTION,"ACC engine-torque request formation. On Q5 (a5a8=0) takes passthrough d0007ce0=Ramd0007ccc. ACC_05 stop-and-go DRIVE-OFF branch (:58-136, gated a757!=0 && a5a8!=0): fires when b057(ACC_Status_ACC) in {3,4} && a3b9(Freigabe_Momentenanf) && a54b==0(not inhibited) && b055==1(valid) && d0007baa>=cal 80043a5c[0x56]; maps d0007baa(Momentenanforderung)->d0007ce0 via kennlinie 0xa005d608 w/ rate-limit+hysteresis. Outputs Ramd0006998 (a5ac-gated) + b2a0. Present but cal-gated OFF on Q5. See RESULTS UPDATE 66.",re-trace
 0x80149194,init_state,FUNCTION,Initialize system state pointers and flags,llm
 0x80158014,process_calibration_data,FUNCTION,Process calibration data and update internal states based on conditions.,llm
 0x8015f6ac,update_status_flags,FUNCTION,Updates status flags based on input conditions.,llm
@@ -986,8 +1026,10 @@ address,name,type,comment,source
 0x80166b8c,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80166b90,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x80166b94,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
+0x801695f0,acc_diag_symptom_can_unpack,FUNCTION,"De-serializes an 8-byte ACC/SMLS Com frame (msg-bus handle 0x1c0) into the ACC flag block d000b0f8.. gated by coding DAT_80043bc6; extracts relayed 2-bit diag symptoms b100=byte3[1:0](bit8), b102=byte3[3:2](bit9), b101=byte3[5:4](bit7 via 801a8680). aa59/aa5b/aa5e = Com substitute-active flags, not limits.",fr-trace
 0x80169e7c,reset_and_dispatch,FUNCTION,Resets certain flags and dispatches a function call based on specific conditions.,llm
 0x8016ff8c,get_response_code,FUNCTION,Returns a response code based on the input parameter.,llm
+0x80170fc0,ac_de_orng_eng_cru_symptom_builder,FUNCTION,"ACC diag bit1 (the 'special' no-debounce): folds engine derate/fault flags (d000a726-a72a etc via d0001650/1/2) into 0-3 severity, writes UNK_d000b32e (=3 if d1650, 2 if d1651, 1 if d1652). ENGINE-INTERNAL -> FR AC_DE_ORNG_ENG_CRU ('cruise accel deviation out of range due to defective engine'). Only firmly-named of the 13.",fr-trace
 0x80175428,update_status_flags,FUNCTION,Updates various status flags based on conditions and sensor inputs.,llm
 0x80178016,process_sensor_and_calibration_data,FUNCTION,"Processes sensor data and calibration values, performs lookups in 1D Kennlinie maps.",llm
 0x8017c2f4,init_state,FUNCTION,Initialize state pointers and reset a global variable.,llm
@@ -1568,6 +1610,8 @@ address,name,type,comment,source
 0x801ab594,update_calibration_pointers,FUNCTION,Updates calibration map pointers and performs a specific action if the index is 5.,llm
 0x801ab5e0,initialize_system_state,FUNCTION,Initializes system state variables and checks a condition before proceeding.,llm
 0x801ab628,update_status_flags,FUNCTION,Updates status flags in the provided buffer.,llm
+0x801ab824,reset_acc_epb_hold_state,FUNCTION,"Failsafe/init reset of the ACC_05/EPB hold-state block: a54b=0, a54c=0, a54d=0 (analogous to 801a6134 for the DCC block). Not a control consumer. See RESULTS UPDATE 66.",re-trace
+0x801abf64,init_acc_mode_a5a8_from_caf,FUNCTION,Sets the ACC mode select a5a8 = DAT_80043caf & 1 (:21) — the sole writer. Selects ACC_01/TSK_02/hold-relay (0) vs ACC_05-Momentenanf/TSK_05 (1). See RESULTS UPDATE 66.,re-trace
 0x801ac548,reset_and_clear_buffers,FUNCTION,Resets and clears various buffers in the system.,llm
 0x801ac588,copy_table,FUNCTION,"Copies data from one table to another, handling multiple nested loops and specific memory offsets.",llm
 0x801ac6c8,copy_table,FUNCTION,Copies data from a source table to multiple destination locations in memory.,llm
@@ -1710,6 +1754,7 @@ address,name,type,comment,source
 0x801b5520,process_configuration,FUNCTION,Process configuration data and update system state based on conditions.,llm
 0x801b58ec,set_flag_and_dispatch,FUNCTION,Sets a flag and dispatches to other functions; no map or sensor interaction,llm
 0x801b5900,process_configuration,FUNCTION,Process configuration parameters and update global state variables.,llm
+0x801b5900,coding_decode_cruise_type,FUNCTION,"Long-coding unpacker: decodes cell 27 (STATE_DCC_TYP, cruise type) into d000a756/a757/a758. type1=GRA(a756), type2=BasicACC(a757=1), type3=F2S(a757=1 & a758=1). d000a757=LV_DCC_ENA gates the min-accel curve in 8013c5d4:211 (0=GRA 0x5b71c, 1=ACC 0x5b728). d000a758 (F2S bit) is DEAD (write-only, 0 readers) => F2S not implemented. See RESULTS UPDATE 60.",re-trace
 0x801b5e54,update_status_flag,FUNCTION,Updates a status flag based on two non-zero values from global data.,llm
 0x801b61b8,set_flag,FUNCTION,Sets a flag in memory.,llm
 0x801b6334,process_configuration,FUNCTION,Handles configuration processing based on certain conditions and flags.,llm
@@ -2285,7 +2330,7 @@ address,name,type,comment,source
 0x801d84a6,write_gpta0_registers,FUNCTION,Writes data to GPTA0 registers based on input parameters.,llm
 0x801d84fe,update_gpta_fpcctr,FUNCTION,Updates GPTA FPCCTR registers based on input data.,llm
 0x801d853a,update_eicr_registers,FUNCTION,Updates EICR registers based on input data,llm
-0x801d8590,process_ecu_data,FUNCTION,"Handles ECU data processing, including map dispatch and function execution based on input parameters.",llm
+0x801d8590,gpta_timing_table_init,FUNCTION,builds GPTA timing RAM table from descriptor 0x8008eab0; sets DAT_d00005c8; NOT UDS diag,re-trace
 0x801d864e,process_ecu_tasks,FUNCTION,"Iterates through a list of tasks and executes them, then resets certain state variables.",llm
 0x801d86c0,process_calibration_data,FUNCTION,Processes calibration data and updates maps based on input parameters.,llm
 0x801d88c2,process_calibration_data,FUNCTION,"Processes calibration data, possibly related to UDS or map handling.",llm
@@ -2433,8 +2478,11 @@ address,name,type,comment,source
 0x801deb9c,reset_flag,FUNCTION,Resets a flag in memory.,llm
 0x801debb0,empty_stub,FUNCTION,A no-operation handler with no clear domain or purpose.,llm
 0x801df1e4,update_calibration_values,FUNCTION,Updates calibration values based on input data.,llm
+0x801df1e4,acc_status_publish_to_can_mirror,FUNCTION,"Publishes ACC status block d000d9xx/d91x to CAN-export mirror d000afxx: afef=d91d(GRA/ACC status), afee=d91a, aff0=d8e8, aff1=d91b, a365=d918, a362=d917. Feeds the TSK Com signal getters.",fr-trace
 0x801df324,update_ecu_state,FUNCTION,Updates ECU state variables based on calibration data and sensor inputs.,llm
 0x801df7ac,update_status_flags,FUNCTION,Updates status flags based on calibration data.,llm
+0x801e3d78,acc_diag_debounce_evaluator,FUNCTION,"ACC diagnosis symptom debounce/latch: descriptor[0]=last cond, [1]=confirmed symptom, [2]=counter; confirms symptom after `timing` stable counts (FR ACTION_ERRM pattern). Called 13x by acc_status_error_aggregator.",fr-trace
+0x801e3f26,dcc_state_builder_dt_mng4,FUNCTION,"DT_MNG_4 (TSK_04/0x10e) status/limiter builder: writes STATE_DCC=UNK_d000d9c7 (0..8; =3 active @:756, =4 override @:705), ACC status/permission block d9b0/d9b2, sig buffer d0005b40 (cal base *0x80090f84=0x8007976c). Twin of 80136794 (DT_MNG_5/TSK_05/0x111). STATE_DCC feeds TSK_Status_GRA_ACC_02.",fr-trace
 0x801e6d54,update_control_flags,FUNCTION,Updates control flags based on sensor data and map lookups.,llm
 0x801e6de0,set_global_flag,FUNCTION,Sets a global flag to indicate a specific state or condition.,llm
 0x801e7508,update_control_flags,FUNCTION,Updates control flags and status bits.,llm
@@ -2443,6 +2491,7 @@ address,name,type,comment,source
 0x801ea218,set_global_param,FUNCTION,Sets a global parameter value.,llm
 0x801ea224,read_global_value,FUNCTION,Accessor for a global value,llm
 0x801eaea8,copy_calibration_data,FUNCTION,Copies calibration data from a source address to a destination buffer.,llm
+0x801eca44,acc_status_hmi_state_mapper,FUNCTION,"Maps ACC master state d000d8ee (∈{0,1,2}) -> 2-bit TSK_Status_GRA_ACC (d000d91c/d91d): 0=off,1=active(d8ee<2),2=override(d8ee==2 & d8e2 bit2),3=Fehler_nicht_moeglich(d8ee==2 & !d8e2 bit2). d91d -> (801df1e4) d000afef -> TSK CAN frames. THE status-3 producer (CRU/AC-based branch, CLF_CAN_CONF_FCT.Bit0=0). See RESULTS UPDATE 55.",fr-trace
 0x801eecfc,update_status_flags,FUNCTION,Updates status flags based on a condition code.,llm
 0x801f0204,update_engine_control_parameters,FUNCTION,Updates engine control parameters based on a condition flag.,llm
 0x801f0744,reset_counters,FUNCTION,Resets two global counters to zero.,llm
@@ -2546,97 +2595,60 @@ address,name,type,comment,source
 0x801f4940,write_calibration_value,FUNCTION,Writes a calibration value to two different memory locations based on input parameters.,llm
 0x801f801e,task_dispatch_loop,FUNCTION,Dispatches tasks based on pointers stored in global arrays.,llm
 0x801f8194,task_dispatch_loop,FUNCTION,Infinite loop that dispatches tasks based on pointers stored in global memory.,llm
+0xd0007baa,acc05_ACC_Momentenanforderung,DATA,"ACC_Momentenanforderung (TORQUE/moment request, unitless 0-1021) from ACC_05/DCC_5 (0x10D) 16|10, decoded 801383fc:105 as min(b0d4*raw*16,0x7fff). NOT an acceleration (older maps mislabeled it 'the accel'). Read by 8013c5d4:734. Likely dormant on B8 (ACC_05 is Gateway_D4C7). See RESULTS UPDATE 65.",re-trace
+0xd0007bac,acc01_ACC_Sollbeschleunigung,DATA,"ACC_Sollbeschleunigung setpoint from DCC_1/ACC_01 (0x109) 24|11 (=(byte4&7)<<8|byte3), decoded 801383e8:90. Res 0.005 m/s2 offset -7.22 (=CAN_AC_DE_DCC_UP). Read by 8013c5d4:517/525 (threshold flags a580/a581). Reset default 0x5a4. On the B8 this (not d0007baa) is the received accel command. See RESULTS UPDATE 65.",re-trace
+0xd0007c3e,esp05_ESP_Bremsdruck,DATA,"ESP-measured brake pressure from ESP_05 (0x106) 16|10 (0.3 bar, -30), decoded 80106db8:109-117 as (raw-100)*3 internal (raw 100 = 0 bar). NOT a 'second ACC setpoint' (older maps mislabeled it). Not read by 8013c5d4. See RESULTS UPDATE 65.",re-trace
+0xd0007cb8,tsk02_TSK_Verzoeg_Anf_src,DATA,"AC_SP_CRU_BRAKE_CTL = decel request source packed into TSK_02 (0x10C) byte8 by 80137a00. 850e-6 offset-binary; packer clamps [0x6db1=-3.984, 0x89b6=+2.112]. Set by 8013ef46:956 (=cae when a58c!=0, else 0x8000). See acc_flow.md / UPDATE 61.",re-trace
+0xd0007ce0,acc_engine_torque_request,DATA,ACC engine-torque request. Q5: = Ramd0007ccc passthrough (80141528:56). ACC_05 mode: = drive-off torque from d0007baa(Momentenanforderung) via 80141528:89-134. See RESULTS UPDATE 66.,re-trace
+0xd000a3b9,acc05_ACC_Freigabe_Momentenanf,DATA,"ACC_Freigabe_Momentenanf (torque-request enable) from ACC_05/DCC_5 (0x10D) bit12, decoded 801383fc:92. See RESULTS UPDATE 65.",re-trace
+0xd000a3ba,acc05_ACC_Betaetigung_EPB,DATA,"ACC_Betaetigung_EPB (EPB-close request) from ACC_05/DCC_5 (0x10D) bit60, decoded 801383fc:114. The EPB engage bit; engine RX-decodes it (if 0x10D received). See RESULTS UPDATE 65.",re-trace
+0xd000a3bd,acc05_ACC_limitierte_Anfahrdyn,DATA,"ACC_limitierte_Anfahrdyn from ACC_05/DCC_5 (0x10D) bit15, decoded 801383fc:93. See RESULTS UPDATE 65.",re-trace
+0xd000a4cb,esp05_ESP_Lenkeingriff_ADS,DATA,"ESP_Lenkeingriff_ADS from ESP_05 (0x106) bit28, decoded 80106db8:120. See RESULTS UPDATE 65.",re-trace
+0xd000a4e4,esp05_ESP_Autohold_Standby,DATA,"ESP_Autohold_Standby from ESP_05 (0x106) bit35, decoded 80106db8:126. See RESULTS UPDATE 65.",re-trace
+0xd000a4e6,esp05_ESP_QBit_Bremsdruck,DATA,"ESP_QBit_Bremsdruck (brake-pressure quality bit) from ESP_05 (0x106) bit12, decoded 80106db8:104. See RESULTS UPDATE 65.",re-trace
+0xd000a4e7,esp05_ESP_Fahrer_bremst,DATA,"ESP_Fahrer_bremst (driver is braking) from ESP_05 (0x106) bit26, decoded 80106db8:118. See RESULTS UPDATE 65.",re-trace
+0xd000a4e9,esp05_ESP_Autohold_aktiv,DATA,"ESP_Autohold_aktiv (ESP vehicle-hold active) from ESP_05 (0x106) bit56, decoded 80106db8:133. See RESULTS UPDATE 65.",re-trace
+0xd000a4ea,esp05_ESP_QBit_Fahrer_bremst,DATA,"ESP_QBit_Fahrer_bremst from ESP_05 (0x106) bit13, decoded 80106db8:105. See RESULTS UPDATE 65.",re-trace
+0xd000a4eb,esp05_ESP_Verz_TSK_aktiv,DATA,"ESP_Verz_TSK_aktiv (ESP is executing the engine's TSK deceleration) from ESP_05 (0x106) bit27, decoded 80106db8:119. Part of the engine<->ESP brake handshake. See RESULTS UPDATE 65.",re-trace
+0xd000a4ec,esp05_ESP_Bremsruck_AWV2,DATA,"ESP_Bremsruck_AWV2 from ESP_05 (0x106) bit30, decoded 80106db8:122. See RESULTS UPDATE 65.",re-trace
+0xd000a4ed,esp05_ESP_Status_Bremsentemp,DATA,"ESP_Status_Bremsentemp from ESP_05 (0x106) bit34, decoded 80106db8:125. See RESULTS UPDATE 65.",re-trace
+0xd000a4ee,esp05_ESP_HDC_Standby,DATA,"ESP_HDC_Standby from ESP_05 (0x106) bit36, decoded 80106db8:127. See RESULTS UPDATE 65.",re-trace
+0xd000a4ef,esp05_ESP_Rueckwaertsfahrt_erkannt,DATA,"ESP_Rueckwaertsfahrt_erkannt from ESP_05 (0x106) bit39, decoded 80106db8:128. See RESULTS UPDATE 65.",re-trace
+0xd000a4f0,esp05_ECD_Bremslicht,DATA,"ECD_Bremslicht from ESP_05 (0x106) bit59, decoded 80106db8:134. See RESULTS UPDATE 65.",re-trace
+0xd000a4f1,esp05_ESP_Status_Bremsdruck,DATA,"ESP_Status_Bremsdruck from ESP_05 (0x106) bit61, decoded 80106db8:135. Participates in the 8013ef46 decel-enable predicate (older maps called it an 'ACC enable' bit). See RESULTS UPDATE 65.",re-trace
+0xd000a4f2,esp05_ECD_nicht_verfuegbar,DATA,"ECD_nicht_verfuegbar from ESP_05 (0x106) bit33, decoded 80106db8:124. See RESULTS UPDATE 65.",re-trace
+0xd000a4f3,esp05_ESP_Status_Anfahrhilfe,DATA,"ESP_Status_Anfahrhilfe from ESP_05 (0x106) bit40, decoded 80106db8:129. See RESULTS UPDATE 65.",re-trace
+0xd000a4f4,esp05_ECD_Fehler,DATA,"ECD_Fehler from ESP_05 (0x106) bit32, decoded 80106db8:123. See RESULTS UPDATE 65.",re-trace
+0xd000a4f5,esp05_ESP_Konsistenz_TSK,DATA,"ESP_Konsistenz_TSK (ESP TSK-request consistency/plausibility handshake) from ESP_05 (0x106) bit29, decoded 80106db8:121. See RESULTS UPDATE 65.",re-trace
+0xd000a54b,acc_driveoff_inhibit,DATA,"ACC_05 drive-off inhibit = (d0001321!=0 || a54c!=0), set by 8010a6ec. Gates the drive-off torque branch in 80141528 (requires a54b==0). See RESULTS UPDATE 66.",re-trace
+0xd000a54c,acc_epb_hold_fault_inhibit,DATA,"ACC_05/EPB hold fault-inhibit word (16 conditions masked by cal 80043ccc[0x14]), set by 8010a6ec. Read by 8011101c/80137d0c/80137f2c. See RESULTS UPDATE 66.",re-trace
+0xd000a54d,acc_standstill_hold_confirmed,DATA,ACC_05/EPB standstill-hold CONFIRMED (debounced). Set by 8010a6ec when hold timer uRamc0001062 >= cal 80043828[5]. Read by drive-off diag 8010a4fc + reset 801ab824. Cal-gated (a5a8) => dead on Q5. See RESULTS UPDATE 66.,re-trace
+0xd000a58c,tsk02_TSK_Freig_Verzoeg_Anf_src,DATA,"TSK_Freig_Verzoeg_Anf (decel-ENABLE) source, TSK_02 (0x10C) byte7 bit7. Set 8013ef46:932-936: =(a57c==0 & b28e in {1,5} & sRamc113c<=cal) || d1181. Gates whether the decel value (cb8) flows. See RESULTS UPDATE 61/64.",re-trace
+0xd000a58d,tsk02_TSK_Anhalten_src,DATA,"TSK_Anhalten source, packed into TSK_02 (0x10C) byte2 bit4 by 80137a00:49/94. = acc01_ACC_Anhalten(a7ae) when b28e in {1,5} & a757(LV_DCC_ENA)!=0, else 0 (8013ef46:937-943). The engine's standstill-hold request to ESP. See RESULTS UPDATE 63/64.",re-trace
+0xd000a58f,tsk02_TSK_Zwangszusch_ESP_src,DATA,"TSK_Zwangszusch_ESP (forced ESP coupling/intervention ENABLE) source, TSK_02 (0x10C) byte7 bit6. Set 8013ef46:963-969 = (b28f in {1,2}). Live companion enable during active ACC control; NOT an independent hold. See RESULTS UPDATE 64.",re-trace
+0xd000a5a8,acc_mode_ACC05_Momentenanf_sel,DATA,"ACC mode select = DAT_80043caf & 1 (sole writer 801abf64:21; cal-fixed). 0 (Q5, this image caf=0x06) = ACC_01 + TSK_02(80137a00, has Anhalten) + hold-relay branch enabled in 8013ef46:850 (requires a5a8==0). 1 = ACC_05 Momentenanforderung drive-off path (80141528) + TSK_05(80137f2c) + hold-relay DISABLED. Mutually exclusive with the ACC_01 hold relay. See RESULTS UPDATE 66.",re-trace
+0xd000a5ac,acc_driveoff_active,DATA,"ACC drive-off-active flag (80141528:148): true if b28e in {1,2,5,6} OR the ACC_05 Momentenanf gate. When set, Ramd0006998 carries the drive-off torque; else 0x80000000 (neutral). See RESULTS UPDATE 66.",re-trace
+0xd000a5ae,acc05_creep_status_tsk,DATA,"ACC_05-path creep/low-speed status (80141528:187), from ego-speed vs cals 0x800435e2/e6. Read by TSK packers 8011101c/80137d0c/80137f2c. A status bit, NOT a hard speed floor. (a5ad sibling is dead - no readers.) See RESULTS UPDATE 66 Q3-followup.",re-trace
+0xd000a756,coding_GRA_ena,DATA,"GRA (basic cruise) coding enable, long-coding cell 27 type1 (decoded 801b5900). See RESULTS UPDATE 60.",re-trace
+0xd000a757,LV_DCC_ENA,DATA,LV_DCC_ENA — ACC(Basic-ACC) coding enable from long-coding cell 27 (decoded 801b5900). a757!=0 required to forward ACC_Anhalten and selects the ACC min-accel curve (0x5b728). GRA-coded car has a757=0 and never forwards hold. See RESULTS UPDATE 60/64.,re-trace
+0xd000a758,coding_F2S_bit_DEAD,DATA,"Follow-to-Stop coding bit (cell 27 type3), written only by 801b5900, read by NOTHING => F2S not implemented in this firmware. See RESULTS UPDATE 60.",re-trace
+0xd000a79f,tsk02_TSK_Codierung_ACC_src,DATA,"TSK_Codierung_ACC source, TSK_02 (0x10C) byte7 bit5 (coding constant via 8011101c). See acc_flow.md / UPDATE 61.",re-trace
+0xd000a7ae,acc01_ACC_Anhalten,DATA,"ACC_Anhalten / LV_CAN_VEH_STOP_REQ_DCC — stop/hold request from DCC_1/ACC_01 (0x109) byte7 bit1, decoded 801383e8:94. Gated forward to tsk02_TSK_Anhalten_src(a58d) in 8013ef46:937 (when b28e in {1,5} & a757!=0). The standstill-hold input. See RESULTS UPDATE 63/64.",re-trace
+0xd000ad0f,acc_master_compute_enable,DATA,ACC master compute-enable (from 8011ac80). 8013ef46 early-returns unless ad0f!=0; also an 8013c5d4 engage gate. See acc_flow.md / UPDATE 64.,re-trace
+0xd000b055,acc05_Momentenanf_valid,DATA,"ACC_05 ACC_Momentenanforderung validity status (801383fc:109): 1=valid, 2/3=SNA/invalid. Gates drive-off in 80141528 (needs b055==1). See RESULTS UPDATE 66.",re-trace
+0xd000b056,acc05_ACC_StartStopp_Info,DATA,"ACC_StartStopp_Info from ACC_05/DCC_5 (0x10D) 44|2, decoded 801383fc:110. See RESULTS UPDATE 65.",re-trace
+0xd000b057,acc_ACC_Status_ACC,DATA,"ACC_Status_ACC (0..7) — the SAME logical signal decoded from whichever ACC frame is coding-active: ACC_01 (0x109) bit60|3 = byte7[6:4] via 801383e8:96, or ACC_05 (0x10D) bit57|3 = byte7[1:3] via 801383fc:113. Only the cal-selected frame's decoder writes it (no runtime conflict). On the Q5 (80043bc6=0x0900 -> ACC_01) it is ACC_01's field. See RESULTS UPDATE 66.",re-trace
+0xd000b06a,acc01_ACC_Dynamik,DATA,"ACC_Dynamik / CAN_STATE_DCC_DYN — DCC_1/ACC_01 (0x109) byte7 bits2-3, decoded 801383e8:95. Reader 8013e47c (torque-rate switch, but INERT: all 4 cals=500). See RESULTS UPDATE 62.",re-trace
+0xd000b1ea,esp05_ESP_BKV_Unterdruck,DATA,"ESP_BKV_Unterdruck (brake-booster vacuum) from ESP_05 (0x106) 48|8, decoded 80106db8:132. See RESULTS UPDATE 65.",re-trace
+0xd000b1ec,esp05_ESP_StartStopp_Info,DATA,"ESP_StartStopp_Info from ESP_05 (0x106) 42|2, decoded 80106db8:130. See RESULTS UPDATE 65.",re-trace
+0xd000b1ed,esp05_ESP_Schwelle_Unterdruck,DATA,"ESP_Schwelle_Unterdruck from ESP_05 (0x106) 14|2, decoded 80106db8:107. See RESULTS UPDATE 65.",re-trace
+0xd000b28d,STATE_CRU_CTL_CAN,DATA,"STATE_CRU_CTL_CAN — CAN-reported cruise status (0..3 enum: 1=GRA_ACC_aktiv..3=Fehler), packed into TSK_02 (0x10C) byte3 bits0-1 (TSK_Status_GRA_ACC_01). From STATE_CRU_CTL via 8013e8aa. See acc_flow.md.",re-trace
+0xd000b28e,STATE_CRU_CTL,DATA,"Internal cruise/ACC control state. b28e in {1,5} = controller actively regulating (the gate bVar4 in 8013ef46 that arms TSK_Anhalten/decel forwarding); feeds STATE_CRU_CTL_CAN(b28d). See RESULTS UPDATE 64.",re-trace
+0xd000b28f,STATE_CRU_CTL_long_substate,DATA,"Longitudinal-controller sub-state (from 8013e8aa): 1=engaged/controlling, 2=decel/approach, 3=transient, 0=off. Drives tsk02_TSK_Zwangszusch_ESP_src (a58f=(b28f in {1,2})). See RESULTS UPDATE 64/65.",re-trace
+0xd000da54,ram_acc_vehicle_speed_mon,DATA,"ACC-monitor ego-speed working copy (=DAT_d000d644=clamp(d5618*32/25)), written 801efbb8:415. Scale 1/128 km/h (128 counts=1.0 km/h). = FR VS_MON. Compared vs C_VS_MIN_CRU_MON (15km/h) in 80102f60. See acc_flow.md.",re-trace
 0xd4000d44,halt_baddata,FUNCTION,Halts execution due to bad data encountered in control flow.,llm
 0xd40011f4,halt_baddata,FUNCTION,Halts execution due to bad data encountered in the control flow.,llm
 0xd4001230,halt_baddata,FUNCTION,Halts execution due to bad data encountered in control flow.,llm
 0xd4001268,halt_baddata,FUNCTION,Halts execution due to bad data encountered in the control flow.,llm
 0xd40013f8,halt_baddata,FUNCTION,Halts execution due to bad data encountered in control flow.,llm
 0xd40016f8,halt_baddata,FUNCTION,Halts execution due to bad data encountered in control flow.,llm
-0x800c553c,ac_min_cru_plausibility_monitor,FUNCTION,"AC_DCRU_PLAUS/AC_MIN_CRU L2 monitor: faults when integrated accel setpoint c0001732 exits [cal 0x80043514=-3.0, cal 0x80043512=+2.0] m/s2 (0.001 scale); FR ch.70.6. FUNCTIONALLY ISOLATED (UPDATE 56): input c0001732 + all fault outputs (154b-f,1550,1551) read by NOTHING except this fn + resets 80172658/801b498c (FindRefsTo-verified); no callers (RAM-dispatched); reports to DTC framework only. Does NOT drive delivered decel / ACC deactivation / TSK status-3. Raising 0x80043514 = DTC threshold only.",fr-trace
-0x801e3d78,acc_diag_debounce_evaluator,FUNCTION,"ACC diagnosis symptom debounce/latch: descriptor[0]=last cond, [1]=confirmed symptom, [2]=counter; confirms symptom after `timing` stable counts (FR ACTION_ERRM pattern). Called 13x by acc_status_error_aggregator.",fr-trace
-0x80102f60,acc_status_error_aggregator,FUNCTION,"ACC diag coordinator: runs 13 cruise diagnoses via acc_diag_debounce_evaluator (desc d000d714-d740). 12 feeders are RELAYED 2-bit CAN/Com symptoms; only bit1(d62b<-80170fc0) is engine-computed (AC_DE_ORNG_ENG_CRU). bits10/11 stubbed(=0). Builds d000d8e0=error word((symptom==3)<<bit), d8d0(==1),d8da(==2). DEACTIVATION path d8e0 & cal(0x800793a0+0x178) is DEAD (fatal mask=0x0000; d746/d894 never latch). But STATUS path is LIVE: d744=debounce(d8e0!=0)(:719) -> d8e2 bit2=0(:792) -> 801eca44 maps to TSK status 3; d744->d8b4 latch gates recompute(:710,:722)=key-cycle latch. enable mask +0x16e=0x1fff. See RESULTS UPDATE 55.",fr-trace
-0x80170fc0,ac_de_orng_eng_cru_symptom_builder,FUNCTION,"ACC diag bit1 (the 'special' no-debounce): folds engine derate/fault flags (d000a726-a72a etc via d0001650/1/2) into 0-3 severity, writes UNK_d000b32e (=3 if d1650, 2 if d1651, 1 if d1652). ENGINE-INTERNAL -> FR AC_DE_ORNG_ENG_CRU ('cruise accel deviation out of range due to defective engine'). Only firmly-named of the 13.",fr-trace
-0x801695f0,acc_diag_symptom_can_unpack,FUNCTION,"De-serializes an 8-byte ACC/SMLS Com frame (msg-bus handle 0x1c0) into the ACC flag block d000b0f8.. gated by coding DAT_80043bc6; extracts relayed 2-bit diag symptoms b100=byte3[1:0](bit8), b102=byte3[3:2](bit9), b101=byte3[5:4](bit7 via 801a8680). aa59/aa5b/aa5e = Com substitute-active flags, not limits.",fr-trace
-0x801e3f26,dcc_state_builder_dt_mng4,FUNCTION,"DT_MNG_4 (TSK_04/0x10e) status/limiter builder: writes STATE_DCC=UNK_d000d9c7 (0..8; =3 active @:756, =4 override @:705), ACC status/permission block d9b0/d9b2, sig buffer d0005b40 (cal base *0x80090f84=0x8007976c). Twin of 80136794 (DT_MNG_5/TSK_05/0x111). STATE_DCC feeds TSK_Status_GRA_ACC_02.",fr-trace
-0x80136794,dcc_state_builder_dt_mng5,FUNCTION,"DT_MNG_5 (TSK_05/0x111) status builder, twin of 801e3f26: writes STATE_DCC=UNK_d000d9c7 (=3 @:757,=4 @:706) + ACC permission block d9b0/d9b2/d9bc/d9ce. FR ch.48.7.19.",fr-trace
-0x8011e9ce,canmo_10e_TSK_04,FUNCTION,"TSK_04 (0x10e TX) packer: copies node(*d000d404)+8..+0xf to CAN. TSK_Status_GRA_ACC_02 = bits6-7 of byte *(d000d404)+0xf (LCAN_DT_MNG4_8_67); 3=Fehler_GRA_ACC_nicht_moeglich. Set 3 when LV_DCC_OFF_DC_EMS or LV_ERR_VAR_COD_CRU_PLAUS (FR p9049).",fr-trace
-0x801eca44,acc_status_hmi_state_mapper,FUNCTION,"Maps ACC master state d000d8ee (∈{0,1,2}) -> 2-bit TSK_Status_GRA_ACC (d000d91c/d91d): 0=off,1=active(d8ee<2),2=override(d8ee==2 & d8e2 bit2),3=Fehler_nicht_moeglich(d8ee==2 & !d8e2 bit2). d91d -> (801df1e4) d000afef -> TSK CAN frames. THE status-3 producer (CRU/AC-based branch, CLF_CAN_CONF_FCT.Bit0=0). See RESULTS UPDATE 55.",fr-trace
-0x801df1e4,acc_status_publish_to_can_mirror,FUNCTION,"Publishes ACC status block d000d9xx/d91x to CAN-export mirror d000afxx: afef=d91d(GRA/ACC status), afee=d91a, aff0=d8e8, aff1=d91b, a365=d918, a362=d917. Feeds the TSK Com signal getters.",fr-trace
-0x80137f2c,tsk_pack_verzoeg_anf_altcoding,FUNCTION,"TSK_02(0x10c) decel packer ALT coding (checksum ^0x10, full layout) — NOT transmitted on this ECU (DAT_80043caf&1=0 selects 80137a00; also gated off by DAT_80043bc6=0x0900). Same source Ramd0007cb8 + same clamp [0x6db1=-3.984,0x89b6=+2.112] as the active 80137a00. See RESULTS UPDATE 58.",re-trace
-0x80137a00,tsk_pack_verzoeg_anf_active,FUNCTION,"ACTIVE TSK_02 (DT_MNG_2, 0x10c) packer (TX scheduler 80106ed8:747, DAT_80043caf&1=0). byte8(param_1[7])=TSK_Verzoeg_Anf from Ramd0007cb8 (=AC_SP_CRU_BRAKE_CTL, 850e-6 offbin), hard-clamp [0x6db1=-3.984,0x89b6=+2.112], 0.024 byte (0xA6=0). byte7.7=Freig_Verzoeg_Anf(enable,a58c), byte2.4=TSK_Anhalten(standstill,a58d), byte3.1-0=Status_GRA_ACC_01(b28d). checksum ^0x0d. See acc_flow.md / UPDATE 58.",re-trace
-0x800793a0,cal_acc_l2monitor_struct,DATA,"ACC/cruise L2-monitor + diagnosis cal struct (base ptr *0x80090f80, used by 80102f60). Speed floors (u8 km/h, compared da54<=cal*0x80, da54=1/128 km/h): +0x14f=15 & +0x152=15 = C_VS_MIN_CRU_MON (15km/h, flash 0x800794ef/0x800794f2); +0x196=384=3.0km/h creep gate. +0x16e=0x1fff diag enable, +0x178=0 fatal mask, +0x121=0xBF engage-inhibit mask. See acc_flow.md / UPDATE 58.",re-trace
-0xd000da54,ram_acc_vehicle_speed_mon,DATA,"ACC-monitor ego-speed working copy (=DAT_d000d644=clamp(d5618*32/25)), written 801efbb8:415. Scale 1/128 km/h (128 counts=1.0 km/h). = FR VS_MON. Compared vs C_VS_MIN_CRU_MON (15km/h) in 80102f60. See acc_flow.md.",re-trace
-0x8013c5d4,acc_brake_request_formation,FUNCTION,"ACC brake decel-request formation (CRUC_MG005): processes CAN 0x8a0 accel d0007baa via Kennfeld/Kennlinie lookups (line 249 lookup_kennfeld 0xa005b5e8/0xa0059890/0xa005abc0) + min/clamp cal chain -> writes Ramd0007c9a (line 419). The -3.0 decel limit lives in these decel-limit Kennfelds (0x7237 cells). See RESULTS UPDATE 57.",re-trace
-0x8013ef46,acc_brake_setpoint_statemachine,FUNCTION,"CRUC_MG005 brake-setpoint state machine: Ramd0007c9a/cae -> Ramd0007cb8 (=AC_SP_CRU_BRAKE_CTL, feeds TSK_Verzoeg_Anf packer 80137f2c). Applies decel-limit kennlinie lookups (line 957-960: 0xa005a26c/0xa005a238). See RESULTS UPDATE 57.",re-trace
-0x8005b71c,cal_acc_decel_limit_kennfeld_m3p0,DATA,"ACC brake decel-limit Kennfeld region: 11 consecutive u16 = 0x7237 = -3.000 m/s2 (850e-6 offset-binary, phys=(raw-0x8000)*850e-6). THE -3.0 brake-decel clamp (openpilot lever). Raise = set more negative (0x6db1=-3.984 floor). File offset 0x5b71c. Recompute cal checksum. +5 scattered cells 0x597f2/59836/598a2/598b2/5a546. See RESULTS UPDATE 57.",re-trace
-0x800a4bbc,max_u16_MISNAMED_min,FUNCTION,"Returns the MAX of two u16 (body p1*(p2<p1)+p2*(p2>=p1)) despite the Ghidra auto-name 'min_u16_800a4bbc'. Used at 8013c5d4:418 as Ramd0007c9a=max(request,0x7237) = the -3.0 decel TRUNCATION (offset-binary, larger raw=less braking). DISTINCT from plain min_u16 (0x800a4c..) which is a genuine min. See acc_flow.md / UPDATE 59.",re-trace
-0x801b5900,coding_decode_cruise_type,FUNCTION,"Long-coding unpacker: decodes cell 27 (STATE_DCC_TYP, cruise type) into d000a756/a757/a758. type1=GRA(a756), type2=BasicACC(a757=1), type3=F2S(a757=1 & a758=1). d000a757=LV_DCC_ENA gates the min-accel curve in 8013c5d4:211 (0=GRA 0x5b71c, 1=ACC 0x5b728). d000a758 (F2S bit) is DEAD (write-only, 0 readers) => F2S not implemented. See RESULTS UPDATE 60.",re-trace
-0x801383e8,canrx_ACC_01_DCC1_109,FUNCTION,"RX decoder for DCC_1 / ACC_01 (CAN id 0x109), MLB E2E seed 0x08 (=(0x01^0x09); validates XOR-all-8==8 + rolling counter byte1 low-nibble). On E2E-OK writes acc01_ACC_Sollbeschleunigung(d0007bac=(b4&7)<<8|b3), acc01_ACC_Anhalten(a7ae=(b7>>1)&1), acc01_ACC_Dynamik(b06a=(b7>>2)&3). Dispatched from canrx_poll_dispatch_acc_esp(80108cc4) handle 0x240. Triple-confirmed vs FR LCAN_DCC1 + opendbc ACC_01. See RESULTS UPDATE 62/64/65.",re-trace
-0x8013e47c,acc_dynamik_torque_switch_INERT,FUNCTION,"CRUC_MG005: 4-way switch on ACC_Dynamik (d000b06a) selecting a torque-rate-scale cal for the cruise torque request Ramd0007caa. INERT: all 4 selectable cals = 500 (0x80043a96/aa2/aa4) so ACC_Dynamik has ZERO effect on this calibration. FR NORM/FAST/SLOW/TOUT gradients folded out (not live). See RESULTS UPDATE 62.",re-trace
-0x80043652,cal_cruise_torque_rate_rising,DATA,"Cruise/ACC engine-torque RISING rate limit (clutch-close / brake->drive re-engagement smoothness), in 80141904 asymmetric slope limiter on Ramd0007d06. s16=10 (~20 Nm/s if res 2). Lower=smoother/slower torque pickup. NOT indexed by ACC_Dynamik (fixed). Cand C_TQ_GRD_NORM_CLU_CLOSE (MEDIUM conf). See UPDATE 62.",re-trace
-0x80043650,cal_cruise_torque_rate_falling,DATA,"Cruise/ACC engine-torque FALLING rate limit (clutch-open / torque release), 80141904 slope limiter. s16=20 (~40 Nm/s if res 2). Cand C_TQ_GRD_CLU_OPEN (MEDIUM conf). See UPDATE 62.",re-trace
-0x801383fc,canrx_ACC_05_DCC5_10D,FUNCTION,"RX decoder for DCC_5 / ACC_05 (CAN id 0x10D), MLB E2E seed 0x0C (=(0x01^0x0D)). Writes acc05_ACC_Momentenanforderung(d0007baa=min(b0d4*raw*16,0x7fff) from 16|10 torque req), acc05_ACC_Freigabe_Momentenanf(a3b9=bit12), acc05_ACC_limitierte_Anfahrdyn(a3bd=bit15), acc05_ACC_StartStopp_Info(b056=44|2), acc05_ACC_Betaetigung_EPB(a3ba=bit60), ACC_Status_ACC(b057=57|3). Dispatched from 80108cc4 handle 0x8a0. Gateway_D4C7 msg, likely dormant on B8. 6 exact bit-matches vs opendbc ACC_05 + FR DCC_5. See RESULTS UPDATE 65.",re-trace
-0x80106db8,canrx_ESP_05_106,FUNCTION,"RX decoder for ESP_05 (CAN id 0x106), MLB E2E seed 0x07 (=(0x01^0x06)) — the ESP->engine FEEDBACK frame (NOT an ACC command). Writes esp05_ESP_Bremsdruck(d0007c3e=(raw-100)*3 from 16|10) + the esp05_* status cluster (Verz_TSK_aktiv, Konsistenz_TSK, Autohold_Standby/_aktiv, StartStopp_Info, BKV_Unterdruck, Status_Bremsdruck a4f1, ...). Closes the engine<->ESP brake loop (TSK_02 out / ESP_05 in). Dispatched from 80108cc4 handle 0x600, gated by coding d000a753. ~20 exact bit-matches vs opendbc ESP_05 + FR TCS5. See RESULTS UPDATE 65.",re-trace
-0x80108cc4,canrx_poll_dispatch_acc_esp,FUNCTION,"RX poll+dispatch loop: reads message objects by HAL handle (FUN_800b15b8/800b15d6 vtable read) and dispatches ACC/ESP decoders. handle 0x240->canrx_ACC_01_DCC1_109, 0x8a0->canrx_ACC_05_DCC5_10D, 0x600->canrx_ESP_05_106. Handles are internal COM/mailbox handles, NOT CAN ids (id back-solved via E2E seed=(hi^lo)). Gated by coding DAT_80043bc6 + message-present DAT_d0006980. See RESULTS UPDATE 64/65.",re-trace
-0x80106ed8,can_tx_scheduler,FUNCTION,"CAN TX scheduler: per-slot dispatch that packs+transmits engine TX frames. TSK_02 (0x10C) at :739-753: when DAT_80043caf&1==0 (image=0x06) and Ramd0006988&0x8000, calls tsk_pack_verzoeg_anf_active(80137a00,&d00010f4) then writes HW mailbox handle 0x680. Alt packer 80137f2c (handle 0x8c0) is the caf&1==1 TSK_05 variant, not used here. See RESULTS UPDATE 64.",re-trace
-0xd000a7ae,acc01_ACC_Anhalten,DATA,"ACC_Anhalten / LV_CAN_VEH_STOP_REQ_DCC — stop/hold request from DCC_1/ACC_01 (0x109) byte7 bit1, decoded 801383e8:94. Gated forward to tsk02_TSK_Anhalten_src(a58d) in 8013ef46:937 (when b28e in {1,5} & a757!=0). The standstill-hold input. See RESULTS UPDATE 63/64.",re-trace
-0xd000b06a,acc01_ACC_Dynamik,DATA,"ACC_Dynamik / CAN_STATE_DCC_DYN — DCC_1/ACC_01 (0x109) byte7 bits2-3, decoded 801383e8:95. Reader 8013e47c (torque-rate switch, but INERT: all 4 cals=500). See RESULTS UPDATE 62.",re-trace
-0xd0007bac,acc01_ACC_Sollbeschleunigung,DATA,"ACC_Sollbeschleunigung setpoint from DCC_1/ACC_01 (0x109) 24|11 (=(byte4&7)<<8|byte3), decoded 801383e8:90. Res 0.005 m/s2 offset -7.22 (=CAN_AC_DE_DCC_UP). Read by 8013c5d4:517/525 (threshold flags a580/a581). Reset default 0x5a4. On the B8 this (not d0007baa) is the received accel command. See RESULTS UPDATE 65.",re-trace
-0xd0007baa,acc05_ACC_Momentenanforderung,DATA,"ACC_Momentenanforderung (TORQUE/moment request, unitless 0-1021) from ACC_05/DCC_5 (0x10D) 16|10, decoded 801383fc:105 as min(b0d4*raw*16,0x7fff). NOT an acceleration (older maps mislabeled it 'the accel'). Read by 8013c5d4:734. Likely dormant on B8 (ACC_05 is Gateway_D4C7). See RESULTS UPDATE 65.",re-trace
-0xd0007c3e,esp05_ESP_Bremsdruck,DATA,"ESP-measured brake pressure from ESP_05 (0x106) 16|10 (0.3 bar, -30), decoded 80106db8:109-117 as (raw-100)*3 internal (raw 100 = 0 bar). NOT a 'second ACC setpoint' (older maps mislabeled it). Not read by 8013c5d4. See RESULTS UPDATE 65.",re-trace
-0xd0007cb8,tsk02_TSK_Verzoeg_Anf_src,DATA,"AC_SP_CRU_BRAKE_CTL = decel request source packed into TSK_02 (0x10C) byte8 by 80137a00. 850e-6 offset-binary; packer clamps [0x6db1=-3.984, 0x89b6=+2.112]. Set by 8013ef46:956 (=cae when a58c!=0, else 0x8000). See acc_flow.md / UPDATE 61.",re-trace
-0xd000a58d,tsk02_TSK_Anhalten_src,DATA,"TSK_Anhalten source, packed into TSK_02 (0x10C) byte2 bit4 by 80137a00:49/94. = acc01_ACC_Anhalten(a7ae) when b28e in {1,5} & a757(LV_DCC_ENA)!=0, else 0 (8013ef46:937-943). The engine's standstill-hold request to ESP. See RESULTS UPDATE 63/64.",re-trace
-0xd000a58c,tsk02_TSK_Freig_Verzoeg_Anf_src,DATA,"TSK_Freig_Verzoeg_Anf (decel-ENABLE) source, TSK_02 (0x10C) byte7 bit7. Set 8013ef46:932-936: =(a57c==0 & b28e in {1,5} & sRamc113c<=cal) || d1181. Gates whether the decel value (cb8) flows. See RESULTS UPDATE 61/64.",re-trace
-0xd000a58f,tsk02_TSK_Zwangszusch_ESP_src,DATA,"TSK_Zwangszusch_ESP (forced ESP coupling/intervention ENABLE) source, TSK_02 (0x10C) byte7 bit6. Set 8013ef46:963-969 = (b28f in {1,2}). Live companion enable during active ACC control; NOT an independent hold. See RESULTS UPDATE 64.",re-trace
-0xd000a79f,tsk02_TSK_Codierung_ACC_src,DATA,"TSK_Codierung_ACC source, TSK_02 (0x10C) byte7 bit5 (coding constant via 8011101c). See acc_flow.md / UPDATE 61.",re-trace
-0xd000a3ba,acc05_ACC_Betaetigung_EPB,DATA,"ACC_Betaetigung_EPB (EPB-close request) from ACC_05/DCC_5 (0x10D) bit60, decoded 801383fc:114. The EPB engage bit; engine RX-decodes it (if 0x10D received). See RESULTS UPDATE 65.",re-trace
-0xd000b056,acc05_ACC_StartStopp_Info,DATA,"ACC_StartStopp_Info from ACC_05/DCC_5 (0x10D) 44|2, decoded 801383fc:110. See RESULTS UPDATE 65.",re-trace
-0xd000a3b9,acc05_ACC_Freigabe_Momentenanf,DATA,"ACC_Freigabe_Momentenanf (torque-request enable) from ACC_05/DCC_5 (0x10D) bit12, decoded 801383fc:92. See RESULTS UPDATE 65.",re-trace
-0xd000a3bd,acc05_ACC_limitierte_Anfahrdyn,DATA,"ACC_limitierte_Anfahrdyn from ACC_05/DCC_5 (0x10D) bit15, decoded 801383fc:93. See RESULTS UPDATE 65.",re-trace
-0xd000a4eb,esp05_ESP_Verz_TSK_aktiv,DATA,"ESP_Verz_TSK_aktiv (ESP is executing the engine's TSK deceleration) from ESP_05 (0x106) bit27, decoded 80106db8:119. Part of the engine<->ESP brake handshake. See RESULTS UPDATE 65.",re-trace
-0xd000a4f5,esp05_ESP_Konsistenz_TSK,DATA,"ESP_Konsistenz_TSK (ESP TSK-request consistency/plausibility handshake) from ESP_05 (0x106) bit29, decoded 80106db8:121. See RESULTS UPDATE 65.",re-trace
-0xd000a4e4,esp05_ESP_Autohold_Standby,DATA,"ESP_Autohold_Standby from ESP_05 (0x106) bit35, decoded 80106db8:126. See RESULTS UPDATE 65.",re-trace
-0xd000a4e9,esp05_ESP_Autohold_aktiv,DATA,"ESP_Autohold_aktiv (ESP vehicle-hold active) from ESP_05 (0x106) bit56, decoded 80106db8:133. See RESULTS UPDATE 65.",re-trace
-0xd000a4f1,esp05_ESP_Status_Bremsdruck,DATA,"ESP_Status_Bremsdruck from ESP_05 (0x106) bit61, decoded 80106db8:135. Participates in the 8013ef46 decel-enable predicate (older maps called it an 'ACC enable' bit). See RESULTS UPDATE 65.",re-trace
-0xd000a4e6,esp05_ESP_QBit_Bremsdruck,DATA,"ESP_QBit_Bremsdruck (brake-pressure quality bit) from ESP_05 (0x106) bit12, decoded 80106db8:104. See RESULTS UPDATE 65.",re-trace
-0xd000a4ea,esp05_ESP_QBit_Fahrer_bremst,DATA,"ESP_QBit_Fahrer_bremst from ESP_05 (0x106) bit13, decoded 80106db8:105. See RESULTS UPDATE 65.",re-trace
-0xd000a4e7,esp05_ESP_Fahrer_bremst,DATA,"ESP_Fahrer_bremst (driver is braking) from ESP_05 (0x106) bit26, decoded 80106db8:118. See RESULTS UPDATE 65.",re-trace
-0xd000a4cb,esp05_ESP_Lenkeingriff_ADS,DATA,"ESP_Lenkeingriff_ADS from ESP_05 (0x106) bit28, decoded 80106db8:120. See RESULTS UPDATE 65.",re-trace
-0xd000a4ec,esp05_ESP_Bremsruck_AWV2,DATA,"ESP_Bremsruck_AWV2 from ESP_05 (0x106) bit30, decoded 80106db8:122. See RESULTS UPDATE 65.",re-trace
-0xd000a4f4,esp05_ECD_Fehler,DATA,"ECD_Fehler from ESP_05 (0x106) bit32, decoded 80106db8:123. See RESULTS UPDATE 65.",re-trace
-0xd000a4f2,esp05_ECD_nicht_verfuegbar,DATA,"ECD_nicht_verfuegbar from ESP_05 (0x106) bit33, decoded 80106db8:124. See RESULTS UPDATE 65.",re-trace
-0xd000a4ed,esp05_ESP_Status_Bremsentemp,DATA,"ESP_Status_Bremsentemp from ESP_05 (0x106) bit34, decoded 80106db8:125. See RESULTS UPDATE 65.",re-trace
-0xd000a4ee,esp05_ESP_HDC_Standby,DATA,"ESP_HDC_Standby from ESP_05 (0x106) bit36, decoded 80106db8:127. See RESULTS UPDATE 65.",re-trace
-0xd000a4ef,esp05_ESP_Rueckwaertsfahrt_erkannt,DATA,"ESP_Rueckwaertsfahrt_erkannt from ESP_05 (0x106) bit39, decoded 80106db8:128. See RESULTS UPDATE 65.",re-trace
-0xd000a4f3,esp05_ESP_Status_Anfahrhilfe,DATA,"ESP_Status_Anfahrhilfe from ESP_05 (0x106) bit40, decoded 80106db8:129. See RESULTS UPDATE 65.",re-trace
-0xd000a4f0,esp05_ECD_Bremslicht,DATA,"ECD_Bremslicht from ESP_05 (0x106) bit59, decoded 80106db8:134. See RESULTS UPDATE 65.",re-trace
-0xd000b1ea,esp05_ESP_BKV_Unterdruck,DATA,"ESP_BKV_Unterdruck (brake-booster vacuum) from ESP_05 (0x106) 48|8, decoded 80106db8:132. See RESULTS UPDATE 65.",re-trace
-0xd000b1ec,esp05_ESP_StartStopp_Info,DATA,"ESP_StartStopp_Info from ESP_05 (0x106) 42|2, decoded 80106db8:130. See RESULTS UPDATE 65.",re-trace
-0xd000b1ed,esp05_ESP_Schwelle_Unterdruck,DATA,"ESP_Schwelle_Unterdruck from ESP_05 (0x106) 14|2, decoded 80106db8:107. See RESULTS UPDATE 65.",re-trace
-0xd000b28e,STATE_CRU_CTL,DATA,"Internal cruise/ACC control state. b28e in {1,5} = controller actively regulating (the gate bVar4 in 8013ef46 that arms TSK_Anhalten/decel forwarding); feeds STATE_CRU_CTL_CAN(b28d). See RESULTS UPDATE 64.",re-trace
-0xd000b28d,STATE_CRU_CTL_CAN,DATA,"STATE_CRU_CTL_CAN — CAN-reported cruise status (0..3 enum: 1=GRA_ACC_aktiv..3=Fehler), packed into TSK_02 (0x10C) byte3 bits0-1 (TSK_Status_GRA_ACC_01). From STATE_CRU_CTL via 8013e8aa. See acc_flow.md.",re-trace
-0xd000b28f,STATE_CRU_CTL_long_substate,DATA,"Longitudinal-controller sub-state (from 8013e8aa): 1=engaged/controlling, 2=decel/approach, 3=transient, 0=off. Drives tsk02_TSK_Zwangszusch_ESP_src (a58f=(b28f in {1,2})). See RESULTS UPDATE 64/65.",re-trace
-0xd000ad0f,acc_master_compute_enable,DATA,"ACC master compute-enable (from 8011ac80). 8013ef46 early-returns unless ad0f!=0; also an 8013c5d4 engage gate. See acc_flow.md / UPDATE 64.",re-trace
-0xd000a757,LV_DCC_ENA,DATA,"LV_DCC_ENA — ACC(Basic-ACC) coding enable from long-coding cell 27 (decoded 801b5900). a757!=0 required to forward ACC_Anhalten and selects the ACC min-accel curve (0x5b728). GRA-coded car has a757=0 and never forwards hold. See RESULTS UPDATE 60/64.",re-trace
-0xd000a756,coding_GRA_ena,DATA,"GRA (basic cruise) coding enable, long-coding cell 27 type1 (decoded 801b5900). See RESULTS UPDATE 60.",re-trace
-0xd000a758,coding_F2S_bit_DEAD,DATA,"Follow-to-Stop coding bit (cell 27 type3), written only by 801b5900, read by NOTHING => F2S not implemented in this firmware. See RESULTS UPDATE 60.",re-trace
-0xd000b057,acc_ACC_Status_ACC,DATA,"ACC_Status_ACC (0..7) — the SAME logical signal decoded from whichever ACC frame is coding-active: ACC_01 (0x109) bit60|3 = byte7[6:4] via 801383e8:96, or ACC_05 (0x10D) bit57|3 = byte7[1:3] via 801383fc:113. Only the cal-selected frame's decoder writes it (no runtime conflict). On the Q5 (80043bc6=0x0900 -> ACC_01) it is ACC_01's field. See RESULTS UPDATE 66.",re-trace
-0xd000a5a8,acc_mode_ACC05_Momentenanf_sel,DATA,"ACC mode select = DAT_80043caf & 1 (sole writer 801abf64:21; cal-fixed). 0 (Q5, this image caf=0x06) = ACC_01 + TSK_02(80137a00, has Anhalten) + hold-relay branch enabled in 8013ef46:850 (requires a5a8==0). 1 = ACC_05 Momentenanforderung drive-off path (80141528) + TSK_05(80137f2c) + hold-relay DISABLED. Mutually exclusive with the ACC_01 hold relay. See RESULTS UPDATE 66.",re-trace
-0x80141528,acc_driveoff_torque_momentenanf,FUNCTION,"ACC engine-torque request formation. On Q5 (a5a8=0) takes passthrough d0007ce0=Ramd0007ccc. ACC_05 stop-and-go DRIVE-OFF branch (:58-136, gated a757!=0 && a5a8!=0): fires when b057(ACC_Status_ACC) in {3,4} && a3b9(Freigabe_Momentenanf) && a54b==0(not inhibited) && b055==1(valid) && d0007baa>=cal 80043a5c[0x56]; maps d0007baa(Momentenanforderung)->d0007ce0 via kennlinie 0xa005d608 w/ rate-limit+hysteresis. Outputs Ramd0006998 (a5ac-gated) + b2a0. Present but cal-gated OFF on Q5. See RESULTS UPDATE 66.",re-trace
-0x8010a6ec,acc_epb_standstill_hold_statemachine,FUNCTION,"ACC_05/EPB stop-and-go standstill-HOLD state machine (gated a757 && ad0f && a5a8 && !a54c; DEAD on Q5 a5a8=0). Hold timer d0001325->uRamc0001062->a54d(hold-confirmed >= cal 80043828[5]); a54b(drive-off inhibit); a54c(EPB fault-inhibit, 16 conds masked by cal 80043ccc[0x14]). Uses b057==3(AKTIV) + a3ba(Betaetigung_EPB). This IS the in-binary 'hold control' (contra 'not implemented'); but engine does NOT originate hold on bus (no ACC_05 TX; TSK_Anhalten relay off when a5a8!=0) - EPB is radar-direct. See RESULTS UPDATE 66.",re-trace
-0x8010a4fc,acc_driveoff_hold_diagnostics,FUNCTION,"Diagnostics for the ACC_05 drive-off/hold path: debounces a3b9(Freigabe_Momentenanf)/b057(Status)/a54d(hold-confirmed) into diag events 0xd1/0xd2/0xd3 (update_control_flags_800a8b20). Monitoring only, no control output. See RESULTS UPDATE 66.",re-trace
-0x801ab824,reset_acc_epb_hold_state,FUNCTION,"Failsafe/init reset of the ACC_05/EPB hold-state block: a54b=0, a54c=0, a54d=0 (analogous to 801a6134 for the DCC block). Not a control consumer. See RESULTS UPDATE 66.",re-trace
-0x801abf64,init_acc_mode_a5a8_from_caf,FUNCTION,"Sets the ACC mode select a5a8 = DAT_80043caf & 1 (:21) — the sole writer. Selects ACC_01/TSK_02/hold-relay (0) vs ACC_05-Momentenanf/TSK_05 (1). See RESULTS UPDATE 66.",re-trace
-0xd000a54d,acc_standstill_hold_confirmed,DATA,"ACC_05/EPB standstill-hold CONFIRMED (debounced). Set by 8010a6ec when hold timer uRamc0001062 >= cal 80043828[5]. Read by drive-off diag 8010a4fc + reset 801ab824. Cal-gated (a5a8) => dead on Q5. See RESULTS UPDATE 66.",re-trace
-0xd000a54b,acc_driveoff_inhibit,DATA,"ACC_05 drive-off inhibit = (d0001321!=0 || a54c!=0), set by 8010a6ec. Gates the drive-off torque branch in 80141528 (requires a54b==0). See RESULTS UPDATE 66.",re-trace
-0xd000a54c,acc_epb_hold_fault_inhibit,DATA,"ACC_05/EPB hold fault-inhibit word (16 conditions masked by cal 80043ccc[0x14]), set by 8010a6ec. Read by 8011101c/80137d0c/80137f2c. See RESULTS UPDATE 66.",re-trace
-0xd0007ce0,acc_engine_torque_request,DATA,"ACC engine-torque request. Q5: = Ramd0007ccc passthrough (80141528:56). ACC_05 mode: = drive-off torque from d0007baa(Momentenanforderung) via 80141528:89-134. See RESULTS UPDATE 66.",re-trace
-0xd000a5ac,acc_driveoff_active,DATA,"ACC drive-off-active flag (80141528:148): true if b28e in {1,2,5,6} OR the ACC_05 Momentenanf gate. When set, Ramd0006998 carries the drive-off torque; else 0x80000000 (neutral). See RESULTS UPDATE 66.",re-trace
-0xd000b055,acc05_Momentenanf_valid,DATA,"ACC_05 ACC_Momentenanforderung validity status (801383fc:109): 1=valid, 2/3=SNA/invalid. Gates drive-off in 80141528 (needs b055==1). See RESULTS UPDATE 66.",re-trace
-0x80043bc6,cal_acc_frame_select,DATA,"CAL word selecting which ACC RX frame(s) the engine decodes (no runtime writer). &0x100=ACC_01/DCC_1(0x109) via 801383e8; &(0x200|0x400|0x1000)=ACC_05/DCC_5(0x10D) via 801383fc. This image=0x0900 => ACC_01 active (Q5), ACC_05 disabled (Macan would set the ACC_05 bits). Reflash to change, NOT VCDS. See RESULTS UPDATE 66.",re-trace
-0x80043caf,cal_acc_mode_tsk_packer_select,DATA,"CAL byte (=0x06). bit0 => a5a8 (801abf64): 0=ACC_01+TSK_02(80137a00,has Anhalten)+hold-relay; 1=ACC_05 Momentenanf drive-off+TSK_05(80137f2c). bit2 selects mass source. Q5=0x06 (bit0=0). See RESULTS UPDATE 64/66.",re-trace
-0x800439f8,cal_creep_to_moving_thd,DATA,"Creep->moving speed threshold (u16=1004=7.84 km/h at 1/128), 8013ef46:755 sets uRamc0001118 bit0x40. Hysteresis partner of 0x800439fa (973=7.60). Lower toward 0 for sub-15 standstill (keep f8>fa). NOTE a hardcoded literal 1000 at 8013ef46:258 also enforces ~7.81 km/h (firmware patch). See RESULTS UPDATE 66.",re-trace
-0x800439fa,cal_moving_to_creep_thd,DATA,"Moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 8013ef46:808 clears uRamc0001118 bit0x80. Hysteresis partner of 0x800439f8 (1004). See RESULTS UPDATE 66.",re-trace
-0x800435e2,cal_acc05_creep_to_moving_thd,DATA,"ACC_05-path creep->moving speed threshold (u16=1004=7.84 km/h at 1/128), 80141528:174-178. The ACC_05/Momentenanf equivalent of the 8013ef46 creep cal 0x800439f8 (same value) but FULLY CALIBRATABLE (no hardcoded 1000 literal). Feeds status a5ae (TSK packers), not a hard disengage. See RESULTS UPDATE 66 Q3-followup.",re-trace
-0x800435e6,cal_acc05_moving_to_creep_thd,DATA,"ACC_05-path moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 80141528:176. Hysteresis partner of 0x800435e2. ACC_05 equivalent of 8013ef46 cal 0x800439fa. See RESULTS UPDATE 66 Q3-followup.",re-trace
-0xd000a5ae,acc05_creep_status_tsk,DATA,"ACC_05-path creep/low-speed status (80141528:187), from ego-speed vs cals 0x800435e2/e6. Read by TSK packers 8011101c/80137d0c/80137f2c. A status bit, NOT a hard speed floor. (a5ad sibling is dead - no readers.) See RESULTS UPDATE 66 Q3-followup.",re-trace

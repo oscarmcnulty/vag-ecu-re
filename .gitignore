@@ -47,6 +47,7 @@ ecus/*/analysis/decompiles_p*/
 ecus/*/analysis/callgraph_*.csv
 # a1-relative cal-access table (regenerable via reproduce.sh step 6 / ResolveCalReads.java)
 ecus/*/analysis/cal_reads.csv
+ecus/*/analysis/dispatch_resolved.csv
 # reproduce.sh build outputs (derived from committed sources -- regenerated every run):
 #   a2l_symbols.csv <- a2l_to_symbols.py(simos85.a2l) at step 4b
 #   map_calls.csv   <- TraceMapCalls.java at step 8

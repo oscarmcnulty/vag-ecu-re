@@ -127,7 +127,9 @@ way to observe the RAM tables as actually constructed.
   the reference-seeded recovery is the safe path.
 
 ## Sequencing / effort
-1. **A on `0x800826c0`** — hours, pure Python, no Ghidra → flash window done.
+1. **A on `0x800826c0`** — pure Python, no Ghidra → flash window. ✅ **DONE — results in
+   `uds_dispatch.md`** (writable window = calibration + DFLASH/EEPROM; boot sector in no
+   descriptor; ASW banks in the geometry map but not the reflash descriptor).
 2. **B → A on the `0x44`/`0x1c` tables** — trace `801d8590`'s caller, decode records → SID map.
 3. **C (`ResolveDispatchTables.java`)** — the reusable pass; recovers the handler bodies incl.
    `$27` → seed/key.

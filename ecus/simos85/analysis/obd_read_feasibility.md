@@ -256,11 +256,14 @@ Key structural facts:
 Not resolvable from the function set alone, and where a determined analyst would go next:
 the **SID→handler dispatch table** and **per-service security-level bytes** (behind
 `DAT_d00005c8` / the `param_1[7]` diagnostic context), the **`0x27` seed/key algorithm,
-level list, and attempt/delay limiter**, and the **`0x800826c0` flash-config table's exact
-writable window**. These live in const/RAM tables, reachable by decoding the diagnostic-init
-that populates them or by resolving the recovered-jumptable targets in the raw image — not by
-reading more C. **The step-by-step recovery plan (anchors, techniques, new `ResolveDispatchTables`
-pass, sequencing) is in `uds_dispatch_recovery.md`.** None of this changes the read conclusion:
+level list, and attempt/delay limiter**, and the **`0x27` seed/key algorithm,
+level list, and attempt/delay limiter**. (The **writable flash window is now recovered** — see
+`uds_dispatch.md`: the reflash descriptor `@0x800826c0` programs **calibration + DFLASH/EEPROM
+only**, the boot sector is in no descriptor, and the ASW code banks are in the geometry map but
+not the reflash window — an independent code-level confirmation of §3b.) The remaining RAM/RODATA
+items are reachable by decoding the diagnostic-init that populates them or by resolving the
+recovered-jumptable targets. **The step-by-step recovery plan (anchors, techniques, new
+`ResolveDispatchTables` pass, sequencing) is in `uds_dispatch_recovery.md`.** None of this changes the read conclusion:
 **no `0x23`, no `0x35`, no CCP/XCP → no CAN path returns arbitrary flash → VR, not RD.**
 
 ---

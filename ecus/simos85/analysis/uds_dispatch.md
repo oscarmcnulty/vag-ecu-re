@@ -145,6 +145,58 @@ Reading their bodies:
   by the **RSA signature at the loader** (`RE_findings_checksum.md`), not an app `$27` challenge.
   (**inference** on the last point.)
 
+## The UDS download (write) path — verification & partial-write feasibility
+
+What `$34 RequestDownload` → `$36 TransferData` → `$37 RequestTransferExit` actually checks, and
+whether a tool can write a **small sub-range** of the 256 K cal segment instead of all of it.
+All hangs off the reflash descriptor `0x800826c0` (`_DAT_c03fd380`); cal is a *single* 256 K
+segment (`0xa0040000`, size `0x40000`). The TC1796 PMU command sequences decode cleanly:
+program-page `801f249e` (`0xAA/0x55/0xA0`), erase-sector `801f40de`/`801f2224` (`…/0x30` written
+to the sector base), blank-check `801f1704` (compares against `0xff`, *not* the programmer).
+
+**Verification = per-block CRC only; no whole-region gate.**
+- Each `0x1e00` block self-validates: `word[0]==~word[0x1dfc]` (complement) **and**
+  `crc16(payload,len,0xABCD)==word[0x1dfa]` (`uds_validate_xfer_block`@`801d1ebe`; the `0x80`-record
+  variants `801d230e`/`801d283c` do the same). No cross-block or whole-segment integrity check.
+- `$37 RequestTransferExit` (`8011efb8`) is trivial — clears a byte, transitions session state. **No
+  whole-region checksum/signature over cal.**
+- No static cal checksum in the image (`RE_findings_checksum.md` §4). RSA keys `0x73/0x6E/0x74` are
+  boot-level (SBOOT/CBOOT), in the `0x0–0x20000` region blank in every OBD read — so whether cal is
+  in the RSA scope **can't be proven statically**; empirically modified cal flashes accepted on the
+  CRC alone (**inference**: cal not RSA-gated over OBD).
+
+**Address handling — `$34` DOES accept a sub-range.** The only bound check (`801f1598:23`) is
+`segment_size < offset+length-1 → NRC 0x80`, i.e. it enforces only `[offset,offset+length) ⊆
+[0,segment_size)`. It does **not** require `offset==0`, `length==segment_size`, or sector alignment;
+the write address is `segment_base + offset` (`801f3b5e:40`, byte-granular; the program stage buffers
+to a 128/256-byte flash page). The request is still bounded to a *declared segment* (cal or EEPROM —
+never the ASW banks).
+
+**Erase — whole 256 K segment (the actual blocker).** The erase executor `801f3fb8` loops over
+**every physical sector spanning the entire descriptor segment, unconditionally** — no "is this
+sector written?" test — with the range taken from the static segment size (`find_map_index_801f1c74`
+over `record+4`/`record+8`, not request-modifiable). So any cal erase wipes all 256 K to `0xFF`. The
+physical sector size can't be read (the sector table is gitignored firmware data) but is immaterial:
+the loop covers the whole segment regardless. Trigger: `$31` erase → `801d1a72:52` → `801f14e0` →
+`801f3fb8`.
+
+**Verdict — can you write small portions of cal?**
+- **The transfer + validation layer would accept it** — a sub-range `$34`/`$36` of valid `0x1e00`
+  blocks passes (Q2 + Q3).
+- **But the normal sequence erases the whole 256 K first** (Q1), so anything you don't re-transmit is
+  left erased (`0xFF`). To change arbitrary bytes you must erase (whole segment) and re-supply all
+  256 K. There is **no UDS-reachable sub-segment / single-sector erase**.
+- **Sole loophole:** a custom tool could **skip the `$31` erase** and send only `$34`/`$36` for a
+  sub-range — program runs without a preceding erase. NOR flash only clears bits (`1→0`) on program,
+  so a no-erase partial write sticks **only where the new bytes are a bitwise subset of the current
+  bytes**. Fine for turning bits off (e.g. clearing a flag); useless for general map edits, which
+  need `0→1` somewhere and thus an erase. Cite: `801f249e` does not self-erase; erase/program are
+  separate ops.
+
+Net for tuning: **surgical small-region cal writes are not achievable over the stock UDS surface** —
+it's whole-segment erase + full 256 K rewrite (exactly what Pcmflash/WinOLS do), unless your edit
+happens to be `1→0`-only.
+
 ## Net
 Targets 1–3 all closed statically. The recovered tables confirm, at the dispatch-table level,
 the §6 conclusion: **no `0x23`/`0x35`/`0x3d`, no CCP/XCP, `$27` gates nothing readable, and the

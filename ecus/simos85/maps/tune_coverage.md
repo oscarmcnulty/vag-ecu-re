@@ -73,23 +73,23 @@ diff-grounded hypothesis → `source=llm`.
 
 | vaddr | new A2L object | conf | FR family / role | change |
 |---|---|---|---|---|
-| `0x40956` | `Mom_ueberw_L2_config_flags_40956` | LOW | Momentenüberwachung (EGAS L2) config flags, next to `0x40940` | S2 zeros first 16 B |
-| `0x4119e` | `monitor_thresh_egtr_bts_4119e` | LOW | EGTR/BTS component-monitor thresholds (FUN_801564d0) | S1=S2 +~3 % |
-| `0x4449e` | `N_MAX_rev_limiter_curve_bank_4449e` | **MED** | `N_MAX` rev-limiter curve bank (FUN_8017a1e0, verified) | S1&S2 raise limiter |
+| `0x40956` | `torque_monitor_config_flags_40956` | LOW | Momentenüberwachung (EGAS L2) config flags, next to `0x40940` | S2 zeros first 16 B |
+| `0x4119e` | `component_monitor_thresh_4119e` | LOW | EGTR/BTS component-monitor thresholds (FUN_801564d0) | S1=S2 +~3 % |
+| `0x4449e` | `rev_limiter_curve_bank_4449e` | **MED** | `N_MAX` rev-limiter curve bank (FUN_8017a1e0, verified) | S1&S2 raise limiter |
 | `0x449fc` | `thermal_prot_tq_limiter_params_449fc` | LOW | per-bank thermal-protection torque limiter (FUN_8018e814) | S1&S2 +~2 % |
-| `0x48c18` | `eff_tqi_cor_struct_48c18` | LOW | `IP_EFF_TQI_COR_CUS` / `EFF_*` correction structure (FUN_800faef8) | S1=S2 lift corner/top |
-| `0x48dde` | `charge_tq_ref_curve_48dde` | **MED** | 1-D charge↔torque reference curve vs N (FUN_8014fe88, verified) | S1&S2 raised |
-| `0x48e2c` | `eff_tq_bank_axis_48e2c` | **MED** | two-plateau axis in the EFF/torque bank (FUN_800faef8 / FUN_8013273c) | S1&S2 raise low plateau |
-| `0x49114` | `eff_tqi_max_ceiling_49114` | **MED** | `TQI_MAX`-type ceiling (FUN_800faef8 kf_interp, verified) | S1=S2 +5.0 % |
-| `0x4925c` | `eff_rpm_fill_curve_4925c` | **MED** | rpm fill/correction curve (FUN_8014fe88, verified) | S1=S2 +~30 % |
+| `0x48c18` | `torque_correction_struct_48c18` | LOW | `IP_EFF_TQI_COR_CUS` / `EFF_*` correction structure (FUN_800faef8) | S1=S2 lift corner/top |
+| `0x48dde` | `charge_torque_ref_curve_48dde` | **MED** | 1-D charge↔torque reference curve vs N (FUN_8014fe88, verified) | S1&S2 raised |
+| `0x48e2c` | `torque_bank_axis_48e2c` | **MED** | two-plateau axis in the EFF/torque bank (FUN_800faef8 / FUN_8013273c) | S1&S2 raise low plateau |
+| `0x49114` | `torque_model_ceiling_49114` | **MED** | `TQI_MAX`-type ceiling (FUN_800faef8 kf_interp, verified) | S1=S2 +5.0 % |
+| `0x4925c` | `rpm_fill_curve_4925c` | **MED** | rpm fill/correction curve (FUN_8014fe88, verified) | S1=S2 +~30 % |
 | `0x53235` | `charge_boost_gate_bank0_53235` | LOW | per-bank charge/boost gate curve, bank[0] | S1&S2 shift up |
 | `0x532f5` | `charge_boost_gate_bank1_532f5` | LOW | charge/boost gate, bank[1] (twin) | S1=S2 shift up |
 | `0x5774e` | `tq_upper_limit_companion_5774e` | LOW | companion clamp to `tq_upper_limit_57620` | S1=S2 922→891 |
 | `0x6567a` | `limiter_monitor_table_6567a` | LOW | structured limiter/monitor table | S2 zeros whole table |
-| `0x6d3c4` | `block_6d3c4_mff_factor_cont` | LOW | continuation of the unity=1024 MFF factor block `0x6d3ac` | S2 reshape |
+| `0x6d3c4` | `block_6d3c4_factor_cont` | LOW | continuation of the unity=1024 MFF factor block `0x6d3ac` | S2 reshape |
 | `0x74084` | `ign_charge_time_corr_74084` | LOW | ignition / charge-time correction (3-col) | S1=S2 +~2 raw |
-| `0x7870e` | `ip_iga_spark_correction_bank2_7870e` | **MED** | 2nd IGA/Zündwinkel map, sibling of `0x7865b` | S1=S2 +1 (more advance) |
-| `0x787c2` | `ip_iga_spark_correction_bank3_787c2` | **MED** | 3rd IGA map, sibling of `0x7865b` | S1=S2 +1 (more advance) |
+| `0x7870e` | `spark_correction_bank2_7870e` | **MED** | 2nd IGA/Zündwinkel map, sibling of `0x7865b` | S1=S2 +1 (more advance) |
+| `0x787c2` | `spark_correction_bank3_787c2` | **MED** | 3rd IGA map, sibling of `0x7865b` | S1=S2 +1 (more advance) |
 | `0x7a38c` | `acc_accel_profile_curve_7a38c` | LOW | ACC/cruise accel-profile curve | S1&S2 raise profile |
 
 Symbol names for these 18 addresses are added to `analysis/symbols_merged.csv`

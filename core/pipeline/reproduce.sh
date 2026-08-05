@@ -26,6 +26,7 @@
 #   CAL_LO/CAL_HI   calibration window            -> steps 6 + 9 type it and resolve cal reads
 #   A2L             path to the canonical A2L     -> step 5b applies cal labels from it
 #   TRACE_MAP_CALLS output csv path               -> step 10 traces map-lookup framework calls
+#   RESOLVE_DISPATCH output csv path              -> step 10b resolves indirect-call jumptables
 #   IMAGE_HI        end of image for coverage     (default LOADBASE + firmware size)
 # ------------------------------------------------------------------------------------
 set -euo pipefail
@@ -40,7 +41,7 @@ source "$ROOT/.env.sh"
 # Defaults BEFORE the conf so the conf can override them; arrays default to empty.
 PROCESSOR="tricore:LE:32:tc176x"
 MEMMAP=(); BASEREGS=(); CODE_RANGES=()
-ALIAS_BASE=""; ALIAS_LEN=""; CAL_LO=""; CAL_HI=""; A2L=""; TRACE_MAP_CALLS=""
+ALIAS_BASE=""; ALIAS_LEN=""; CAL_LO=""; CAL_HI=""; A2L=""; TRACE_MAP_CALLS=""; RESOLVE_DISPATCH=""
 EXPECT_SHA="${EXPECT_SHA:-}"; IMAGE_HI=""
 # shellcheck source=/dev/null
 source "$HERE/ecu.conf"
@@ -216,6 +217,17 @@ if [ -n "$TRACE_MAP_CALLS" ]; then
   say 10_tracemaps '^TraceMapCalls'
 else
   skip 10 "no TRACE_MAP_CALLS (map-lookup framework not identified on this ECU)"
+fi
+
+if [ -n "$RESOLVE_DISPATCH" ]; then
+  echo "==> 10b resolve indirect-call jumptable targets -> $RESOLVE_DISPATCH"
+  # Statically-resolvable subset only (const fn-ptr + const-base indexed tables); RAM-vtable /
+  # trampoline dispatch needs EmulBoot. CSV only -- add --addrefs manually to create references.
+  run 10b_dispatch "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+    -scriptPath "$SCRIPTS" -postScript ResolveDispatchTables.java "$HERE/$RESOLVE_DISPATCH"
+  say 10b_dispatch '^DISPATCHDONE'
+else
+  skip 10b "no RESOLVE_DISPATCH declared"
 fi
 
 echo "==> 11 byte-level coverage report -> analysis/coverage.log"

@@ -41,9 +41,14 @@ uint crc32(byte *data, uint len) {          // standard zlib CRC32
 }
 ```
 
-- Only direct caller in the ASW: `FUN_801dce30` (an 8-byte runtime integrity check).
-  → In this image the table-driven CRC32 is used at **runtime**, not as the flash
-  programming checksum (that path is in the bootloader, absent here).
+- Callers in the ASW: `FUN_801dce30` (an 8-byte runtime integrity check) **and** the Mode 09
+  **CVN engine `FUN_800297ea`**, which runs this CRC32 over the SW/cal component segments and
+  compares to the stored references at `region+0x304` (CAL ref `0xA92A60BC` @`0x80040304`).
+  → In this image the table-driven CRC32 is used at **runtime** (integrity check + the OBD-II
+  CVN surfaced to smog tools — see `mode09_calid_cvn.md`), not as the flash programming
+  checksum (that path is in the bootloader, absent here). The CVN reference lives in a `+0x304`
+  descriptor, **not** interleaved in the cal payload, so "no static cal checksum in the maps"
+  (below) still holds.
 
 The lone inline `0x04C11DB7` constant at file 0x311b4 is **unrelated** (it falls in a
 small bit-field helper) — a red herring.

@@ -7,8 +7,11 @@ MED17/MD1). Read `README.md` for layout and `docs/methodology.md` for the workfl
 - **Never commit firmware-derived work.** Decompiled C, the `ghidra_proj/`, and firmware
   images are gitignored (`ecus/*/firmware/*`, `.env.sh`). Only *metadata* (addresses,
   names, scripts) is committed, and analysis is regenerated from it. Keep it that way.
-- Function names in `analysis/symbols_merged.csv` are mostly LLM hypotheses — trust the
-  `source` column (`verified`/`re-trace`/`fr-trace` vs `llm`), not a name quoted in prose.
+- `analysis/symbols_merged.csv` holds **only confirmed** names (`source ∈ {verified,
+  re-trace, fr-trace}`); everything else is `FUN_<addr>`. The machine-proposed `llm` names
+  were removed (20% were actively wrong — `analysis/symbol_name_audit.md`); they live only in
+  git history, not the tree. A name earns a place here by tracing (`re-trace`) or a
+  Funktionsrahmen match (`fr-trace`) — don't reintroduce unverified guesses.
 
 ## Reproduce an ECU
 `source .env.sh` then `ecus/<ecu>/reproduce.sh` (parameters in `ecus/<ecu>/ecu.conf`).

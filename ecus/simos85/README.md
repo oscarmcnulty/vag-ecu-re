@@ -29,6 +29,22 @@ First and reference ECU pack. The `core/` tooling is built against this target.
   - CRC16/ARC table @ `0x800808ec` (init 0xABCD; UDS download buffers)
   - CRC8/AUTOSAR table @ `0x80080aec` (no callers)
 
+## External read paths (bench SBOOT vs OBD) — see analysis/obd_read_feasibility.md
+
+Why 8.5 is *virtual read* over OBD, not a real dump — three doors, all shut over OBD:
+**Door 1** the SBOOT boot-password exploit ([fastboatster/Simos8_SBOOT]) is **bench-only**
+(entry is a PWM-on-boot-pins timing gate, not a bus message) but is the only route to the
+boot sector `0x0–0x20000`; **Door 2** a Simos18-style patch-and-read OBD unlock needs an
+unsigned-code-write primitive (RSA-signature bypass) unbroken on the 8.5 loader; **Door 3**
+a CCP/XCP `UPLOAD` (the AL551 vector) would need a measurement slave — and a **static pass
+over the reproduced decompiles finds none**: no CCP/XCP anywhere, and the UDS stack has **no
+`0x23` ReadMemoryByAddress and no `0x35` upload** — only a session+security-gated write/
+reflash path and fixed-DID `0x22` reads (the identify-for-virtual-read surface). Full
+reasoning, the door-by-door analysis, and the per-service evidence table in
+`analysis/obd_read_feasibility.md`.
+
+[fastboatster/Simos8_SBOOT]: https://github.com/fastboatster/Simos8_SBOOT
+
 ## Calibration map engine
 
 - 1D: `kl_interp_u16` @0x800a5f40 · 2D: `kf_interp_u16` @0x800a5fc0 (bilinear)
@@ -54,7 +70,7 @@ Functions are a separate store — the A2L describes calibration data, not code.
 | Store | Role | Holds | Provenance |
 |---|---|---|---|
 | `maps/simos85.a2l` | **canonical (hand-edited)** | ASAP2 model of every cal object; the INCA/CANape/WinOLS-native source | each CHARACTERISTIC's description string |
-| `analysis/symbols_merged.csv` | **canonical** | function names (addr,name,type,comment,**source**) | `source` = `verified` or `llm` |
+| `analysis/symbols_merged.csv` | **canonical** | **confirmed** function names (addr,name,type,comment,**source**) | `source` ∈ {`verified`,`re-trace`,`fr-trace`} |
 | `maps/a2l_symbols.csv` | generated | cal labels for Ghidra `ApplySymbols` (address,name,type,comment) | from the A2L (`core/maps/a2l_to_symbols.py`) |
 | `maps/a2l_catalog.csv` | generated | flat CSV index (name, dims, axes, scaling, unit; `--bin` monotonic check) | from the A2L (`core/maps/a2l_catalog.py`) |
 
@@ -107,9 +123,10 @@ Canonical version-controlled inputs (RE metadata, not firmware code):
 | `core/ghidra/*.java`, `core/pipeline/reproduce.sh` | the shared pipeline |
 | `maps/RESULTS.md` | findings/addresses not yet pinned to a labeled object |
 
-> **Symbol provenance:** most function names in `symbols_merged.csv` are LLM-proposed
-> (`source=llm`) — hypotheses, not verified findings. Only `source` ∈ {`verified`,
-> `re-trace`, `fr-trace`} has been confirmed against the code or the Funktionsrahmen.
+> **Symbol provenance:** `symbols_merged.csv` contains only names confirmed against the code
+> or the Funktionsrahmen (`source` ∈ {`verified`, `re-trace`, `fr-trace`}). The machine-proposed
+> `llm` names were audited (20% actively wrong) and removed — recoverable from git history if
+> needed, but not carried in the tree. See `analysis/symbol_name_audit.md`.
 
 ## TODO / open items
 

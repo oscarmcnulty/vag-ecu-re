@@ -420,7 +420,8 @@ ASAP2_VERSION 1 71
        (ce04091d-8R0907551F.ols). These 18 blocks are changed by the tunes but were not
        covered by the objects above; adding them makes the A2L cover all 50 changed cal
        blocks. Names/roles are grounded in core/diff/diff3.py + maps/map_consumers.csv +
-       maps/tune_diff_analysis.md; confidence is stated per-object. See tune_coverage.md. */
+       maps/tune_diff_analysis.md; confidence is stated per-object (see its OLS-provenance
+       section for the extraction offset and stored-order caveat). */
     /begin CHARACTERISTIC torque_monitor_config_flags_40956 "Momentenueberwachung (EGAS L2) monitor config/enable flag block adjacent to the torque_monitor_permissible_dev_40940 deviation curves. 32x u8 byte-pair flags (0x01/0x00 pattern). STAGE2 zeros the first 16 bytes (disables monitor sub-conditions); Stage1 stock. FR family: Momentenueberwachung config (token not pinned). Confidence LOW."
       VAL_BLK 0x80040956 RL_V_UBYTE 0 CM_IDENTITY 0 255
       MATRIX_DIM 32

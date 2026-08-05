@@ -85,3 +85,22 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
   complete. Auto-generated `FUN_*` / `process_*` symbol names are not FR names; identifications rest
   on data-flow (output global), unity scalings (0x8000 / 4096 / 1024), the `(T+300)` gas-law
   signature, and the proven rpm index `DAT_d000b4f8 = N≫5`.
+
+## OLS provenance & full A2L coverage (from `ce04091d-8R0907551F.ols`)
+
+- **Extracting the bins.** The three 2 MB images sit back-to-back at file offset **`0x4ee9f`**
+  in the WinOLS project, stored in order **`Original, Stage 2, Stage 1`** (header string
+  `"2 (Original, Stage 2: NOCS, Stage 1: NOCS)"`). **Extract with that order or every
+  Orig→S1→S2 direction inverts** — verified via the `0x43c2c` top-speed limiter
+  (159→234→250 km/h ⇒ stored copy 1 = 250 = Stage 2). Offset pinned by structure: blank boot
+  `0x0–0x20000`, code at `0x20000`, part-number `8R0907551F` at `0x40060`. Bins are
+  firmware-derived and stay out of the repo.
+- **Coverage.** `core/diff/diff3.py` over `0x40000:0x80000` (gap 16) → **50** changed blocks,
+  all in `0x40940–0x7a393`. The A2L covered **32/50**; the **18** missing blocks were added
+  (the `*_40956 … *_7a38c` objects in `simos85.a2l`), so it now covers **50/50**. Per-object
+  role/confidence lives in each A2L comment; the machine-readable per-block map can be
+  regenerated any time by joining the diff to `maps/a2l_catalog.csv`.
+- **FR PDF not re-indexed:** `files.s4wiki.com` is egress-blocked and `pdftotext` is absent
+  this session, so the MED/LOW FR families rest on the committed FR docs. Refresh with
+  `core/pdf/fr_index.py` once `Simos8.5.pdf` is staged locally (e.g. a GitHub release asset,
+  which is reachable through the proxy).

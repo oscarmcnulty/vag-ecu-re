@@ -416,5 +416,83 @@ ASAP2_VERSION 1 71
       VAL_BLK 0x8007865b RL_V_UBYTE 0 CM_IDENTITY 0 255
       MATRIX_DIM 129
     /end CHARACTERISTIC
+    /* ---- Calibration objects recovered from the 8R0907551F Stage1/Stage2 tuner-diff
+       (ce04091d-8R0907551F.ols). These 18 blocks are changed by the tunes but were not
+       covered by the objects above; adding them makes the A2L cover all 50 changed cal
+       blocks. Names/roles are grounded in core/diff/diff3.py + maps/map_consumers.csv +
+       maps/tune_diff_analysis.md; confidence is stated per-object (see its OLS-provenance
+       section for the extraction offset and stored-order caveat). */
+    /begin CHARACTERISTIC torque_monitor_config_flags_40956 "Momentenueberwachung (EGAS L2) monitor config/enable flag block adjacent to the torque_monitor_permissible_dev_40940 deviation curves. 32x u8 byte-pair flags (0x01/0x00 pattern). STAGE2 zeros the first 16 bytes (disables monitor sub-conditions); Stage1 stock. FR family: Momentenueberwachung config (token not pinned). Confidence LOW."
+      VAL_BLK 0x80040956 RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 32
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC component_monitor_thresh_4119e "Per-bank component/thermal monitor threshold block (EGTR/BTS family; tune_diff consumer FUN_801564d0). 16x u16. S1=S2 nudge a few cells +~3% (20210->20850, 17826->18770) so the monitor trips later. map-call did not resolve into the block; raw scaling. Confidence LOW."
+      VAL_BLK 0x8004119e RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 16
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC rev_limiter_curve_bank_4449e "N_MAX rev-limiter curve/param bank preceding the two named Max_RPM_for_* curves. Consumer VERIFIED FUN_8017a1e0 (same rev-limiter fn), with embedded INDEX_INCR axes at 0x444a6/0x444ce and several data curves (map_consumers.csv). 58x u16 spanning 0x4449e..0x44512. S1&S2 raise the limiter cells (e.g. 53713->59367) in lockstep with the 7200->7392 rpm bump. Raw internal encoding (offset-binary-ish); axes not split out. Confidence MED (consumer verified)."
+      VAL_BLK 0x8004449e RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 58
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC thermal_prot_tq_limiter_params_449fc "Per-bank thermal-protection torque-limiter parameter block (tune_diff consumer FUN_8018e814). 18x u16. S1&S2 raise a couple of cells ~+2% (18370->18770; S2 also 18370->19170) => protection engages later. map-call unresolved into block; raw scaling. Confidence LOW."
+      VAL_BLK 0x800449fc RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 18
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC torque_correction_struct_48c18 "IP_EFF_TQI_COR_CUS / EFF_* efficiency<->torque-correction structure (tune_diff consumer FUN_800faef8). 122x u16; leading cells form a monotone fill curve (0,592,1647,3747,...). S1=S2 lift the corner/high end (31665->33437, 26228->28915) => corner torque-fill raised. map-call unresolved into block; raw scaling. Confidence LOW (FR family EFF_/TQI_COR)."
+      VAL_BLK 0x80048c18 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 122
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC charge_torque_ref_curve_48dde "1-D charge<->torque reference curve vs N. Consumer VERIFIED FUN_8014fe88 (kl_interp over 0x48ddc, map_consumers.csv); companion to the ip_tqi_ref torque model. 11x u16. S1&S2 raise the whole curve (42463->45105 ...), Stage1 higher than Stage2 at the top. Raw. Confidence MED (consumer)."
+      VAL_BLK 0x80048dde RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 11
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC torque_bank_axis_48e2c "Two-plateau axis/setpoint in the EFF/torque bank. Consumers VERIFIED: 0x48e2c axis -> FUN_800faef8, 0x48e38 axis -> FUN_8013273c (kl_interp, map_consumers.csv). 12x u16 = 6x lo then 6x hi plateau (24120/36181). S1&S2 raise the lower plateau (24120->~28944). Raw. Confidence MED."
+      VAL_BLK 0x80048e2c RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 12
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC torque_model_ceiling_49114 "TQI_MAX-type flat ceiling read by FUN_800faef8 (kf_interp axis, map_consumers.csv). 84x u16, all cells equal. S1=S2 raise 9175->9633 (+5.0%) => +5% torque-model ceiling. FR family TQI_MAX (p.562); token not address-pinned. Raw. Confidence MED (consumer verified)."
+      VAL_BLK 0x80049114 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 84
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC rpm_fill_curve_4925c "rpm-indexed fill/correction curve read by FUN_8014fe88 (kl_interp axis, map_consumers.csv). 12x u16, monotone decreasing. S1=S2 raise every cell ~+30% (11819->15364) => richer high-rpm torque fill. Raw. Confidence MED (consumer verified)."
+      VAL_BLK 0x8004925c RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 12
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC charge_boost_gate_bank0_53235 "Per-bank charge/boost gate curve set, bank[0] (odd-aligned => u8). 75x u8. S1&S2 shift the profile up slightly (Stage2 a touch more than Stage1). Pairs with bank[1] @0x532f5 (0xC0 apart). map-call unresolved; no clean FR label. Raw. Confidence LOW."
+      VAL_BLK 0x80053235 RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 75
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC charge_boost_gate_bank1_532f5 "Per-bank charge/boost gate curve set, bank[1] (u8), twin of bank[0] @0x53235. 75x u8. S1=S2 shift the profile up. map-call unresolved; no clean FR label. Raw. Confidence LOW."
+      VAL_BLK 0x800532f5 RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 75
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC tq_upper_limit_companion_5774e "Companion clamp to tq_upper_limit_57620 (see that entry). 10x u16 = 922 stock -> 891 (S1=S2), tightening the upper torque clamp alongside 0x57620 (973->922). map-call unresolved into block; raw torque units. Confidence LOW (role via adjacency to the verified 0x57620 clamp)."
+      VAL_BLK 0x8005774e RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 10
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC limiter_monitor_table_6567a "Structured limiter/monitor table (leading 1075,2074,579 then 0xC002 run then 6090 run). 83x u16. STAGE2 zeros the entire table (monitor/limiter neutralized); Stage1 stock. map-call unresolved; raw. Confidence LOW."
+      VAL_BLK 0x8006567a RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 83
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC block_6d3c4_factor_cont "Continuation of the unity=1024 correction/threshold block (see block_6d3ac_consumer_unresolved) in the fuel/injection (MFF) region. Starts at 0x6d3c4, immediately after the 12-word block_6d3ac (whose last word at 0x6d3c2 also changes in the tune -- that word is covered by block_6d3ac). 64x u16 (unity=1024 run then reshaped tail). STAGE2 only reshapes head+tail (tail 1019->936); Stage1 stock. Binding unverified (same adjacency trap as 0x6d3ac). Unity=1024 scaling. Confidence LOW."
+      VAL_BLK 0x8006d3c4 RL_V_UWORD 0 CM_L27 0 65535
+      MATRIX_DIM 64
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC ign_charge_time_corr_74084 "Ignition / charge-time correction map, 3-column repeating structure (32128,29816,29298 triplets). 64x u16. S1=S2 add ~+2 raw to every cell (32128->32642) => uniform advance/charge-time bias. map-call unresolved; raw. Confidence LOW (ignition cluster by value pattern)."
+      VAL_BLK 0x80074084 RL_V_UWORD 0 CM_IDENTITY 0 65535
+      MATRIX_DIM 64
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC spark_correction_bank2_7870e "Second ignition spark-advance (IGA/Zuendwinkel) map in the bank whose first map is ip_iga_spark_correction_bank @0x7865b (explicitly named as a sibling in that entry). 142x u8, monotone (offset-binary per-bank correction). S1=S2 +1 raw across the bank => more advance. Raw; consumer binding unproven (same as the 0x7865b sibling). Confidence MED (ignition domain)."
+      VAL_BLK 0x8007870e RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 142
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC spark_correction_bank3_787c2 "Third ignition spark-advance (IGA) map, sibling of ip_iga_spark_correction_bank @0x7865b and @0x7870e. 154x u8, monotone. S1=S2 +1 raw across the bank => more advance. Raw. Confidence MED."
+      VAL_BLK 0x800787c2 RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 154
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC acc_accel_profile_curve_7a38c "ACC / cruise accel-profile shaping curve (7x u8 hump: 56,69,84,88,88,69,51). Sits in the ACC cal block near ACC_feature_enable_bitfield_0x7a247 / C_VS_MIN_CRU_functional. S1&S2 raise the profile (S1 also extends the upper end differently than S2). map-call unresolved; raw. Confidence LOW."
+      VAL_BLK 0x8007a38c RL_V_UBYTE 0 CM_IDENTITY 0 255
+      MATRIX_DIM 7
+    /end CHARACTERISTIC
   /end MODULE
 /end PROJECT

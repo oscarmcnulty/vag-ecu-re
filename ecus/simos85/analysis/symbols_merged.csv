@@ -9,6 +9,11 @@ address,name,type,comment,source
 0x800439fa,cal_moving_to_creep_thd,DATA,"Moving->creep speed threshold (u16=973=7.60 km/h at 1/128), 8013ef46:808 clears uRamc0001118 bit0x80. Hysteresis partner of 0x800439f8 (1004). See RESULTS UPDATE 66.",re-trace
 0x80043bc6,cal_acc_frame_select,DATA,"CAL word selecting which ACC RX frame(s) the engine decodes (no runtime writer). &0x100=ACC_01/DCC_1(0x109) via 801383e8; &(0x200|0x400|0x1000)=ACC_05/DCC_5(0x10D) via 801383fc. This image=0x0900 => ACC_01 active (Q5), ACC_05 disabled (Macan would set the ACC_05 bits). Reflash to change, NOT VCDS. See RESULTS UPDATE 66.",re-trace
 0x80043caf,cal_acc_mode_tsk_packer_select,DATA,"CAL byte (=0x06). bit0 => a5a8 (801abf64): 0=ACC_01+TSK_02(80137a00,has Anhalten)+hold-relay; 1=ACC_05 Momentenanf drive-off+TSK_05(80137f2c). bit2 selects mass source. Q5=0x06 (bit0=0). See RESULTS UPDATE 64/66.",re-trace
+0x8004449e,rev_limiter_curve_bank_4449e,DATA,Calibration object (58x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80048dde,charge_torque_ref_curve_48dde,DATA,Calibration object (11x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80048e2c,torque_bank_axis_48e2c,DATA,Calibration object (12x u16); changed by tune (S1&S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x80049114,torque_model_ceiling_49114,DATA,Calibration object (84x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
+0x8004925c,rpm_fill_curve_4925c,DATA,Calibration object (12x u16); changed by tune (S1=S2). Added from OLS tuner-diff; see maps/simos85.a2l for scaling/role.,re-trace
 0x8005b71c,cal_acc_decel_limit_kennfeld_m3p0,DATA,"ACC brake decel-limit Kennfeld region: 11 consecutive u16 = 0x7237 = -3.000 m/s2 (850e-6 offset-binary, phys=(raw-0x8000)*850e-6). THE -3.0 brake-decel clamp (openpilot lever). Raise = set more negative (0x6db1=-3.984 floor). File offset 0x5b71c. Recompute cal checksum. +5 scattered cells 0x597f2/59836/598a2/598b2/5a546. See RESULTS UPDATE 57.",re-trace
 0x800793a0,cal_acc_l2monitor_struct,DATA,"ACC/cruise L2-monitor + diagnosis cal struct (base ptr *0x80090f80, used by 80102f60). Speed floors (u8 km/h, compared da54<=cal*0x80, da54=1/128 km/h): +0x14f=15 & +0x152=15 = C_VS_MIN_CRU_MON (15km/h, flash 0x800794ef/0x800794f2); +0x196=384=3.0km/h creep gate. +0x16e=0x1fff diag enable, +0x178=0 fatal mask, +0x121=0xBF engage-inhibit mask. See acc_flow.md / UPDATE 58.",re-trace
 0x800808ec,CRC16_ARC_TABLE,LABEL,"256-entry CRC16/ARC table, refl 0xA001",verified
@@ -40,7 +45,6 @@ address,name,type,comment,source
 0x8011e8f8,canmo_109_ACC_01,FUNCTION,"CAN message-object handler for ACC_01 (0x109, RX); dispatch @0x80082f18 -> descriptor -> this handler (sender Gateway_B8)",verified
 0x8011e94a,canmo_107_Motor_04,FUNCTION,"CAN message-object handler for Motor_04 (0x107, TX); dispatch @0x80082f18 -> descriptor -> this handler (sender Motor_EDC17_D4)",verified
 0x8011e98c,canmo_108_id108,FUNCTION,"CAN message-object handler for UNKNOWN (0x108, ?); dispatch @0x80082f18 -> descriptor -> this handler (sender ?)",verified
-0x8011e9ce,canmo_10e_TSK_04,FUNCTION,"CAN message-object handler for TSK_04 (0x10e, TX); dispatch @0x80082f18 -> descriptor -> this handler (sender Motor_EDC17_D4)",verified
 0x8011e9ce,canmo_10e_TSK_04,FUNCTION,TSK_04 (0x10e TX) packer: copies node(*d000d404)+8..+0xf to CAN. TSK_Status_GRA_ACC_02 = bits6-7 of byte *(d000d404)+0xf (LCAN_DT_MNG4_8_67); 3=Fehler_GRA_ACC_nicht_moeglich. Set 3 when LV_DCC_OFF_DC_EMS or LV_ERR_VAR_COD_CRU_PLAUS (FR p9049).,fr-trace
 0x8011ef88,uds_svc_10_DiagnosticSessionControl,FUNCTION,UDS SID 0x10 handler (SID table 0x80085e58),re-trace
 0x8011efcc,uds_svc_37_RequestTransferExit,FUNCTION,UDS SID 0x37 handler (SID table),re-trace

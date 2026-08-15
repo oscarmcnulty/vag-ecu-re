@@ -5,14 +5,34 @@ so every `*(a9+off)` folds to a concrete cal object. Built from the folded corpu
 (`analysis/decompiles_r/`) + firmware reads. Load base `0x80000000`; file off = `addr & 0x1FFFFFFF`;
 `0xa00xxxxx` = uncached alias; RAM = `0xd00xxxxx`.
 
-Confidence tags: **[C]** read the code/bytes · **[I]** inferred · **[G]** gap.
+Confidence tags: **[C]** read the code/bytes · **[M]** measured on-car · **[I]** inferred · **[G]** gap.
 
-The ACC min-speed gate is EGAS-L2 cal #208 (`FUN_800f006c`/`800f027c`), gated on cruise-active
-(`d000a113`). It is a **self-recovering, speed-gated permit**: below the floor the ECU simply withholds the
-ACC command (no fault) and resumes when speed exceeds 15. There is no key-off-on lockout on MED17 — all
-state is volatile RAM and no non-volatile store exists in the corpus for this path. The functional L1 cells
-(§Q1) and the L2 monitor (§Q2) are independent; the ACC floor is #208's 15/7 pair alone. See
-`maps/l2_monitors.md` for the full L2-monitor detail.
+**The ACC min-speed gate is EGAS-L2 cal #208 (`FUN_800f006c`/`800f027c`), SET edge `0x80389809` = 15 km/h.**
+On-car the engine enforces a floor at **15 km/h**: it refuses to grant ACC below it, arms within one 20 ms
+frame above it, and signals nothing (no DTC, no limp, `TSK_04` never 3). Below the floor the ACC command is
+withheld **completely** — `TSK_Verzoeg_Anf`/`TSK_Radbremsmom` are exactly zero, not attenuated. Above it,
+they track `ACC_Sollbeschleunigung` to one 0.024 m/s² quantum. First grant came above 15; after a drop, the
+re-arm landed at 15.80–15.90 km/h — the SET edge, exactly. **[M]**
+
+#208 reaches the ACC command not as a permit but as a **fault contributor**: permit bit7 clear →
+`DAT_d000d7f9` (`800f006c:728`) → `FUN_800d9936` aggregator (`:71`) → `EGAS_L2_fault_verdict` (d000d344) →
+`EGAS_L2_reaction_level` (d000aa23) → the 0x8031 ACC/DCC controller. That is why the withhold is silent —
+it is a reaction *level*, not a latched DTC. Full chain in `maps/l2_monitors.md`. **[C]**
+
+Two model corrections from the code: bit7 is an **arming pulse** (re-initialised false each cycle, assigned
+only while the engaged latch is 0), not a sustained permit; and the 7 cell only clears `dc87` rather than
+holding a permit open down to 7.
+
+The `dc8b` suppression term is fully resolved, and it is **eliminated** as the min-speed mechanism (see
+`maps/l2_monitors.md`): `dc8b = cru_acc_active_flag && d240<=8 && a0a9 && (gear_sel_state ∈ {6,8})`. The
+state chains `d0009f76` → `d000a89a` = `tbl[d000a6c3]`, and `d000a6c3` is bound by the COM descriptor table
+to **`Getriebe_03` (0x102) bit 44 len 4 = `GE_Waehlhebel`** — the **gear selector lever**, not a cruise
+state. On-car it steps P→R→N→D (`5→6→7→8`) at drive start and holds **D** throughout, so `{6,8}` = selector
+in R or D, and the term was satisfied across both 15 km/h transitions. That also explains why `80087a70`
+and the `80143b8a` state machine contain no speed reference: they are gear logic. **[C]/[M]**
+
+There is no key-off-on lockout on MED17 — all state is volatile RAM, no non-volatile store exists in the
+corpus for this path, and the on-car floor is fully self-recovering. **[C]/[M]**
 
 ---
 
@@ -59,11 +79,51 @@ Notes / caveats:
   the radar simply never issues ACC requests below ~30 km/h, so no engine-ECU cal needs to encode 30. This is
   the most likely reason no clean 30 km/h engine-side engage cal exists. **[I]**
 
-**openpilot lever (lower the functional floor):** the layered low-speed thresholds above are the editable
-cells (`0x803b528e` 10→lower; `0x803b88ae`/creep 3 km/h family). Lowering them relaxes the low-speed
-behaviour, but because engagement is table-driven + radar-gated, cal edits alone will not reach standstill —
-openpilot supplies the sub-floor request itself; keep it E2E-valid on ACC_01 (0x109). All cal edits need a
-cal-block checksum recompute (`core/checksum`).
+**openpilot lever (lower the functional floor):** the table-driven engage precondition is the barrier that
+matters, and it is `[G]` — none of the cells in the table above produces the measured 15 km/h symmetric
+floor (10, 20, 3 and 80 km/h are all excluded by the measured 14.90–48.25 km/h granted range). Since the
+precondition is reached through a descriptor table and no C-visible speed cal sits on it, the compare is
+plausibly a **code literal** — which is exactly why cal edits do not move this floor. **[M]/[I]**
+
+Search key for the missing compare: functional ego speed `d0008f5e`/`d0008c22` (0.01 km/h) against
+**1500** (`0x5dc`), or monitor speed `d0007b8a` (1/128 km/h) against **1920** (`0x780`), reached from
+`FUN_800accac` / descriptor `0x8003f374`.
+
+**`TSK_01` frame bit 23 is EXCLUDED as the floor — traced to the bottom, no speed threshold on it. [C]**
+Bit 23 tracks the floor in the log (set ≤15 km/h, clear above, leading the ACC drop by one frame), so it was
+the best speed-correlated observable available. The full chain is now verified at instruction level, every
+link by writer-enumeration rather than by grep (`st.t`/base+displacement stores included):
+
+> frame bit 23 → `d0005e34` bit 7 (descriptor `0x80039460`, `sb=16 len=24`, message binding confirmed via
+> the §6a table) → copy of `d0005e38` → copy of `d0004938` → `FUN_80143a68` packer slot `[a10]+0x0c`
+> → `d00049c9` bit 2 → snapshot `d0004930` bit 5 → **`d000a346` bit 5**, written only at `0x80140d3c`
+
+and there it terminates in
+
+    a346 bit5 = (DSM_status(275) == 0) || cfg(0xd000017a).bit4
+
+- `0xd000017a` has **no writer in disassembled code** — it is part of the absolutely-addressed, bit-tested
+  config block loaded at startup, i.e. static variant coding.
+- `FUN_800981cc` is a **DSM event-status getter**, not a CAN-presence check:
+  `id < *(0x80027f88)=23` → bit 6 of `0xd000b083+id`, else bit 5 of `0xd000b117+id`. `FUN_80097fa4`
+  initialises every entry to `0x20` and clears bit 5 when a path's test completes; `FUN_80098184` clears
+  bit 4 and writes `0x8e` — ISO-14229 DTC status-byte semantics. So bit 5 is a **latched monitor-completion
+  status**, which cannot produce clean hysteresis at 15.0 km/h.
+
+**Correction:** the earlier reading of this site as `presence(CAN 0x113)` was wrong. `0x113` is a DSM path
+index (275), not a CAN identifier — which is why it appears in no `vw_*.dbc` and on no bus, and it is also
+absent from the §6a message table. No on-car observation was needed to settle this.
+
+**Consequence:** bit 23's correlation with the floor is a *symptom* (a monitor reporting the same underlying
+state), not the gate. It carries no calibratable threshold, so no cal edit on this chain can move the floor
+and it should not be pursued further. The one nearby threshold that *is* calibratable —
+`lt d8, cal_obj(0x3e8)[0x2f], RAM[0xd000499e]` at `0x80144f88`, feeding frame **bit 21** — holds **2**, not
+15, and bits 18–21 are conditionally cleared downstream (`andn #0x3c`). Also not the floor.
+
+The layered low-speed cells above (`0x803b528e` 10→lower; `0x803b88ae`/creep 3 km/h family) remain editable
+and may matter for *behaviour* once the precondition is lifted, but none of them is the floor. All cal edits
+need a cal-block checksum recompute (`core/checksum`). openpilot supplies the sub-floor request itself; keep
+it E2E-valid on ACC_01 (0x109).
 
 ## Q1b — the 3 km/h creep gate: **stock value is fine, no modification needed** [C]
 
@@ -108,15 +168,19 @@ There is a full **EGAS L2 monitor cluster (~20 functions at `0x800d_xxxx … 0x8
 3. Compares speed with the tell-tale `d0007b8a </<= cal·0x80` form (u8 km/h × 128), all resolving to clean
    integer km/h — the direct analog of Simos `da54 <= C_VS_MIN_CRU_MON·0x80`.
 
-**The ACC min-speed gate is cal #208's 15/7 hysteresis pair — and only that.** The operative floor is:
-`0x80389809`=15 (SET/arm) and `0x8038980e`=7 (re-arm/clear), driving the persistent permit memory `d000dc87`
-→ `MON_cru_permit_flags` bit7. It is gated on `cru_acc_active_flag` (`d000a113`), i.e. it acts only when
-cruise/ACC is the active controller — that is what makes it the ACC monitor. Both edges are live: `dc87` (the
-permit memory) is persistent, SET at 15 / CLEAR at 7. 15 = arm-from-scratch; 7 = re-arm floor (once armed you
-can re-engage down to 7). Behaviour is a self-recovering, speed-gated permit: below the floor the ECU
-withholds the ACC command (no fault) and resumes when speed exceeds 15. For openpilot, set **`0x80389809`=15→0
-and `0x8038980e`=7→0** (arm at any speed + never clear the memory), then recompute the cal checksum. See
-`maps/l2_monitors.md` "The fault mechanism".
+**Cal #208 is the ACC min-speed gate.** Its cells are `0x80389809`=15 (SET/arm) and `0x8038980e`=7
+(clear), driving the permit memory `d000dc87` → `MON_cru_permit_flags` bit7. It is gated on
+`cru_acc_active_flag` (`d000a113`), i.e. it acts only when cruise/ACC is the active controller — that is
+what makes it the ACC monitor. bit7 clear then raises `d7f9` → the EGAS-L2 aggregator → verdict `d344` →
+reaction `aa23` → the 0x8031 ACC/DCC controller, which is how a monitor flag ends up withholding the ACC
+command silently. **[C]**
+
+The measured arm edge matches the SET cell exactly (re-arm at 15.80–15.90 km/h). Still `[G]`: the drop at
+14.93 km/h while already engaged, which needs the `d7f6`/`dc8b` suppression conditions traced. **[M]**
+
+For openpilot, set **`0x80389809`=15→0 and `0x8038980e`=7→0**, recompute the cal checksum
+(`core/checksum`), and **read the two bytes back over UDS after flashing** — an uncorrected block checksum
+is the most likely cause of an edit that appears to do nothing. See `maps/l2_monitors.md`.
 
 The following table is a **raw catalogue of L2 monitor-speed cells** read out of flash — useful for reference,
 but note that these are general/failsafe EGAS supervision cells and, apart from #208, are **not** the ACC
@@ -156,7 +220,13 @@ together (15 and 7 → 0) or the permit flips at standstill.
   (20/80 km/h windows, cal#260), `0x803b88ae` (3 km/h). Engage precondition proper = table-driven [G].
 - **L2 monitor cells (0x8038 region, separate cal base):** `0x80389809` (15 km/h, cal#208) + the 17/14/10/65/
   20/5 km/h family; monitor speed `d0007b8a`.
-- **Q1 verdict:** no single `C_VS_MIN_CRU` cell; layered thresholds + radar-hardware 30 km/h floor. [C/I/G]
-- **Q2 verdict:** the EGAS-L2 monitor cluster is present + separate, and only **cal #208 (`0x80389809`=15 /
-  `0x8038980e`=7)** is the ACC gate (gated on cruise-active, self-recovering permit). The other cells in the
-  §Q2 table are general EGAS torque/speed monitors, not ACC. **Edit #208's 15+7 →0.** See `maps/l2_monitors.md`.
+- **Q1 verdict:** no single functional `C_VS_MIN_CRU` cell. The layered functional cells (10/20/3/80 km/h)
+  are all excluded by the measured 14.90–48.25 km/h granted range, and a sweep of all 5918 decompiles for a
+  15 km/h literal in ten encodings finds no speed compare anywhere in the ACC cluster — so the floor is a
+  cal, not code. `FUN_800accac`'s condition table provably holds no speed variable or cal. [C/M]
+- **Q2 verdict:** the EGAS-L2 monitor cluster is present + separate, and **cal #208 (`0x80389809`=15 /
+  `0x8038980e`=7)** is the ACC gate — the only ACC-specific member, holder of the only 15 in the ACC path,
+  with a traced output chain (`d7f9` → aggregator → `d344` → `aa23` → 0x8031 ACC/DCC controller) and a SET
+  edge matching the measured arm edge. The other cells in the §Q2 table are general EGAS torque/speed
+  monitors, not ACC. **Edit #208's 15+7 →0, checksum-correct, and verify the read-back.**
+  See `maps/l2_monitors.md`.

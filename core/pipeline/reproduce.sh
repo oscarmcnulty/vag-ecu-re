@@ -142,6 +142,26 @@ if [ ${#CODE_RANGES[@]} -gt 0 ]; then
   run 04c_reexport "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
     -scriptPath "$SCRIPTS" -postScript ExportFunctions.java "$ENTRIES"
   say 04c_reexport '^ExportFunctions:'
+
+  echo "==> 4d AUDIT: code reachable only through a function-pointer table (report only)"
+  # A handler whose sole entry is a dispatch-table slot is invisible to every step above:
+  # the table is raw data, so no reference exists, so ClaimOrphanCode/RecoverReferencedCode
+  # never see it (the latter reports seeds=0 on this image while 325 computed call sites are
+  # still unresolved). This reports candidates; it deliberately does NOT create them.
+  #
+  # Report-only ON PURPOSE. Measured on MED17.1.1: of 20 surviving candidates only 3 were real
+  # code -- the rest were u16 axis tables, ROM constant-pool slots and an ASCII version string
+  # that all pass the "looks like a code pointer" test. Auto-creating them would corrupt the
+  # function set. Vet the list by hand, then add confirmed entries to function_entries.txt,
+  # which is what makes step 4 create and step 7 decompile them on every future run.
+  for r in "${CODE_RANGES[@]}"; do
+    run "04d_ptraudit_${r/:/_}" "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+      -scriptPath "$SCRIPTS" -postScript RecoverPointerTargets.java "${r%:*}" "${r#*:}" -n
+    sed 's/.*java> //;s/ (GhidraScript).*//' "$LOGS/04d_ptraudit_${r/:/_}.log" \
+      | grep -E '^(  would create|RecoverPointerTargets)' \
+      > "$HERE/analysis/pointer_target_audit_${r/:/_}.txt" || true
+    say "04d_ptraudit_${r/:/_}" '^RecoverPointerTargets'
+  done
 else
   skip 4b "no CODE_RANGES declared (orphan-code claim disabled)"
 fi
@@ -173,6 +193,16 @@ if [ -n "$CAL_LO" ] && [ -n "$CAL_HI" ]; then
   say 06_markcal '^MarkCalData'
 else
   skip 6 "cal window not pinned yet (set CAL_LO/CAL_HI in ecu.conf)"
+fi
+
+if [ -n "${COM_DESC_CB:-}" ]; then
+  echo "==> 6b decode the COM signal-descriptor table -> bind signals to their RAM targets"
+  # Must run BEFORE step 7 so the decompiles carry the bindings as comments.
+  run 06b_combind "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+    -scriptPath "$SCRIPTS" -postScript DecodeComBindings.java "$COM_DESC_CB" "${COM_DESC_MASK:-0x0000ffff}"
+  say 06b_combind '^DecodeComBindings'
+else
+  skip 6b "COM_DESC_CB not pinned in ecu.conf (signal bindings stay opaque)"
 fi
 
 echo "==> 7 decompile every function + manifest (DERIVED WORK -- gitignored)"
@@ -240,6 +270,16 @@ run 11_coverage "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
   -scriptPath "$SCRIPTS" -postScript CoverageStat.java "$LOADBASE" "$IMAGE_HI" "${CALARG[@]}"
 sed 's/.*java> //;s/ (GhidraScript).*//' "$LOGS/11_coverage.log" > "$HERE/analysis/coverage.log"
 sed -n '/=== image/,/^$/p;/LIVE CONTENT/,/NOT accounted/p' "$HERE/analysis/coverage.log" | sed 's/^/    /'
+
+echo "==> 11b indirect-branch audit -> analysis/indirect_branches.csv"
+# Byte coverage and the per-function manifest both measure only what Ghidra already found.
+# Neither can see a computed call whose target was never resolved -- that shows up as a clean
+# 100% while a whole dispatch tree is missing. This walks every ji/calli and classifies it, so
+# UNRESOLVED and OFF-IMAGE counts are visible on every run instead of being discovered by hand.
+run 11b_indirect "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+  -scriptPath "$SCRIPTS" -postScript AuditIndirectBranches.java \
+  "$HERE/analysis/indirect_branches.csv"
+say 11b_indirect '^  (computed|UNRESOLVED|RESOLVED|OFF-IMAGE)'
 
 echo
 echo "done. labeled project in $PROJ ; decompiles in analysis/decompiles_r (regenerable)."

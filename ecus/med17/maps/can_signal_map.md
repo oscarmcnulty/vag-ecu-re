@@ -113,6 +113,42 @@ Dispatch is by the **top nibble of the handle** (`handle>>12`) through the 16-en
   The TSK producers are dispatched from an **unresolved function-pointer task table** (zero in-corpus
   callers), so the **cyclic period (≈20 ms by Simos analogy) is not statically recoverable** — GAP.
 
+## COM signal-descriptor table — signal ↔ RAM bindings recovered  ⭐ [C]
+
+The COM stack binds signals to RAM in **data**, not code: the unpack routines store through a pointer read
+from a descriptor record, so Ghidra shows the ACC status/state globals as unwritten. The descriptors are
+plain records and decode cleanly, which recovers the bindings the call graph cannot. Applied by
+**step 6b** of the pipeline (`core/ghidra/DecodeComBindings.java`, constants in `ecu.conf` as
+`COM_DESC_CB`/`COM_DESC_CTX`), which annotates every target so the decompiles carry the binding inline.
+
+**Record layout (40 bytes):**
+
+| offset | field |
+|---|---|
+| `+0x00` / `+0x04` / `+0x08` | pointers into a constant pool — max / SNA / default values |
+| `+0x0c` | conversion callback `0x800286c6` — **invariant across the table** |
+| `+0x10` | context `0xd000ad2a` — **invariant** |
+| `+0x14` | mask `0x0000ffff` |
+| `+0x18` | **RAM target** |
+| `+0x1c` | `[start_bit, bit_len, type, 0]` |
+
+Records are located by the invariant `+0x0c`/`+0x10` pair rather than by stride, so enumeration does not
+depend on the table being contiguous. On this image: **278 records, 40-byte stride, `0x80035e28`–`0x8003a9a0`.**
+
+**The decode is self-checking:** a correct format implies `start_bit + bit_len <= 64` (signals live in an
+8-byte frame). Measured **278/278 = 100%**, with start bits 0–62 and lengths 2–20. Random bytes would not
+do that, so the layout is confirmed rather than fitted.
+
+**Confirmed binding:** `d000a590` ← `ACC_01` (0x109) **bit 60 len 3** = `ACC_Status_ACC` (record
+`@0x80038ad8`, desc `0x0000033c`) — independently matching the on-car CAN log, where openpilot's commanded
+status maps 1:1 through `tbl[]` to `TSK_04`. A second record `@0x80038a60` binds the same byte from bit 57
+len 3 (platform variant). Also: **message handles are literally CAN IDs** (`0x80028bd0` = `0x010e` = TSK_04,
+`0x80028bda` = `0x0109` = ACC_01), with internal PDUs sharing the id space above the CAN range.
+
+**Still GAP:** the record→PDU grouping. The `+0x00/+0x04/+0x08` pointers resolve into a constant pool of
+limit/default values, not a message table, so a record's owning message is not yet recoverable — which is
+what blocks naming the producer of `d000a6c3` (bit 44 len 4, internal PDU).
+
 ## MLB E2E checksum + rolling counter — PARTIAL
 - **Rolling counter (byte1 low nibble) — CONFIRMED:** global `DAT_d000b729` (u8, reset in `FUN_8009b9e8`)
   copied into per-slot `DAT_d00142b0[slot]` and post-incremented on each commit in `FUN_800be052`.

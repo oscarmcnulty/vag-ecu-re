@@ -54,7 +54,7 @@ ACC_01 (0x109, MO#59)
   → FUN_801418ea / 801434de accel/decel controller (internal ±500000 authority rail; PT1 filter FUN_8007c10c)
   → FUN_80140922            TSK_02 signal handler (mode-mux → shadows d00082ae/ce/d0/8302, d000a343/a344/a35c)
   → FUN_8009d0ca → Com      generic Com bit-pack + E2E → TSK_02 (0x10C) wire bytes
-Parallel TX: FUN_8014469a (+FUN_80143a68) → TSK_01 Status_AB (d000f828/29/2a);  FUN_801455ae → TSK_04 status (d000ab01)
+Parallel TX: FUN_8014469a (+FUN_80143a68) → TSK_01 Status_AB (d0005e34);  FUN_801455ae → TSK_04 status (d000ab01)
 ```
 
 ## Encoding conventions
@@ -168,10 +168,42 @@ Producer **`FUN_801455ae`** (gated `d000a454==2`; references TSK_04 handle `DAT_
 | dbc signal | source shadow | detail | conf |
 |---|---|---|---|
 | **TSK_Status_GRA_ACC_02 (62\|2)** | **`DAT_d000ab01`** (0..3 enum) | `801455ae` switch(ab01) cases 0/1/2/3; **`ab01=3` (fault/not-possible) forced when the MO#67 present-gate `FUN_800981cc(0x10e)` fails**. Remapped by `FUN_80199344`: ab01 1→3, 2→4, 3→7 into `d000a13d`. Direct parallel to Simos8.5 `STATE_DCC`. | **HIGH** |
-| TSK_ax_Getriebe (18\|9) | `d0005f20` / `d0005d00` | accel-domain outputs of the gear state machine | MED |
+| TSK_ax_Getriebe (18\|9) | `d0005f20` / `d0005d00` | accel-domain outputs of the gear state machine. **Railed to neutral whenever `ab01==0`** — see "payload rail behaviour" below | **HIGH [M]** |
 | TSK_zul_Regelabw (12\|6) | — | not isolated in `801455ae` outputs | G |
 | TSK_Wunsch_Uebersetz (27\|10) | `d00078d8/da` ratio bounds | gear-ratio request | LOW |
 | TSK_Freig_WU (37\|1) / TSK_Limiter_aktiv (38\|1) | `ab02`-region / limiter flags | discrete | LOW |
+
+### Payload rail behaviour below the ACC min-speed floor  ⭐ **[M]**
+
+Measured on-car with openpilot as ACC master. When `TSK_Status_GRA_ACC_02 == 0`, the ACC **request**
+channels are not "live but flagged inactive" — they are driven to a well-formed neutral and held there:
+
+| field | while status 0 (n=8472) | while status 1 (n=921) |
+|---|---|---|
+| `TSK_04.TSK_ax_Getriebe` | raw **84** on all 8472 frames — one unique value (0.000 m/s²) | 75 distinct raws, −1.440…+1.416 m/s² |
+| `TSK_02.TSK_Verzoeg_Anf` | raw 166 on 8466/8472 (0.000 m/s²) | 44 distinct raws, −1.440…+0.504 m/s² |
+| `TSK_02.TSK_Radbremsmom` | 0 on 8465/8472 | 0 or 18 (144 Nm) |
+
+Raw 84 (field 0..511, offset −2.016) and raw 166 (×0.024 = 3.984) are exact zeros, **not SNA sentinels** —
+the engine affirmatively requests nothing. This is the CAN-side confirmation of `801455ae` case 0, which
+sets `d0005f20 = d0005d00 = 0xfff85ee0` = **−500000** (the internal rail) and packs to the neutral code.
+
+Held under load: openpilot commanded a steady **+1.535 m/s²** for 7.8 s at 4.6–6.2 km/h and `ax_Getriebe`
+never left raw 84. At the grant edge the command appears in the **same frame** as the status flip
+(cmd 0.900 → `ax_raw` 121 = 0.888), so above the floor `TSK_ax_Getriebe` tracks `ACC_Sollbeschleunigung`
+~1:1 at the 0.024 quantum.
+
+**The two channels release asymmetrically at disengage** (only 7 non-neutral frames exist in the whole log,
+all in one ~120 ms window): `TSK_04.TSK_ax_Getriebe` **steps** to neutral in the same frame as the status,
+while `TSK_02.TSK_Verzoeg_Anf` **ramps** out over ~6 frames (raw 126 → 166) with `TSK_Radbremsmom` decaying
+18 → 15. Brake pressure is released gracefully; the gearbox accel channel is cut instantly.
+
+**What stays live below the floor** — the engine is refusing, not asleep: `TSK_01.TSK_amax_moeglich`
+(99 distinct values, 0.000…6.072 m/s², tracking speed continuously), `TSK_04.TSK_Wunsch_Uebersetz`
+(63 distinct values), and `TSK_01.TSK_Status_AB` (0x180 below the floor vs 0 above).
+
+**Consequence:** there is no residual setpoint for a downstream consumer to act on — a well-formed zero goes
+out at 50 Hz. Sub-floor braking must come from lifting the floor or from a different actuator entirely.
 
 ## 6. TSK_01 (0x10A) OUTPUT — 24-bit status + max accel [C for status / G for amax]
 No handler is keyed on the TSK_01 handle (`DAT_80028bd8` appears only in the presence collector
@@ -179,11 +211,34 @@ No handler is keyed on the TSK_01 handle (`DAT_80028bd8` appears only in the pre
 
 | dbc signal | source shadow | detail | conf |
 |---|---|---|---|
-| **TSK_Status_AB (16\|24 = 3 bytes)** | **`d000f828 / f829 / f82a`** (= `a34b/a34c/a34d`) | `8014469a` builds each byte via **`FUN_80143a68`** (8-bool→byte packer, called 5×); upstream bits from `80140922`'s `a343/a344/a346/a349` + present-gates. Three consecutive status bytes exactly fill the 24-bit field. | **MED-HIGH** |
+| **TSK_Status_AB (16\|24)** | **`d0005e34`** (descriptor `0x80039460`, `start_bit=16 bit_len=24`) | Descriptor→message binding **verified** via the CAN message table (§6a): TSK_01's signal block entry #0 is `0x80039478` = `0x80039460 + 0x18`. `8014469a` writes `d0005e34` at `0x801454b6` as a straight copy of `d0005e38` (optionally `andn #0x3c`, clearing frame bits 18–21); `d0005e38` in turn copies `d0004938`, which is OR-accumulated from **`FUN_80143a68`** (8-bool→byte packer) outputs. | **VERIFIED** |
 | TSK_amax_moeglich (48\|9) | — | max achievable accel; origin is the powertrain torque model, upstream of the TSK cluster; candidates `d0008306/d0008308` unconfirmed | **G** |
 
-TSK_01 (24-bit status view) and TSK_02 (2-bit status view) **share the same status-byte producers**
-(`80140922` `a343/a344/a346/a349`) — one status word, two projections.
+TSK_01's 24-bit status draws on the same `80140922` shadow bytes (`a343/a344/a346/a349`) that feed the
+2-bit status views, but it is a **separate** RAM word. The two *2-bit* status signals are the ones that are
+literally the same storage: TSK_02 `start_bit=16 len=2` and TSK_04 `start_bit=62 len=2` both bind
+**`d000ab01`** — one byte, two projections, which is why they move in lockstep in the on-car log.
+
+## 6a. CAN message table — the central ID → signal → RAM map
+`DecodeComBindings` recovers each signal's RAM target and bit position by content, but not which message
+owns it: the descriptors live in one flat unordered pool (the six records adjacent to TSK_01's status
+descriptor target six unrelated RAM words). The binding is a separate table at **`0x800312d0`**, 48 records
+of stride `0x30`:
+
+| field | meaning |
+|---|---|
+| `+0x00` | pointer to this message's **signal block** (0 if none) |
+| `+0x04` | **CAN identifier** (11-bit) |
+| `+0x08` | shared per-message callback (`0x80029652` for every record) |
+
+Each signal block is stride `0x0c`; `+0x00` points at **`descriptor + 0x18`** (straight at the `target`
+field, *not* at the record start), and the block runs until the next block begins.
+
+Decoded by `core/maps/decode_can_table.py` → 44 messages / 274 signals. It reproduces both bindings that
+were established independently: ACC_01 `d000a590 sb=60 len=3`, and the shared `d000ab01` above.
+
+Two useful negatives fall straight out: **`0x113` and `0x102` are absent from this table**, so "absent here"
+is a cheap, reliable test for an ID this controller does not handle.
 
 ## 7. Editable levers (openpilot) — `a9` RESOLVED, cals now addressable
 **`a9` is solved** (boot emulation `research/emulation/EmulA9.java`): `a9 = 0xa0103464` = uncached

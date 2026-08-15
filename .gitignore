@@ -71,3 +71,9 @@ ecus/*/analysis/_rerun_logs/
 ecus/*/analysis/unaccounted_runs.csv
 ecus/*/analysis/orphan_entries*.txt
 ecus/*/analysis/gapwalk_entries.txt
+# indirect-branch audit (regenerable via reproduce.sh step 11b / AuditIndirectBranches.java)
+ecus/*/analysis/indirect_branches.csv
+# pointer-table audit (regenerable via reproduce.sh step 4d / RecoverPointerTargets.java).
+# Report-only by design: its candidates are mostly data that merely looks like code pointers,
+# so vetted entries belong in function_entries.txt, never this file.
+ecus/*/analysis/pointer_target_audit*.txt

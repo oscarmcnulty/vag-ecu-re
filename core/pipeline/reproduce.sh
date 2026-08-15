@@ -23,6 +23,7 @@
 #   ALIAS_BASE/_LEN non-cached flash alias        -> step 3b collapses alias twin functions
 #   BASEREGS        array a0=0x.. a1=0x.. a8=0x.. -> step 3 sets base registers + re-analyzes
 #   CODE_RANGES     array of lo:hi                -> step 4b claims orphan (function-less) code
+#   LOAD_IMAGE_RANGES array of lo:hi              -> step 4c excludes boot-copy sources from recovery
 #   CAL_LO/CAL_HI   calibration window            -> steps 6 + 9 type it and resolve cal reads
 #   A2L             path to the canonical A2L     -> step 5b applies cal labels from it
 #   TRACE_MAP_CALLS output csv path               -> step 10 traces map-lookup framework calls
@@ -40,7 +41,7 @@ source "$ROOT/.env.sh"
 [ -f "$HERE/ecu.conf" ] || { echo "missing $HERE/ecu.conf"; exit 1; }
 # Defaults BEFORE the conf so the conf can override them; arrays default to empty.
 PROCESSOR="tricore:LE:32:tc176x"
-MEMMAP=(); BASEREGS=(); CODE_RANGES=()
+MEMMAP=(); BASEREGS=(); CODE_RANGES=(); LOAD_IMAGE_RANGES=()
 ALIAS_BASE=""; ALIAS_LEN=""; CAL_LO=""; CAL_HI=""; A2L=""; TRACE_MAP_CALLS=""; RESOLVE_DISPATCH=""
 EXPECT_SHA="${EXPECT_SHA:-}"; IMAGE_HI=""
 # shellcheck source=/dev/null
@@ -139,6 +140,23 @@ if [ ${#CODE_RANGES[@]} -gt 0 ]; then
       "$HERE/analysis/orphan_entries_${r/:/_}.txt"
     say "04b_claim_${r/:/_}" '^ClaimOrphanCode'
   done
+  echo "==> 4c recover code that is UNDEFINED *and* UNREFERENCED (bracketing seed)"
+  # The three passes above all need something this population does not have: bytes already
+  # disassembled (4b), an incoming reference (RecoverReferencedCode), or a pointer table aimed at
+  # it (4d). Code reached only through a boot-filled RAM table -- or not reached at all in this
+  # calibration -- has none of them, and on MED17.1.1 that hid ~144 KB behind a coverage report
+  # reading "84.5% accounted". The seed used instead is positional: the compiler lays functions out
+  # back to back, so a real body is preceded by the previous function's flow terminator.
+  # Validation that it is not inventing functions: nothing calls these entries, so a spurious one
+  # would truncate and be classified 'bogus' by DecompileAll. Measured here: bogus=0.
+  BRKEX=(); for r in "${LOAD_IMAGE_RANGES[@]:-}"; do [ -n "$r" ] && BRKEX+=("--exclude=$r"); done
+  for r in "${CODE_RANGES[@]}"; do
+    run "04c_bracket_${r/:/_}" "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+      -scriptPath "$SCRIPTS" -postScript RecoverBracketedCode.java "${r%:*}" "${r#*:}" \
+      "$HERE/analysis/bracketed_entries_${r/:/_}.txt" "${BRKEX[@]}"
+    say "04c_bracket_${r/:/_}" '^RecoverBracketedCode'
+  done
+
   run 04c_reexport "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
     -scriptPath "$SCRIPTS" -postScript ExportFunctions.java "$ENTRIES"
   say 04c_reexport '^ExportFunctions:'

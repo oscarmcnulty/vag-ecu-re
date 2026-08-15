@@ -77,3 +77,5 @@ ecus/*/analysis/indirect_branches.csv
 # Report-only by design: its candidates are mostly data that merely looks like code pointers,
 # so vetted entries belong in function_entries.txt, never this file.
 ecus/*/analysis/pointer_target_audit*.txt
+# bracketed-code recovery entries (regenerable via reproduce.sh step 4c / RecoverBracketedCode.java)
+ecus/*/analysis/bracketed_entries*.txt

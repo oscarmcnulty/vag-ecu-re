@@ -92,7 +92,7 @@ public class DecompileAll extends GhidraScript {
                 }
                 if (r.getDecompiledFunction() == null) { reason = "no-c"; continue; }
                 c = r.getDecompiledFunction().getC();
-                String damage = firstMatch(c, DAMAGE_SIGNALS);
+                String damage = firstDamage(c);
                 if (damage != null) {
                     // Truncated body. If nothing CALLs the entry it is a spurious function on data
                     // (string/table/padding) -> 'bogus' (pruned, not disasm-recovered). If it is a
@@ -169,6 +169,26 @@ public class DecompileAll extends GhidraScript {
 
     private static String firstMatch(String hay, String[] needles) {
         for (String n : needles) if (hay.contains(n)) return n;
+        return null;
+    }
+
+    /**
+     * Damage signals, but ONLY where the decompiler itself raised them.
+     *
+     * Scanning the whole C text is wrong once ApplySymbols is in the pipeline: the function's plate
+     * comment is emitted above the signature and becomes part of getC(), so a symbols_merged.csv
+     * comment that merely DISCUSSES a bad instruction marks its own function degraded. That is not
+     * hypothetical -- it happened to segC_routine_called_from_TSK02 (0xc000079c), a complete 40-byte
+     * function ending in `ret`, whose note explains the bad-instruction story and thereby tripped the
+     * detector. Ghidra prefixes every warning it emits with "WARNING:", so require that on the same
+     * line; prose in a plate comment can then say anything it likes.
+     */
+    private static String firstDamage(String c) {
+        for (String line : c.split("\n")) {
+            if (!line.contains("WARNING:")) continue;
+            String hit = firstMatch(line, DAMAGE_SIGNALS);
+            if (hit != null) return hit;
+        }
         return null;
     }
 

@@ -161,42 +161,57 @@ steps whose inputs are not yet pinned. Steps: import + `MapMemory` → `FindBase
 `DecompileAll` (+ manifest) → disasm fallback for anything without usable C →
 `ResolveCalReads`.
 
-## Goal: lower the ACC minimum speed
+## Goal: ACC longitudinal control below the factory floor
 
-Same target as simos85: the calibration that sets the ACC/cruise **minimum control
-speed**, so openpilot can hold longitudinal control below the factory floor. The
-B8 Q5 shipped a single-radar ACC with a ~30 km/h floor and no stop&go (see the
-`b8-acc-radar-hardware` note), and on Simos 8.5 that floor is `C_VS_MIN_CRU`
-(u8, km/h, ≈30) — identified in the Funktionsrahmen but never pinned to a byte for
-lack of an A2L.
+Same target as simos85: let openpilot hold longitudinal control below the speed at
+which the car withdraws ACC authority. The B8 Q5 shipped a single-radar ACC with a
+~30 km/h floor and no stop&go (see the `b8-acc-radar-hardware` note).
 
-What is different here, and why this ECU may be the easier target:
-- cal addressing is **absolute**, so a cal byte's readers are directly visible in
-  the xref graph rather than hidden behind a base register;
-- MED17.1.1 is a far more widely tuned ECU than Simos 8.5, so public
-  A2L/DAMOS/XDF label sets are much more likely to exist and bridge label→address;
-- the `ACC_ENABLE` tag on this very file implies someone already modified the
-  ACC-related calibration — a stock diff would point straight at it.
+### The headline result: the floor is not in this ECU
 
-Status: pipeline up, corpus decompiled, cal region pinned. The **ACC longitudinal path
-`ACC_01 → TSK_01/02/04` is traced** via the CAN anchor — see
-`maps/acc_flow.md` and `maps/can_signal_map.md`. The ACC/decel coordinator
-(`FUN_801455ae`), the TSK_02 handler (`FUN_80140922`) and the mode/state machine are
-identified; the decel authority (internal ±500000 rail) and status enums are pinned.
-The base register **`a9`** — which the ACC path uses to reach its calibration — is
-resolved by boot emulation (`research/emulation/EmulA9.java`): `a9 = 0xa0103464`
-= the uncached alias of the **cal-object table `0x80103464`**, so the ACC code indexes that table
-(`*(a9+off)` = cal object `off/4`). This pins the ACC calibration directly — the decel-shaping maps
-are cal object #247 @ `0x803b4834` (read by `FUN_801418ea`) and #269 @ `0x803b5bfc`. `a9` is in
-`ecu.conf` `BASEREGS`; re-running `reproduce.sh` folds every ACC cal read to a concrete address.
-See `maps/a9_resolution.md` and `maps/RESULTS.md §③`.
+**The MED17 has no internal 15 km/h ACC threshold.** It relays `ESP_05` (CAN `0x106`)
+frame bit 33 `ECD_nicht_verfuegbar` — the ESP/ABS declaring that externally-commanded
+deceleration is unavailable — and withdraws ACC authority in response. The full
+propagation chain is proved at instruction level and confirmed on-car across 8.11 h and
+1.46 M frames on two Q5s. **No MED17 calibration edit lifts the floor by itself.**
 
-**The ACC min-speed gate** is the **EGAS-L2 cal #208 permit-floor pair `0x80389809`=15 (SET) +
-`0x8038980e`=7 (CLEAR)** in `FUN_800f006c`/`800f027c` (gated on cruise-active) → the persistent permit
-memory `dc87`. It is a **self-recovering, speed-gated permit**: below the floor the ECU withholds the ACC
-command (no fault), and ACC resumes the moment speed exceeds 15 — a MED17 openpilot user observes re-enable
-at ~15 = the SET edge. There is **no key-off-on lockout on MED17** (the MED17 corpus has no non-volatile store
-in this path). openpilot edit: set both cells →0. Only #208 gates ACC; the other EGAS-L2 monitors are general
-torque/speed supervision, not ACC. ACC *engagement* itself is a table-driven state machine with **no speed gate**
-(`maps/engage_state.md`). Authoritative writeup: **`maps/l2_monitors.md`**; ready-to-flash cal set:
-**`maps/med17_openpilot_lowspeed.a2l`**.
+Read **`maps/ecd_relay.md`** first — it is the authoritative account, including what
+was ruled out and where the lever actually is.
+
+Two ECU-side items remain real and must not be confused with it:
+
+- **EGAS-L2 cal #208** (`0x80389809` = 15, `0x8038980e` = 7) is a *separate* Level-2
+  monitor gate running on the independent monitor speed. It is a fault contributor, not
+  the ACC permit, but it can impose its own 15/7 boundary regardless of the ESP — so
+  sub-15 operation likely needs it edited *as well*. See `maps/l2_monitors.md` and the
+  ready-to-flash cal set `maps/med17_openpilot_lowspeed.a2l`.
+- **A real but inert low-speed engage lock** hangs off `ESP_05` bit 36
+  (`ESP_HDC_Standby`), constant 0 on these cars. See `maps/ecd_relay.md` and
+  `maps/engage_state.md`.
+
+### What is mapped
+
+| area | file |
+|---|---|
+| The ACC floor: what it is, where it comes from, what was ruled out | **`maps/ecd_relay.md`** |
+| ACC_01 → TSK_01/02/04 longitudinal path, decel authority, hold relay | `maps/acc_flow.md` |
+| CAN layer: MultiCAN controller, message table, descriptors, E2E | `maps/can_signal_map.md` |
+| Per-message directory: id → direction → descriptors | `maps/com_group_direction.md` |
+| EGAS Level-2 monitors, cal #208 | `maps/l2_monitors.md` |
+| Vehicle-speed variables + functional low-speed cal cells | `maps/min_speed_l2.md` |
+| Mode arbitration + engage state machine | `maps/engage_state.md` |
+| `a9` = the cal-object table | `maps/a9_resolution.md` |
+| Kennlinie/Kennfeld interpolators and how to sweep them | `maps/kennlinie_interpolators.md` |
+| Simos 8.5 vs MED17 hold-bit comparison | `maps/anhalten_compare.md` |
+| Cal findings and pack status | `maps/RESULTS.md` |
+
+The base register **`a9`** — which the ACC path and the L2 monitors use to reach their
+calibration — is `0xa0103464`, the uncached alias of the **cal-object table
+`0x80103464`**, so `*(a9+off)` is cal object `off/4`. It is in `ecu.conf` `BASEREGS`, so
+`reproduce.sh` folds every ACC cal read to a concrete address; the decel-shaping maps are
+cal object #247 `@0x803b4834` and #269 `@0x803b5bfc`.
+
+Still worth having: a **stock `8R0907115N_0006` read to diff against.** This image is a
+WinOLS export tagged `ACC_ENABLE` with checksums off, so someone already modified its
+ACC calibration — the diff would show exactly what. That is an input problem, not an RE
+problem, and it is the highest-value remaining input.

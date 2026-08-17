@@ -1,195 +1,311 @@
-# MED17.1.1 engine ECU — CAN signal / handler map (8R0907115N_0006)
+# MED17.1.1 — the CAN layer (8R0907115N_0006)
 
-Companion to `acc_flow.md` (the ACC_01→TSK longitudinal trace). This file documents the **CAN
-infrastructure** the trace sits on. Built from the decompiled corpus
-(`analysis/decompiles_r/<vaddr>.c`) + raw firmware reads. Load base
-`0x80000000`; `0xa00xxxxx` = uncached mirror; file offset = `addr & 0x1FFFFFFF`; RAM = `0xd00xxxxx`.
+How this ECU gets bits on and off the wire: the controller, the message table, the descriptor
+formats, the bit-numbering convention, and the E2E protection. `acc_flow.md` sits on top of this;
+`com_group_direction.md` is the per-message directory that falls out of it.
 
-> **Architecture headline — this is NOT Simos8.5.** MED17.1.1 runs a **generic table-driven Vector
-> CANbedded IL** (interaction layer) + AUTOSAR-Com, and the **CAN controller is an external companion
-> chip reached over the Infineon MLI (Micro Link Interface) serial link** (`MLI0_TP0BAR/TRSTATR/TCBAR/
-> RDATAR`, drivers `FUN_8009319e`/`FUN_80093318`). Consequence: there is **no "13 dedicated hardware
-> mailbox handlers" table** like Simos8.5. Every message flows through generic descriptor arrays keyed
-> by CAN-id and by internal slot; only a handful of **TX signal producers** (the TSK app functions) are
-> bespoke. The RX signal decode and the TX byte assembly are **data-driven from flash descriptor
-> tables**, so the byte↔signal wire layout is a *table decode*, not a readable per-message packer.
+Load base `0x80000000`; `0xa00xxxxx` = uncached mirror; file offset = `addr & 0x1FFFFFFF`;
+RAM = `0xd00xxxxx`. Confidence tags: **[C]** read the code/bytes · **[I]** inferred · **[G]** gap.
 
-## Three tables that define the message layer
+Everything below is reproduced by `core/maps/decode_can_table.py`:
 
-### 1. Per-MO CAN-ID table @ `0x80027fd4` (121 × u32) — CONFIRMED
-`id_table[i]` = CAN ID assigned to internal message-object `i`. Located mechanically (dense run of
-`<0x800` values); not referenced by literal address in any decompiled function (read by the driver init
-via base+index), so the MO↔ID binding is authoritative from the table but has no code xref.
-
-| MO# | CAN ID | msg | dir | MO# | CAN ID | msg | dir |
-|---|---|---|---|---|---|---|---|
-| 52 | 0x106 | ESP_05 | RX | 67 | 0x10e | **TSK_04** | **TX** |
-| 58 | 0x10d | ACC_05 | RX | 68 | 0x10c | **TSK_02** | **TX** |
-| 59 | 0x109 | **ACC_01** | **RX** | 69 | 0x10a | **TSK_01** | **TX** |
-| 76 | 0x10b | LS_01 | RX | | | | |
-
-Other 0x10x/0x11x occupants: MO47=0x104, MO53=0x101, MO64=0x114, MO65=0x107, MO66=0x111, MO81=0x102,
-MO92=0x103, MO93=0x100, MO95=0x115, MO107=0x105, MO43=0x11d. (Remainder are 0x0xx/0x3xx/0x5xx/0x6xx
-body/chassis IDs.) **Direction is not a per-MO bit** in a sibling array — it is encoded in the runtime
-per-id descriptor flags (via `*(a9+0x36c)`/`*(a9+0x370)`) and by TX-slot membership (`DAT_800296aa`=20
-TX slots; the RX timeout monitor covers id window `[0x434,0x5b0)`). RX/TX above is from the dbc,
-corroborated by handler behaviour (TSK_* drive the TX set-signal path; ACC_*/LS_*/ESP_* only get gated
-by the validity accessor).
-
-### 2. Master message-handle array @ `0x80028bc0` (278 × u16) — CONFIRMED
-A plain **descending u16 list of every CAN id**, `0x116` at idx0 down to `0x0001` at idx277 (ends
-`0x80028dea`). The **address of a message's id-slot is its canonical "handle"** — the token passed around
-the IL. Dereferencing a handle yields the 16-bit id, which indexes the RAM status arrays.
-
-> **Closed form: `handle(id) = 0x80028bc0 + (0x116 − id)·2`.**
-
-| msg | id | handle | | msg | id | handle |
-|---|---|---|---|---|---|---|
-| ESP_05 | 0x106 | `0x80028be0` | | TSK_02 | 0x10c | `0x80028bd4` |
-| ACC_01 | 0x109 | `0x80028bda` | | ACC_05 | 0x10d | `0x80028bd2` |
-| TSK_01 | 0x10a | `0x80028bd8` | | TSK_04 | 0x10e | `0x80028bd0` |
-| LS_01 | 0x10b | `0x80028bd6` | | | | |
-
-Idiom everywhere: `FUN_800981cc((int)DAT_80028bXX)` = "read the id at this handle, return its validity".
-Handles are also passed to `FUN_80093910(id,state)` (participation/enable) and to the TX dispatch.
-
-### 3. TX signal-handle table @ `0x800295e0` (u16, `0x11`…`0x01`) — CONFIRMED
-Small descending list of **TX signal handles**. The TSK producers deposit values by these handles:
-- **TSK_02** (`FUN_80140922`): handles 8/9/10 (`DAT_800295f2/f0/ee`) + status 1/2 (`DAT_80029600/fe`).
-- **TSK_04** (`FUN_801455ae`): handles 5/6/7 (`DAT_800295f8/f6/f4`).
-
-## The validity accessor `FUN_800981cc` @ `0x800981cc` — CONFIRMED
-```c
-byte FUN_800981cc(uint id){
-  id &= 0xffff;
-  if (id < 0x17 /*DAT_80027f88=23*/) return (DAT_d000b083[id] >> 6) & 1;  // bit 0x40, low-id set
-  return (DAT_d000b117[id] >> 5) & 1;                                     // bit 0x20, full range
-}
+```bash
+python3 core/maps/decode_can_table.py ecus/med17/firmware/8R0907115N_0006.bin --csv /tmp/can_map.csv
+# 107 messages, 970 bindings
 ```
-- **Returns the timeout / not-present flag: `0` = message present & fresh (use real data); `1` = timed-out
-  / absent (use failsafe).** Proven by caller `FUN_80087a70`: real signal data is read only when the
-  accessor is `0`, else a default/`0` is sent. (This is the opposite polarity to a naive "is-valid" read —
-  noted because it inverts every gate.)
-- Status arrays are byte-indexed by CAN id: `DAT_d000b083[id]` (bit `0x40`, ids<23) and
-  `DAT_d000b117[id]` (bit `0x20`, ids≥23; e.g. ACC_01 0x109 → `b117[0x109]`). Low nibble = a 4-bit
-  confirmation down-counter; bit `0x80` = "changed".
-- **Bits set/cleared by the RX reception monitor:** `FUN_800bc5d6` (event-driven — on reception clears the
-  timeout bit + bumps the counter; on a missed cycle decrements, and at 0 sets timeout `|=0xa0`) and
-  `FUN_8009787e` (periodic sweep, the timeout monitor proper, called from `FUN_80093910`). Both walk a
-  per-bus slot→id map (`DAT_d0006d84`) + threshold table (`DAT_d0006d88`).
 
-## Generic RX path — PARTIAL (MLI-based, table-driven)
-- **`FUN_80099600`** = the generic per-MO receive dispatch loop: round-robin MO cursor `DAT_d000b68a`
-  (bound `DAT_800296aa`), per-MO control words `(&DAT_d0009330)[MO]` (pending bit `&0x4000`), per-MO
-  buffer index `(&DAT_d0013e64)[MO]` → data at `*(a9+0x370) + idx` (**`a9+0x370` = CAN controller
-  message-RAM base**). Message RAM is organised **C_CAN-style as parallel per-byte arrays indexed by MO**
-  (readers hit `msgram+0x456/0x46f/0x565/0x5c9` = "field-X"[MO]) — which is why **no contiguous 8-byte
-  ACC_01 record appears in the C**.
-- Generic per-MO state machines (shared, not message-specific): `FUN_8009c532` (state table `DAT_800455a0`),
-  `FUN_800be038`, `FUN_8009a3ae`, `FUN_8009acd2` (transition table `DAT_8003debc`, index `DAT_8004556f`).
-  These do timeout / rolling-alive / valid-bit tracking that feeds the presence bitfields above.
-- **RX signal decode is table-driven** (descriptor `DAT_d0006e40`, bit-offset table `DAT_800441f8`) — there
-  is **no hand-coded bit-unpacker** per message. The decoded ACC request is consumed through the struct at
-  `*(a9+0x3ec)` (see `acc_flow.md`).
-- **GAP:** exact MLI RX ISR entry + precise per-slot frame stride not pinned; IL frame-stage base
-  `~0xd001429c` is code-confirmed (slot→id `DAT_d0013e64`, slot state `DAT_d0013e8c`).
+## The controller: TC1797 internal MultiCAN [C]
 
-## Generic TX path — CONFIRMED
-Dispatch is by the **top nibble of the handle** (`handle>>12`) through the 16-entry pointer table
-**`PTR_FUN_8003e0d8`**:
-- **`FUN_8009d0ca(handle, value, 0, ctx)` @ `0x8009d0ca`** = the **generic set-signal / request-transmit
-  dispatcher** (the CANbedded `Il_SetTxSignal` equivalent) that the app producers call. For a *signal
-  handle* (class 0) it routes to **`FUN_800bffba` = Com_SendSignal / bit-packer**, which writes the value
-  into the packed frame buffer using signal descriptor `DAT_d0006e48[handle]` (bit offset/length) + flash
-  table `DAT_800441f8`. For a *message handle* (class 8, `0x84xx`) it requests the MO transmit.
-  (The `PTR_FUN_8003e0d8` dispatch + the `0x800bffba` bit-packer are the Com signal path; some calls
-  set a status/quality signal to `0`/`0xf`.)
-- **`FUN_8009ca3c(id, …)` @ `0x8009ca3c`** = per-id **TX-request state machine** (control nibble
-  `DAT_d00142c5[id]`, pending bitmap `DAT_d0009386`) → hands to **`FUN_800be052`**.
-- **`FUN_800be052(id, …)` @ `0x800be052`** = the **CANbedded TX slot engine**: looks up the internal TX
-  slot, memcpys the packed signal buffer into the MO frame (src `~0xd001429c`, dst `*(a9+0x3c8)`), **stamps
-  the rolling counter**, sets request flags `DAT_d0009330[slot]`.
-- **Cyclic TX scheduler** = `FUN_8009c694` (round-robin over the 20 TX slots); bus (re)init = `FUN_8009b9e8`.
-  The TSK producers are dispatched from an **unresolved function-pointer task table** (zero in-corpus
-  callers), so the **cyclic period (≈20 ms by Simos analogy) is not statically recoverable** — GAP.
+There is **no external CAN companion chip.** Frames are moved by the TriCore's own MultiCAN
+module. The init routine `FUN_800a3ae4` writes `CAN_CLC`, `CAN_PANCTR`, `CAN_NBTR0`, `CAN_NECNT0`,
+`CAN_NIPR0`, `CAN_NSR0`, `CAN_SRC1/2/5`, `CAN_MSIMASK` and `CAN_NCR0`, and the message-object
+registers live at **`0xF0005000 + MO*0x20`** (`MOFCR +0x00`, `MOIPR +0x08`, `MOAMR +0x0c`,
+`MODATAL/H +0x10/+0x14`, `MOAR +0x18`, `MOCTR +0x1c`).
 
-## COM signal-descriptor table — signal ↔ RAM bindings recovered  ⭐ [C]
+`MLI0` *is* driven (`FUN_8009319e` / `FUN_80093318`, `MLI0_TP0BAR/TRSTATR/TCBAR/RDATAR`) but it
+carries no CAN payload — nothing in the CAN path touches it. **[I]** it is an inter-processor link.
 
-The COM stack binds signals to RAM in **data**, not code: the unpack routines store through a pointer read
-from a descriptor record, so Ghidra shows the ACC status/state globals as unwritten. The descriptors are
-plain records and decode cleanly, which recovers the bindings the call graph cannot. Applied by
-**step 6b** of the pipeline (`core/ghidra/DecodeComBindings.java`, constants in `ecu.conf` as
-`COM_DESC_CB`/`COM_DESC_CTX`), which annotates every target so the decompiles carry the binding inline.
+### MO configuration table `0x8003e640 .. 0x8003f270` — 130 records × `0x18` [C]
 
-**Record layout (40 bytes):**
+Record 0 is a header; records 1..129 are the configured message objects. The driver indexes the table
+from `DAT_d0007314 = 0x8003e654`, i.e. as `0x8003e654 + msgidx*0x18` with `msgidx = record − 1`;
+addresses below are given from the **record start** `0x8003e640 + record*0x18`.
+
+| offset (from record start) | field |
+|---|---|
+| `+0x00` | **pointer to** the 32-bit CAN identifier |
+| `+0x04` | acceptance mask (`0x7ff` standard, `0x1fffffff` extended) |
+| `+0x08` | extended-identifier flag (1 = 29-bit) — selects `MOAR = id` + IDE over `MOAR = id<<18` |
+| `+0x09` | **direction: 1 = TX, 2 = RX** |
+| `+0x0e` | interrupt-enable flag |
+| `+0x10` | per-MO callback |
+| `+0x14` | u16 record index (high half carries flags) |
+
+Counts: **129 configured objects — 126 on node 0 (52 TX / 74 RX) plus three extended-identifier TX
+objects `0x1BFC0C00`, `0x1BFC0C01`, `0x1BFC0C03` on node 1.** (A fourth extended id `0x1BFC0C02`
+sits in the identifier pool at `0x80027fc0` but no record references it in this image.)
+
+`MOAR = id << 18` is proved in both directions: the transmit setup `FUN_800a3798` writes
+`MOAR = (MOAR & 0xe003ffff) | id*0x40000`, and the receive reader `FUN_800a393c` recovers
+`id = (MOAR & 0x1fffffff) >> 0x12` unless the extended bit `0x20000000` is set. The MO number for a
+message index is assigned at init and stored in `DAT_d000b814[msgidx]`.
+
+> ### Hazard: `0x80027fd4` is not `id_table[MO]` [C]
+> The identifiers live in a **pointer-addressed constant pool** at `0x80027fc0..0x800281b4`, and the
+> `+0x00` pointers *descend* as the record index ascends. Reading that pool as a flat array indexed by
+> MO number therefore reverses the mapping and yields wrong MO numbers for every message — e.g. it
+> makes `0x106` look like MO 52 when it is record 71. Always dereference `record+0x00`.
+
+Selected records:
+
+| CAN id | msg | record | dir | | CAN id | msg | record | dir |
+|---|---|---|---|---|---|---|---|---|
+| `0x100` | ESP_01 | 30 | RX | | `0x10a` | TSK_01 | 54 | **TX** |
+| `0x102` | Getriebe_03 | 42 | RX | | `0x10c` | TSK_02 | 55 | **TX** |
+| `0x106` | **ESP_05** | **71** | RX | | `0x10e` | TSK_04 | 56 | **TX** |
+| `0x109` | ACC_01 | 64 | RX | | `0x111` | TSK_05 | 57 | **TX** |
+| `0x10d` | ACC_05 | 65 | RX | | `0x10b` | LS_01 | 47 | RX |
+
+## The COM message table `0x80030c38 .. 0x80032168` — 113 records × `0x30` [C]
+
+This is the table that says which signals belong to which message. **111 records carry a valid
+11-bit identifier** (two are variant-disabled and hold `0xffffffff`), covering **107 distinct CAN
+ids** — `0x092` and `0x560` each appear twice.
 
 | offset | field |
 |---|---|
-| `+0x00` / `+0x04` / `+0x08` | pointers into a constant pool — max / SNA / default values |
-| `+0x0c` | conversion callback `0x800286c6` — **invariant across the table** |
-| `+0x10` | context `0xd000ad2a` — **invariant** |
-| `+0x14` | mask `0x0000ffff` |
-| `+0x18` | **RAM target** |
-| `+0x1c` | `[start_bit, bit_len, type, 0]` |
+| `+0x00` | u8 — the record's own index |
+| `+0x01` | u8 **`n_bool`** — number of boolean descriptors owned by this record |
+| `+0x02` | u8 **`n_sig`** — number of signal-block entries owned by this record |
+| `+0x03` | u8 extraction mode (0 everywhere here = the inline LSB-first path) |
+| `+0x04` | → first **boolean descriptor** (20-byte records, contiguous, `n_bool` of them) |
+| `+0x08` | → **signal block** (12-byte entries, `n_sig` of them) |
+| `+0x0c` | u32 **CAN identifier** (`0xffffffff` = variant-disabled) |
+| `+0x10` | → expected DLC. Every record points into the descending byte table at `0x80029652` (`8,7,6,…`); all of them at the `8` entry |
+| `+0x14` / `+0x18` / `+0x1c` | → error-status records `{→u16 signal handle, →u32 timestamp}` for timeout / checksum / counter |
+| `+0x20` | → per-message callback (`0x800b9250` across the TSK TX set, `0x80089c22` on ESP_01) |
+| `+0x24` | → 8-byte raw-frame snapshot buffer (RX only; 0 if the message keeps no snapshot) |
+| `+0x28` | → counter-indexed checksum-seed table (0 = derive the seed from the identifier) |
+| `+0x2c` | u16 **index into the MO configuration table** — the link to the hardware |
 
-Records are located by the invariant `+0x0c`/`+0x10` pair rather than by stride, so enumeration does not
-depend on the table being contiguous. On this image: **278 records, 40-byte stride, `0x80035e28`–`0x8003a9a0`.**
+**Signal block entry** (`0x0c` stride): `+0x00` points at **descriptor + 0x18**, straight at the
+descriptor's `target` field, not at the record start. Subtract `0x18` to get the record.
 
-**The decode is self-checking:** a correct format implies `start_bit + bit_len <= 64` (signals live in an
-8-byte frame). Measured **278/278 = 100%**, with start bits 0–62 and lengths 2–20. Random bytes would not
-do that, so the layout is confirmed rather than fitted.
+**40-byte signal descriptor** — `+0x18` RAM target, `+0x1c` start_bit, `+0x1d` bit_len, `+0x1e` type.
+The 580 owned descriptors form an almost perfectly contiguous `0x28`-stride array,
+`0x80035d10 .. 0x8003b8a0` (578 of the 579 gaps are exactly `0x28`; one 8-slot hole).
 
-**Confirmed binding:** `d000a590` ← `ACC_01` (0x109) **bit 60 len 3** = `ACC_Status_ACC` (record
-`@0x80038ad8`, desc `0x0000033c`) — independently matching the on-car CAN log, where openpilot's commanded
-status maps 1:1 through `tbl[]` to `TSK_04`. A second record `@0x80038a60` binds the same byte from bit 57
-len 3 (platform variant). Also: **message handles are literally CAN IDs** (`0x80028bd0` = `0x010e` = TSK_04,
-`0x80028bda` = `0x0109` = ACC_01), with internal PDUs sharing the id space above the CAN range.
+**20-byte boolean descriptor** — `+0x00` RAM target, `+0x04` = `0xffff | (destBit << 8) | srcBit`,
+where `srcBit` is the **frame** bit and `destBit` selects the bit inside the target
+(`byte = destBit>>3`, `bit = destBit&7`). The 390 owned records form a `0x14`-stride array,
+`0x80033d48 .. 0x80035c24`, with one 7-slot hole.
 
-**Still GAP:** the record→PDU grouping. The `+0x00/+0x04/+0x08` pointers resolve into a constant pool of
-limit/default values, not a message table, so a record's owning message is not yet recoverable — which is
-what blocks naming the producer of `d000a6c3` (bit 44 len 4, internal PDU).
+Totals: **970 bindings = 580 signals + 390 booleans.**
 
-## MLB E2E checksum + rolling counter — PARTIAL
-- **Rolling counter (byte1 low nibble) — CONFIRMED:** global `DAT_d000b729` (u8, reset in `FUN_8009b9e8`)
-  copied into per-slot `DAT_d00142b0[slot]` and post-incremented on each commit in `FUN_800be052`.
-- **Checksum (byte0) — mechanism known, function GAP:** no standalone XOR routine surfaced; byte0 =
-  `seed ^ XOR(bytes1..7)` with per-id `seed = (id>>8)^(id&0xff)` (**ACC_01 0x109 → 0x08**; TSK_01 0x10a →
-  0x0b; TSK_02 0x10c → 0x0d; TSK_04 0x10e → 0x0f). Applied inside the generic per-id E2E Com pack callback
-  (a message is flagged E2E-protected via the `*(a9+0x36c/0x370)` per-id flag, test `bVar8 & 2` in
-  `FUN_800be052`); the exact callback address is not pinned. Matches the verified MLB seeds in the
-  `vw-mlb-checksums` note.
+### Self-checks
 
-## Target-message handler table (MED17 idiom — the analog of Simos8.5's "13 dedicated handlers")
-"App function" = the bespoke application function that touches the message (validity gate for RX, signal
-producer for TX). Everything else is generic IL/Com.
+- `n_bool`/`n_sig` are explicit fields, so the decoded runs must match the declared counts — they do,
+  for all 113 records.
+- Joined against `vw_mlb.dbc`, **522 of 548 bindings on messages the DBC knows land on an exact
+  `start_bit|bit_len` match — 95.3%.** ESP_05, ESP_01, ACC_01, ACC_05, TSK_04, TSK_05 and
+  Getriebe_03 match 100%. Random or misaligned decoding does not do that.
 
-| CAN ID | msg | MO# | dir | handle | app function | mechanism | conf |
-|---|---|---|---|---|---|---|---|
-| 0x106 | ESP_05 | 52 | RX | `0x80028be0` | `FUN_8019c6a0` (presence collector) | validity→shadow `d00028cX`; signals via generic Com | high |
-| **0x109** | **ACC_01** | 59 | **RX** | `0x80028bda` | consumed in `FUN_801455ae`/`FUN_80145c88` via `*(a9+0x3ec)` | generic table decode → ACC-request struct; gated `d000a454==2` | high |
-| **0x10a** | **TSK_01** | 69 | **TX** | `0x80028bd8` | `FUN_8014469a` (+ byte packer `FUN_80143a68`) | TSK_Status_AB(24b) ← `d000f828/29/2a`; generic Com serialize | med-high |
-| 0x10b | LS_01 | 76 | RX | `0x80028bd6` | `FUN_8017a760` (presence collector) | validity→shadow; generic unpack | high |
-| **0x10c** | **TSK_02** | 68 | **TX** | `0x80028bd4` | **`FUN_80140922`** | decel/hold/status shadows → generic Com (sig handles 8/9/10); gated `d000a454∈{1,2}` | high |
-| 0x10d | ACC_05 | 58 | RX | `0x80028bd2` | read in `FUN_801455ae` | validity `FUN_800981cc(0x10d)`; gated `d000a454==2` | high |
-| **0x10e** | **TSK_04** | 67 | **TX** | `0x80028bd0` | **`FUN_801455ae`** | status/gear shadows → generic Com (sig handles 5/6/7); gated `d000a454==2` | high |
+## Bit numbering is LSB-first / Intel, everywhere [C]
 
-> `FUN_8019c6a0` and `FUN_8017a760` are validity **collectors** (fan `FUN_800981cc` over many handles into
-> `d00028cX`/`d0009fxx` presence-shadow bytes) — **not** signal decoders/packers. Don't mistake them for
-> handlers; this was the first false trail (the ACC_01 handle only appears in `8019c6a0`).
+> frame bit *n* = payload byte `n>>3`, bit `n&7`. A signal of length *L* at start_bit *S* occupies
+> frame bits *S..S+L-1*, with value bit *k* at frame bit *S+k*. **There is no MSB-first path.**
 
-## Quick-reference addresses
-- per-MO id table `0x80027fd4` (121×u32) · handle array `0x80028bc0` (278×u16, `0x116`↓`0x001`)
-- validity accessor `FUN_800981cc` (thr `DAT_80027f88`=23; arrays `d000b083` bit0x40 / `d000b117` bit0x20)
-- RX monitors `FUN_800bc5d6` (event) / `FUN_8009787e` (sweep) · RX dispatch `FUN_80099600`
-- TX set-signal `FUN_8009d0ca`→`PTR_FUN_8003e0d8`→Com_SendSignal `FUN_800bffba` · TX FSM `FUN_8009ca3c` · slot engine `FUN_800be052` · scheduler `FUN_8009c694`
-- rolling counter `DAT_d000b729`→`DAT_d00142b0[slot]` · TX signal-handle table `0x800295e0`
-- MLI driver `FUN_8009319e`/`FUN_80093318` (external CAN controller) · CAN msg-RAM base `*(a9+0x370)`
+Proved on both sides:
 
-## The load-bearing open item: the unresolved base register `a9`
-Every per-message runtime structure hangs off **`a9`** (CAN msg-RAM `*(a9+0x370)`, per-id config
-`*(a9+0x36c)`, ACC-request struct `*(a9+0x3ec)`, ACC cal struct `*(a9+0x3dc)`, MO frame area `*(a9+0x3c8)`).
-Ghidra's `SetBaseRegs` pinned `a0/a1/a8` (see `ecu.conf`) but **not `a9`** — it is loaded in the
-un-decompiled task dispatcher and preserved across the task, so all `*(a9+…)` members stay symbolic.
-Resolving `a9` (emulation — as Simos8.5's `EmulComWatch` did — or a RAM dump) is what would turn the
-table-driven RX shadows and the pointer-relative cal cells into absolute addresses. This is the single
-highest-value next step for both this map and `acc_flow.md`.
+- **TX assembler `FUN_8008a3f8`** (`0x8008a6be-0x8008a706`) builds a 64-bit `frame`, OR-ing in
+  `(v & ((1<<len)-1)) << start_bit` per signal — with a second branch that shifts into the high word
+  once `start_bit >= 32` — and stores it with `st.d` on a little-endian core.
+- **RX extractor `FUN_80089dac`** (`0x80089dc6-0x80089dec`) computes `byte = start_bit>>3`,
+  `bit = start_bit&7` and masks with `(1<<bit_len)-1`.
+- **RX distributor `FUN_8008a75e`** does the same for every signal in the block, and for booleans
+  sets or clears bit `destBit&7` of `target[destBit>>3]` from frame bit `srcBit`.
+
+## The two ends of the pipe [C]
+
+**RX** — `FUN_8008a75e(record_index)`: pull the frame with `FUN_800a393c` using the record's `+0x2c`
+MO index, run the `+0x20` callback, then walk the signal block (extract → range-check against the
+descriptor's limit/SNA pointers → store by type into the RAM target) and the boolean list. Callers
+`FUN_80088daa` / `FUN_80088e74`. On timeout or a failed E2E check the substitution path
+`FUN_8008b17c` (`COM_rx_default_substitution`) writes the message's targets instead.
+
+**TX** — `FUN_8008a3f8(record_index)`: walk booleans then signals, OR each into the 64-bit frame,
+compute the checksum, then `FUN_800a3848` → `FUN_800a3798` → MultiCAN MO. The application deposits
+values through `FUN_8009d0ca(handle, value, …)` (dispatch by `handle>>12` via `PTR_FUN_8003e0d8`;
+signal class → `FUN_800bffba`).
+
+Both directions gate each signal on `DSM_get_event_status(path)` — the descriptor carries a pointer
+to its DSM path id, and a released path selects the live value while a set one selects the
+descriptor's default. Note the polarity: **`0` = fine, non-zero = degraded.**
+
+## E2E: alive counter + checksum — mechanism and sites pinned [C]
+
+Both live in `FUN_8008a75e` / `FUN_8008a3f8`, selected by the descriptor's **type** byte:
+
+| type | meaning |
+|---|---|
+| 6 | **alive counter** — stores the value, compares against the previous one modulo `1<<bit_len`, and counts mismatches against the two thresholds in the descriptor |
+| 7 / 9 | **XOR checksum** over all 8 payload bytes; type 9 additionally folds in the identifier: `((id>>8) & 7) ^ ((xor ^ id) & 0xff)` |
+| 8 | byte-sum checksum with identifier fold and a nibble-fold tail |
+| 10 / 11 | delegated to `FUN_80089f9e` / `FUN_8008a098` |
+
+Every message in the ACC/TSK/ESP set uses **type 9**, so the effective per-id seed is
+`(id>>8) ^ (id&0xff)` — ACC_01 `0x109` → `0x08`, ESP_05 `0x106` → `0x07`, TSK_01 `0x10a` → `0x0b`,
+TSK_02 `0x10c` → `0x0d`, TSK_04 `0x10e` → `0x0f`. Matches the verified seeds in the
+`vw-mlb-checksums` note.
+
+`FUN_80089e00` is a separate table-driven CRC8 (nibble tables `0x800454e7`/`0x800454f7`) used by the
+type-10 path; it takes its seed either from the identifier or, when the record's `+0x28` pointer is
+set, from a counter-indexed table (ESP_05 → `0x800304f8` → `0x800454b7`).
+
+## Raw-frame snapshots and the monitor-path speed decode [C]
+
+Thirteen RX messages keep a verbatim 8-byte copy of the last frame, addressed by record `+0x24`
+(`0xd0009a9c .. 0xd0009b1c`). `FUN_800a3f76` mirrors all thirteen into a second contiguous block
+based at **`0xd0009a2c`**, and the EGAS-L2 side reads *that* block rather than the COM shadows:
+`FUN_8005e822` and `FUN_80050a04` rebuild `byte4 | byte5<<8` from `0xd0009a30/31` — ESP_01 frame
+bits 32..47, i.e. **`ESP_v_Signal` decoded a second time, independently of
+`comsig_d0008608_b32l16`.** That is the redundancy the Level-2 monitor path is built on.
+
+Mirror order: `0xd0009a2c`←`0x100`, `a34`←`0x082`, `a3c`←`0x083`, `a44`←`0x10b`, `a4c`←`0x109`,
+`a54`←`0x106`, `a5c`←`0x105`, `a64`←`0x3c0`, `a74`←`0x102`, `a84`←`0x098`, `a8c`←`0x0a9`,
+`a94`←`0x0a5`.
+
+## The messages that matter, fully decoded [C]
+
+DBC names from `vw_mlb.dbc`; `bool` rows are 20-byte boolean descriptors, `sig` rows are 40-byte
+signal descriptors. `target` is the RAM byte/word the COM layer reads or writes.
+
+### ESP_05 `0x106` — RX, record 71, MO config 70 · 25/25 DBC match
+
+| kind | descriptor | target | bits | signal |
+|---|---|---|---|---|
+| sig | `0x80038650` | `0xd000a4a2` | 0\|8 | CHECKSUM |
+| sig | `0x80038628` | `0xd000a50b` | 8\|4 | COUNTER |
+| bool | `0x800346e4` | `0xd000ab77` b0 | 12\|1 | ESP_QBit_Bremsdruck |
+| bool | `0x800346f8` | `0xd000ab42` b7 | 13\|1 | ESP_QBit_Fahrer_bremst |
+| sig | `0x80038600` | `0xd000ab33` | 14\|2 | ESP_Schwelle_Unterdruck |
+| sig | `0x800385d8` | `0xd0008dd4` | 16\|10 | ESP_Bremsdruck |
+| bool | `0x8003470c` | `0xd000ab42` b3 | 26\|1 | ESP_Fahrer_bremst |
+| bool | `0x80034720` | `0xd000ab42` b0 | 27\|1 | ESP_Verz_TSK_aktiv |
+| bool | `0x80034734` | `0xd000ab2c` b0 | 28\|1 | ESP_Lenkeingriff_ADS |
+| bool | `0x80034748` | `0xd000ab42` b4 | 29\|1 | ESP_Konsistenz_TSK |
+| bool | `0x8003475c` | `0xd000ab2f` b0 | 30\|1 | ESP_Bremsruck_AWV2 |
+| bool | `0x80034770` | `0xd000ab42` b6 | 32\|1 | ECD_Fehler |
+| **bool** | **`0x80034784`** | **`0xd000ab42` b5** | **33\|1** | **ECD_nicht_verfuegbar** |
+| bool | `0x80034798` | `0xd000ab42` b1 | 34\|1 | ESP_Status_Bremsentemp |
+| bool | `0x800347ac` | `0xd000ab6a` b0 | 36\|1 | ESP_HDC_Standby |
+| bool | `0x800347c0` | `0xd000ab79` b0 | 38\|1 | ESP_Prefill_ausgeloest |
+| bool | `0x800347d4` | `0xd000ab7c` b0 | 39\|1 | ESP_Rueckwaertsfahrt_erkannt |
+| bool | `0x800347e8` | `0xd000ab41` b0 | 40\|1 | ESP_Status_Anfahrhilfe |
+| sig | `0x800385b0` | `0xd000ab34` | 42\|2 | ESP_StartStopp_Info |
+| sig | `0x80038588` | `0xd0008dd2` | 48\|8 | ESP_BKV_Unterdruck |
+| bool | `0x800347fc` | `0xd000ab6f` b0 | 56\|1 | ESP_Autohold_aktiv |
+| bool | `0x80034810` | `0xd000ab41` b1 | 57\|1 | ESP_FStatus_Anfahrhilfe |
+| bool | `0x80034824` | `0xd000a61d` b0 | 58\|1 | ESP_Verz_EPB_aktiv |
+| bool | `0x80034838` | `0xd000a60b` b0 | 59\|1 | ECD_Bremslicht |
+| bool | `0x8003484c` | `0xd000ab42` b2 | 61\|1 | ESP_Status_Bremsdruck |
+
+`0xd000ab42` is the ESP brake/ECD status byte: eight ESP_05 bits packed into one byte. **Frame bit 33
+`ECD_nicht_verfuegbar` → bit 5 is the origin of the whole ACC low-speed floor — see
+`ecd_relay.md`.** `ESP_Verzoeg_EPB_verf` (60\|1) is not bound here.
+
+### ACC_01 `0x109` — RX, record 64 · 11/11 DBC match
+
+| kind | descriptor | target | bits | signal |
+|---|---|---|---|---|
+| sig | `0x80038c18` | `0xd000a465` | 0\|8 | CHECKSUM |
+| sig | `0x80038bf0` | `0xd000a4e3` | 8\|4 | COUNTER |
+| sig | `0x80038bc8` | `0xd00084ae` | 16\|6 | ACC_zul_Regelabw_unten |
+| sig | `0x80038ba0` | `0xd00084aa` | 24\|11 | **ACC_Sollbeschleunigung** |
+| sig | `0x80038b78` | `0xd00084b0` | 35\|5 | ACC_zul_Regelabw_oben |
+| sig | `0x80038b50` | `0xd00084be` | 40\|8 | ACC_neg_Sollbeschl_Grad |
+| sig | `0x80038b28` | `0xd00084c0` | 48\|8 | ACC_pos_Sollbeschl_Grad |
+| **bool** | **`0x80034a04`** | **`0xd000a59b` b0** | **57\|1** | **ACC_Anhalten** |
+| sig | `0x80038b00` | `0xd000a595` | 58\|2 | ACC_Dynamik |
+| sig | `0x80038ad8` | `0xd000a590` | 60\|3 | **ACC_Status_ACC** |
+| bool | `0x80034a18` | `0xd000a592` b0 | 63\|1 | ACC_Minimale_Bremsung |
+
+ACC_01 carries no `ACC_Anfahren` binding in this image (DBC 56\|1 is unbound).
+
+### ACC_05 `0x10d` — RX, record 65 · 9/9 DBC match
+
+`0xd000a590` (57\|3, `ACC_Status_ACC`) and `0xd000a59b` (62\|1, `ACC_Anhalten`) are the **same two RAM
+bytes ACC_01 writes** — the platform variant that sends the ACC command on `0x10d` lands on the same
+shadows. Also: `0x800349b4` → `0xd000a598` b0 (12\|1 `ACC_Freigabe_Momentenanf`), `0x800349c8` →
+`0xd000a5fe` (15\|1), `0x80038ab0` → `0xd0008588` (16\|10 `ACC_Momentenanforderung`), `0x80038a88` →
+`0xd000a59d` (44\|2 `ACC_StartStopp_Info`), `0x800349dc` → `0xd000a596` (60\|1 `ACC_Betaetigung_EPB`).
+
+### TSK_02 `0x10c` — TX, record 55 · 12 bindings
+
+| kind | descriptor | target | bits | signal |
+|---|---|---|---|---|
+| sig | `0x800392a8` | `0xd000a4d8` | 0\|8 | CHECKSUM |
+| sig | `0x800392d0` | `0xd000a545` | 8\|4 | COUNTER |
+| **bool** | **`0x80034b58`** | **`0xd000a33d` b0** | **12\|1** | **TSK_Anhalten** |
+| sig | `0x80039370` | `0xd000ab01` | 16\|2 | TSK_Status |
+| sig | `0x80039348` | `0xd00082e6` | 18\|5 | (Fahrzeugmasse, shared with TSK_05) |
+| bool | `0x80034b6c` | `0xd000a358` b0 | 23\|1 | (QBit) |
+| **sig** | **`0x80039320`** | **`0xd0005de0`** | **40\|12** | **TSK_Radbremsmom** |
+| bool | `0x80034b80` | `0xd000a968` b0 | 52\|1 | TSK_Standby_Anf_ESP |
+| bool | `0x80034b94` | `0xd000a33f` b0 | 53\|1 | (Codierung_ACC) |
+| bool | `0x80034ba8` | `0xd000a345` b0 | 54\|1 | (Zwangszusch_ESP) |
+| bool | `0x80034bbc` | `0xd000a968` b1 | 55\|1 | (Freig_Verzoeg_Anf) |
+| **sig** | **`0x800392f8`** | **`0xd0008d5a`** | **56\|8** | **TSK_Verzoeg_Anf** |
+
+> `TSK_Verzoeg_Anf` is `0xd0008d5a` and `TSK_Radbremsmom` is `0xd0005de0`. Names in parentheses are
+> taken from TSK_05, which binds the same RAM bytes at the same geometry; the DBC's TSK_02 variant
+> does not list them.
+
+### TSK_04 `0x10e` — TX, record 56 · 8/8 DBC match
+
+`0x800391b8`→`0xd000a4da` (0\|8), `0x800391e0`→`0xd000a549` (8\|4), `0x80039280`→`0xd00082ce`
+(12\|6 `TSK_zul_Regelabw`), `0x80039258`→`0xd00082b6` (18\|9 **`TSK_ax_Getriebe`**),
+`0x80039230`→`0xd00082fc` (27\|10 `TSK_Wunsch_Uebersetz`), `0x80034b30`→`0xd000a720` b0
+(37\|1 `TSK_Freig_WU`), `0x80034b44`→`0xd000aac0` b0 (38\|1 `TSK_Limiter_aktiv`),
+`0x80039208`→`0xd000ab01` (62\|2 **`TSK_Status_GRA_ACC_02`**).
+
+### TSK_01 `0x10a` — TX, record 54
+
+`0x80039398`→`0xd000a4d7` (0\|8), `0x800393c0`→`0xd000a543` (8\|4), `0x80034bd0`→`0xd000a35d` b0
+(12\|1), `0x80039460`→**`0xd0005e34`** (16\|24 **`TSK_Status_AB`**), `0x80039438`→`0xd00082fa` (40\|8),
+`0x80039410`→`0xd0008ec0` (48\|9 `TSK_amax_moeglich`), `0x800393e8`→`0xd000a759` (57\|2).
+
+`TSK_Status_AB` bit 7 of `0xd0005e34` is TSK_01 frame bit 23 — the ECD relay's exit onto the wire.
+Full chain in `ecd_relay.md`.
+
+### ESP_01 `0x100` — RX, record 30 · 18/18 DBC match
+
+The vehicle-speed source: `0x8003a770` → **`0xd0008608`**, 32\|16, `ESP_v_Signal`, **0.01 km/h**.
+Also `0x8003a7c0`→`0xd00085d4` (12\|10), `0x8003a798`→`0xd00085d2` (22\|10), and eleven booleans
+(`ASR_Tastung_passiv` … `ESP_ASP`) into `0xd0008c7e`, `0xd000a78f`, `0xd000a78a`, `0xd000a625`,
+`0xd000a5ae`.
+
+### Getriebe_03 `0x102` — RX, record 42 · 10/10 DBC match
+
+`0x80039c08` → **`0xd000a6c3`**, 44\|4, **`GE_Waehlhebel`** — the gear-selector position that the
+EGAS-L2 `dc8b` term reads (`l2_monitors.md`).
+
+## Quick reference
+
+- MultiCAN init `FUN_800a3ae4` · MO TX `FUN_800a3798` · MO RX `FUN_800a393c` · MO→DMA `FUN_800a347a`
+- MO config table `0x8003e640` (130×`0x18`) · id pool `0x80027fc0..0x800281b4` · MO number map `DAT_d000b814[msgidx]`
+- COM message table `0x80030c38` (113×`0x30`, runtime pointer `DAT_d0006630`)
+- signal descriptors `0x80035d10..0x8003b8a0` (`0x28`) · boolean descriptors `0x80033d48..0x80035c24` (`0x14`)
+- RX distributor `FUN_8008a75e` · TX assembler `FUN_8008a3f8` · counter/checksum extractor `FUN_80089dac` · CRC8 `FUN_80089e00`
+- set-signal `FUN_8009d0ca` → `PTR_FUN_8003e0d8` → `FUN_800bffba` · RX default substitution `FUN_8008b17c`
+- DSM event status `FUN_800981cc` (threshold `DAT_80027f88`=23; arrays `d000b083` bit `0x40` / `d000b117` bit `0x20`)
+- raw-frame snapshots `0xd0009a9c..0xd0009b1c`, mirrored to `0xd0009a2c` by `FUN_800a3f76`
+
+## Gaps
+
+- The `+0x00` byte-0 flags and `+0x03` extraction mode are decoded but their variant meanings are not
+  exercised in this image. **[G]**
+- Node membership is built into RAM at init (`DAT_d000c66c` per-node index lists), so the node→MO
+  assignment is only inferable from the extended-identifier split. **[I]**
+- Cyclic TX period: the producers run from an OS function-pointer task table with no in-corpus
+  callers, so the period is not statically recoverable. **[G]**

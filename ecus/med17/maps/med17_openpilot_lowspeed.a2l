@@ -1,6 +1,6 @@
 ASAP2_VERSION 1 71
 /begin PROJECT MED1711 "Bosch MED17.1.1 8R0907115N_0006 - openpilot ACC-to-0km/h cal set"
-  /begin MODULE MED1711 "Audi Q5 2.0 TFSI (B8/8R) CHJA - the calibration cells to let openpilot hold ACC longitudinal control below the ~15 km/h factory floor down to standstill. UPDATED 2026-07-27 after an 8-subagent characterisation of every EGAS-L2 monitor (see maps/l2_monitors.md): the operative ACC min-speed lockout is ONE hysteresis pair in cal #208 (15/7); most other 'monitor floors' are general EGAS torque/speed monitors, NOT ACC. Empirically confirmed: ACC below 15 km/h latches a non-volatile fault (key-off-on to clear). Every CHARACTERISTIC validated against raw firmware (sha256 3f95531a...a086c4fe) + the decompiled read site. Load base 0x80000000; file off = addr & 0x1FFFFFFF; little-endian."
+  /begin MODULE MED1711 "Audi Q5 2.0 TFSI (B8/8R) CHJA - the ENGINE-SIDE calibration cells that constrain ACC below ~15 km/h. SCOPE WARNING: the ~15 km/h ACC floor itself is NOT an engine calibration - it is ESP_05 (0x106) frame bit 33 ECD_nicht_verfuegbar, declared by the ESP/ABS and merely relayed by this ECU (maps/ecd_relay.md). Nothing in this file changes that. What IS here is cal #208, a genuine, separate EGAS Level-2 speed monitor that enforces its own 15/7 km/h boundary on the independent monitor-path speed; zeroing its pair is a NECESSARY COMPANION edit so the monitor does not reimpose a floor, but on its own it will change nothing observable. There is no non-volatile lockout on this path - every element is volatile RAM recomputed each cycle. Every CHARACTERISTIC validated against raw firmware (sha256 3f95531a...a086c4fe) + the decompiled read site; see maps/a2l_validation.md and maps/l2_monitors.md. Load base 0x80000000; file off = addr & 0x1FFFFFFF; little-endian."
 
     /begin MOD_COMMON ""
       BYTE_ORDER MSB_LAST
@@ -38,20 +38,24 @@ ASAP2_VERSION 1 71
     /end RECORD_LAYOUT
 
     /* =====================================================================
-       GROUP 1 -- THE ACC MIN-SPEED LOCKOUT (edit these two, set both to 0).
+       GROUP 1 -- THE EGAS-L2 SPEED-MONITOR PERMIT PAIR (edit these two to 0).
        cal #208 @0x803896ec (FUN_800f006c/800f027c = EGAS_L2_cru_speed_monitor,
        gated on cru_acc_active_flag d000a113). The 15/7 hysteresis pair drives
-       MON_cru_permit_flags(d000d7d1).b7 = "cruise speed-control permitted".
-       Below the floor while ACC is active -> latch d00148be -> diag status
-       d00000e1.b4 -> stored Dem DTC = the non-volatile key-off-on lockout.
-       This is the ONE genuine ACC min-speed floor (maps/l2_monitors.md).
+       MON_cru_permit_flags(d000d7d1).b7, which when CLEAR raises the fault
+       contributor MON_cru_floor_fault (d000d7f9) into FUN_800d9936 -> verdict
+       d000d344 -> reaction level d000aa23. Silent (a reaction level, not a
+       latched DTC) and fully self-recovering - no key-cycle memory exists on
+       this path. This is a REAL, SEPARATE ECU-side gate on the independent
+       monitor speed d0007b8a, NOT the ACC floor: the floor is ESP_05 bit 33
+       (maps/ecd_relay.md). Edit these so the monitor does not reimpose 15/7,
+       but expect no change from this edit alone.  (maps/l2_monitors.md)
        ===================================================================== */
 
-    /begin CHARACTERISTIC C_VS_MON_CRU_permit_SET_15 "15 km/h (u8=15); VERIFIED [C]. *** THE operative ACC min-speed lever -- the SET/ARM edge. *** cal #208 +0x11d. FUN_800f006c:737 `cal*128 < veh_speed_MON_128` -> permit bit7=1 -> the engaged-latch ARMS. The 15/7 floor block runs ONLY while the latch is 0 (800f006c:728); once armed it holds until ACC-off regardless of speed. So the lockout is the FRESH-ENGAGE-BELOW-15 case (latch never arms). Set cal=0 -> arm test becomes `0 < speed` -> latch arms at any speed>0 (incl. a sub-15 engage) -> lockout cannot occur. This is the fix. Recompute cal checksum."
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_SET_15 "15 km/h (u8=15); VERIFIED [C]. The SET/ARM edge of the EGAS-L2 permit memory. cal #208 +0x11d. FUN_800f006c:740 `cal*128 < veh_speed_MON_128` -> MON_cru_permit_floor_flag(dc87)=1 -> permit bit7 -> the engaged latch arms. The 15/7 block runs ONLY while the latch is 0 (the arming phase); bit7 is an arming pulse, re-initialised false each cycle. Set cal=0 -> the arm test becomes `0 < speed`, so the monitor arms at any speed. Necessary companion edit, NOT the ACC floor (that is ESP_05 bit 33, maps/ecd_relay.md). Recompute cal checksum."
       VALUE 0x80389809 RL_V_UBYTE 0 CM_KMH_MON 0 255
     /end CHARACTERISTIC
 
-    /begin CHARACTERISTIC C_VS_MON_CRU_permit_CLR_7 "7 km/h (u8=7); VERIFIED [C]. RE-ARM / memory-clear edge -- LIVE (not dead). cal #208 +0x122. FUN_800f006c:742 `speed < cal*128` clears the permit memory dc87 (MON_cru_permit_floor_flag), which is a PERSISTENT hysteretic flag (SET at 15, CLEAR at 7, written only in the floor block, reset nowhere). Once dc87=1 it stays 1 down to 7, so ACC can drop and RE-ENGAGE down to 7 and re-arm; below 7 (un-latched) dc87 clears -> must exceed 15 to re-arm. Set cal=0 so dc87 never clears -> permit memory permanent -> re-engage works at any speed incl. standstill. Set together with SET_15."
+    /begin CHARACTERISTIC C_VS_MON_CRU_permit_CLR_7 "7 km/h (u8=7); VERIFIED [C]. The memory-clear edge -- LIVE (not dead). cal #208 +0x122. FUN_800f006c:745 `speed < cal*128` clears the permit memory dc87 (MON_cru_permit_floor_flag), which is PERSISTENT (written only in this block, reset nowhere, zeroed at key-on). Once dc87=1 it stays 1 down to 7; below 7 it clears and speed must exceed 15 to re-arm. Set cal=0 so dc87 never clears. Always set together with SET_15, or the permit flips at standstill."
       VALUE 0x8038980e RL_V_UBYTE 0 CM_KMH_MON 0 255
     /end CHARACTERISTIC
 
@@ -137,7 +141,7 @@ ASAP2_VERSION 1 71
        No CHARACTERISTIC emitted; listed so they are not mistakenly edited.
        ----------------------------------------------------------------------- */
 
-    /begin GROUP OPENPILOT_ACC_TO_ZERO "PRIMARY EDIT: set both #208 permit cells to 0 to remove the sub-15 ACC lockout and hold permit through standstill. GROUP 2/3 only if a bench test shows a secondary/crawl fault at a lower speed."
+    /begin GROUP OPENPILOT_ACC_TO_ZERO "PRIMARY EDIT: set both #208 permit cells to 0 so the EGAS-L2 monitor holds its permit through standstill. This removes the ECU-side 15/7 boundary only; the ~15 km/h ACC floor itself is the ESP's ECD_nicht_verfuegbar declaration (maps/ecd_relay.md) and is not addressable from this ECU. GROUP 2/3 only if a bench test shows a secondary/crawl fault at a lower speed."
       ROOT
       /begin REF_CHARACTERISTIC
         C_VS_MON_CRU_permit_SET_15

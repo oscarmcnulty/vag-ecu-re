@@ -1,104 +1,112 @@
-# ACC_Anhalten / TSK_Anhalten — Simos8.5 vs MED17.1.1, and the "L2 monitor = 0" question
+# `ACC_Anhalten` → `TSK_Anhalten`: Simos 8.5 vs MED17.1.1
 
-Comparative study. Both ECUs sit on the same MLB powertrain CAN, RX **ACC_01 (0x109)** and TX
-**TSK_02 (0x10C)** with identical wire layout (`ACC_Anhalten` = ACC_01 57|1; `TSK_Anhalten` = TSK_02 12|1).
-Tags: [C]=read code/bytes, [I]=inferred, [G]=gap.
+Both ECUs sit on the same MLB powertrain CAN, receive **ACC_01 (`0x109`)** and transmit
+**TSK_02 (`0x10C`)** with identical wire layout (`ACC_Anhalten` = ACC_01 57\|1;
+`TSK_Anhalten` = TSK_02 12\|1). This file compares how each one gets the hold bit from one to the
+other, and what that means for driving standstill from openpilot.
 
-## Q1 — how `ACC_Anhalten` reaches `TSK_Anhalten` in each ECU
+Tags: **[C]** read code/bytes · **[M]** measured on-car · **[I]** inferred · **[G]** gap.
 
-### Simos8.5 — DIRECT gated relay of the received CAN bit [C, from simos85/maps/acc_flow.md §6]
-`ACC_01 (0x109) byte7·bit1` → decoder `801383e8` (E2E seed 0x08) → **`d000a7ae`** → `8013ef46:937-943`
-(`a58d = a7ae` when the gate holds) → **`d000a58d`** → packer `80137a00` → **TSK_02 byte2·bit4**.
-- Forward gate: `ad0f≠0` (compute-enable) ∧ `a757≠0` (Basic-ACC coded) ∧ `a5a8==0` (cal-fixed 0 on Q5) ∧
-  **`b28e∈{1,5}`** (cruise actively regulating).
-- So Simos **passes the driver/radar `ACC_Anhalten` bit straight through** to TSK_Anhalten, gated by runtime
-  engage state.
+## The answer: both are direct, gated relays of the same received bit
 
-### MED17 — relay of a DIFFERENT received bit, coding-gated [C]
-`80140922` (TSK_02 handler) mode-muxes on `d000a454`:
-- **GRA (`a454==1`)**: `d000a35c = d000a7ef` (GRA hold value).
-- **ACC (`a454==2`)** (`80140922:96-101`):
-  `bVar13 = 0; if (d0000195 & 0x10) bVar13 = PTR_DAT_80104094[0x13] != 0; d000a35c = bVar13;`
-  where `PTR_DAT_80104094 = *(a9+0xc30)` = cal object **#780 @0x803dba70**, and **`[0x13] = 0x01` on this
-  image** (Anhalten coding-enabled). So **`TSK_Anhalten = d0000195.4` (AND coding const = 1)**.
-- **`d0000195.4` is a received bit**: `800b0e94:89-96` (ACC-cluster decoder, sub-frames param `0x29`/`0x2a`)
-  sets `d0000195 |= 0x10` iff `d000a59a.0 == 1`, where `d000a59a` is an unpacked ACC-cluster shadow. So the
-  chain is **received `a59a.0` → `d0000195.4` → (coding `#780[0x13]`) → `d000a35c` → TSK_Anhalten (12|1)**.
-- **`a59a` is an INTERNALLY-ROUTED signal, not the raw ACC_01 wire bit**: `a59a` =
-  byte[2] of a 12-byte block at `d000a598` that the Com signal-routing layer copies in (descriptor
-  `@0x800349b4`: `{src-handle 0x800286c6, dest 0xd000a598, len 0x0c}`). The source `0x800286c6` is a handle
-  table of **internal PDU/signal IDs in the `0x38x–0x39x` range — NOT CAN IDs (`0x10x`)**. So `a59a.0` is a
-  bit of an *internal ACC-subsystem signal* (routed/processed through the signal layer), **not** a direct copy
-  of `ACC_01` byte7·bit1. `801434de`/`8008b17c` only clear `a598`; the wire value arrives via this routing copy.
-- **It is a RECEIVED ACC signal, not internally derived [C].** The whole decoded-shadow block
-  `d000a590..a5a4` (which contains `a59a`) has **zero app-computed writers** — every byte is populated only by
-  the generic Com RX/routing copy. The processor `800b0e94` is dispatched by `800b13ce` over the ACC message
-  set (internal signal handles **`0x1c0..0x1c9`**, gated by presence bits `d000a652/a657/a65b` and validity
-  `FUN_800981cc(0x1c9)`). So `a59a.0` is a **received ACC-command bit** routed in from the ACC messages — i.e.
-  **openpilot, as the ACC command source, CAN drive MED17's `TSK_Anhalten`** (same end capability as Simos:
-  openpilot owns the hold). It is NOT computed from ego speed/standstill.
-- **[G] the ONLY thing left unpinned** is the exact wire signal/bit that maps to `a59a.0`
-  (`ACC_Anhalten` vs `ACC_StartStopp_Info` vs an ACC status bit), because it passes through ≥2 Com handle-remap
-  layers (`0x1cx → 0x38x → CAN 0x10x → bit`) that live in **ROM Com-config tables, not in the decompiled code**.
-  Resolving it needs the Com signal database (A2L/DAMOS) or a bench bus capture — not further static tracing.
-- **Bottom line vs Simos:** both derive `TSK_Anhalten` from a *received* ACC bit (openpilot-controllable), but
-  via **different signals, different routing, and different gates** — Simos = raw `ACC_01` byte7·bit1 relay
-  gated by runtime engage; MED17 = a routed ACC signal (`a59a.0`) gated by a coding constant. Same capability,
-  not the same bit — bit-exact equivalence must be confirmed on a bus capture.
+### Simos 8.5 [C, from `simos85/maps/acc_flow.md` §6]
 
-**Net Q1:** both ultimately relay a *received* stop bit, but via **different signals and different gates** —
-Simos = ACC_01 byte7·bit1 gated by runtime engage (`b28e∈{1,5}`, `a5a8`, `a757`, `ad0f`); MED17 = a decoded
-ACC-cluster bit (`a59a.0`→`d0000195.4`) gated by a **coding constant** (cal#780[0x13]) + `a454==2`.
+```
+ACC_01 (0x109) byte7·bit1  ->  decoder 801383e8 (E2E seed 0x08)
+  ->  d000a7ae
+  ->  8013ef46:937-943   a58d = a7ae while the gate holds
+  ->  d000a58d
+  ->  packer 80137a00    ->  TSK_02 byte2·bit4
+```
 
-## Low-speed barriers per ECU, and what "L2 monitor = 0" removes
+Forward gate: `ad0f != 0` (compute-enable) ∧ `a757 != 0` (Basic-ACC coded) ∧ `a5a8 == 0`
+(cal-fixed 0 on the Q5) ∧ **`b28e ∈ {1,5}`** (cruise actively regulating).
 
-| barrier | Simos8.5 | removed by L2→0? | MED17 | removed by L2→0? |
-|---|---|---|---|---|
-| EGAS-L2 min-speed monitor | `C_VS_MIN_CRU_MON`=15 km/h @0x800794ef/f2 | **yes** (that's the edit) | `0x80389809`=15 km/h (+L1 family) | **yes** |
-| low-speed creep/permission state | Simos routes hold/decel through the CRUC state machine (`8013ef46`/`8013e8aa`) with several sub-15 permission/sub-state flags (2.34 km/h cal, a `1000`≈7.81 km/h launch latch `d000118a`, a `d0007e84` hysteresis) | partial — these are permission inputs, not a single removable floor | decel/hold path is **cal-map driven, no CRUC creep state machine, no hardcoded speed literal** | different mechanism |
-| creep hysteresis cals | ~7.8 km/h @0x800439f8/fa | no (separate cal edit) | none identified as a hard gate | n/a |
-| regulating gate | `b28e∈{1,5}` | no (runtime) | `a361∈{1,5}` | no (runtime) |
-| Anhalten enable | runtime `a5a8`(=0 cal-fixed)/`a757`/`ad0f` | no | coding `cal#780[0x13]` (=1) | no |
+### MED17.1.1 [C]
 
-## Q2 — with the L2 monitor zeroed, do both send EXACTLY the same low-speed signals incl. Anhalten?
+```
+ACC_01 (0x109) frame bit 57  ACC_Anhalten
+  ->  boolean descriptor 0x80034a04            ->  0xd000a59b bit 0
+  ->  FUN_800b0e94 :65-72 / :102-109           ->  0xd0000113 bit 4
+  ->  FUN_801405d4 :167-174                    ->  0xd000a33d
+          d000a33d = (a362 in {1,5} && d000a454 == 2) ? (d0000113 >> 4 & 1) : 0
+  ->  boolean descriptor 0x80034b58            ->  TSK_02 (0x10C) frame bit 12  TSK_Anhalten
+```
 
-**NO. [C/I]** Two independent reasons they diverge:
+Forward gate: `d000a454 == 2` (ACC mode) ∧ **`a362 ∈ {1,5}`** (ACC actively regulating) — the direct
+analog of Simos's `b28e ∈ {1,5}`.
 
-1. **Different low-speed mechanism (not a single removable floor).** Simos gates hold/decel behind the CRUC
-   state machine (`STATE_CRU_CTL∈{1,5}`) fed by several sub-15 permission/creep flags (2.34 km/h cal → `d0001171`;
-   a `1000`≈7.81 km/h launch latch → `d000118a`; a `d0007e84` hysteresis → `uRamc0001118`). MED17's hold/decel
-   path is **cal-map driven with no such CRUC creep state machine and no hardcoded speed literal**. So the two
-   diverge in low-speed behaviour by construction, and zeroing the L2 monitor does not make them equivalent.
-   The `1000`≈7.81 km/h literal is one permission input to the CRUC state, not a direct cutoff; whether Simos
-   brakes to true 0 is decided by the CRUC state machine as a whole, which is untraced. **[C mechanism differs /
-   G on exact Simos engaged-to-0]**
+The ingress binding is read out of the COM message table (`can_signal_map.md`): ACC_01's boolean
+descriptor at frame bit 57 targets `0xd000a59b` bit 0, and TSK_02's boolean descriptor at frame bit 12
+sources `0xd000a33d` bit 0. `FUN_800b0e94` is dispatched per ACC sub-frame (`0x55`, `0x29`, `0x2a`,
+`0x56`) and every branch that touches the hold bit copies `a59b` bit 0 into `d0000113` bit 4.
 
-2. **The Anhalten signal itself is derived differently.** Simos = direct pass-through of `ACC_01.ACC_Anhalten`
-   (byte7·bit1); MED17 = a *different* received ACC-cluster bit (`a59a.0`→`d0000195.4`) AND a coding constant.
-   For the same on-wire ACC_01 input the two will not necessarily assert `TSK_Anhalten` on the same condition or
-   at the same instant — different source bit, different gate. **[C mechanism / G on exact a59a.0 identity]**
+**ACC_05 (`0x10d`) frame bit 62 writes the same `0xd000a59b` bit 0**, so a platform that sends the ACC
+command on `0x10d` uses the identical downstream path.
 
-**So even with identical hardware, identical ACC_01 input, and both L2 monitors = 0, the two ECUs will NOT emit
-byte-identical low-speed TSK_02.** The robust reason is the **different `TSK_Anhalten` source + gate** (Simos =
-raw `ACC_01` byte7·bit1 relay gated by `STATE_CRU_CTL∈{1,5}`; MED17 = routed signal `a59a.0` gated by coding).
-Their low-speed *decel* behaviour also diverges by construction (Simos = CRUC creep state machine; MED17 =
-cal-map to 0). Whether Simos actually reaches true standstill is decided by its CRUC state machine as a whole
-(untraced) — it is NOT settled by one hardcoded literal, so no single Simos code patch guarantees convergence.
+> `d0000113` sits in the `0xd0000000..0xd0003fff` bit-flag block, which TriCore reaches with ABS-mode
+> `st.t`/`ld.t`. Address-resolution tools that do not model ABS addressing see none of these writes.
 
-## To make them match (if that's the goal)
-- MED17: zero the #208 L2 permit floor `0x80389809`=15 **and** its CLEAR edge `0x8038980e`=7 (both →0; see
-  `maps/l2_monitors.md`). No code patch needed (cal-map driven). No L1 cell needs to move with it — the
-  functional L1 cells and the L2 monitor are independent. Confirm `a59a.0` is the intended stop bit and
-  `cal#780[0x13]` stays 1.
-- Simos: zero `C_VS_MIN_CRU_MON`; the sub-15 CRUC creep/permission flags (2.34 km/h cal, the `1000` launch
-  latch, the `d0007e84` hysteresis) feed the state machine rather than acting as a single removable floor, so
-  matching Simos's engaged-to-0 behaviour requires understanding the CRUC state machine (`8013e8aa`/`8013e47c`),
-  not just patching the `1000` literal. **Untraced — do not assume a one-literal fix.**
-- Residual (dominant): the `TSK_Anhalten` *source signal* differs (byte7·bit1 relay vs `a59a.0`), so bit-exact
-  equivalence of the hold bit is not guaranteed regardless — verify on a bus capture.
+### Net comparison
+
+| | Simos 8.5 | MED17.1.1 |
+|---|---|---|
+| source bit | ACC_01 57\|1 | ACC_01 57\|1 (also ACC_05 62\|1) |
+| intermediate | `d000a7ae` → `d000a58d` | `d000a59b`.0 → `d0000113`.4 → `d000a33d` |
+| gate | compute-enable, ACC-coded, `a5a8==0`, `b28e ∈ {1,5}` | `a454 == 2`, `a362 ∈ {1,5}` |
+| output | TSK_02 byte2·bit4 (= 12\|1) | TSK_02 12\|1 |
+
+Same signal, same destination, structurally the same gate. **openpilot, as the ACC command source,
+owns `TSK_Anhalten` on both ECUs**: transmit ACC_01 with bit 57 set and a valid MLB E2E (XOR checksum
+with seed `0x08`, rolling counter in byte 1's low nibble), stay ACC-coded, and keep the controller
+actively regulating.
+
+## Low-speed barriers per ECU
+
+| barrier | Simos 8.5 | MED17.1.1 |
+|---|---|---|
+| **ECD availability** | `ESP_05` bit 33 `ECD_nicht_verfuegbar`, declared by the ESP/ABS on the shared bus | same — **proved on MED17**, `ecd_relay.md`. Not an engine calibration in either ECU. **[C]** on MED17, **[I]** on Simos |
+| EGAS-L2 min-speed monitor | `C_VS_MIN_CRU_MON` = 15 km/h @ `0x800794ef/f2` | cal #208 `0x80389809` = 15 / `0x8038980e` = 7 (`l2_monitors.md`) |
+| low-speed creep/permission state | CRUC state machine (`8013ef46`/`8013e8aa`) with several sub-15 permission flags (a 2.34 km/h cal, a `1000` ≈ 7.81 km/h launch latch `d000118a`, a `d0007e84` hysteresis) | none — the decel/hold path is cal-map driven with no hardcoded speed literal (`min_speed_l2.md` §3) |
+| creep hysteresis cals | ~7.8 km/h @ `0x800439f8/fa` | none identified as a gate |
+| regulating gate | `b28e ∈ {1,5}` | `a362 ∈ {1,5}` |
+| hold enable | runtime `a5a8` (cal-fixed 0) / `a757` / `ad0f` | `a454 == 2` |
+
+## Would both send the same low-speed signals with the L2 monitors zeroed?
+
+**Not necessarily, and for a reason that has nothing to do with the hold bit.**
+
+1. **Zeroing the L2 monitor does not remove the floor on either car.** The dominant constraint is the
+   ESP's ECD declaration, which is external to both engine ECUs. On MED17 this is proved end to end
+   (`ecd_relay.md`); on Simos the same `ESP_05` bit is on the same bus from the same ESP, so the same
+   constraint is expected to apply. **[C]/[I]**
+2. **The low-speed *decel* behaviour still diverges by construction.** Simos gates hold and decel
+   behind the CRUC state machine (`STATE_CRU_CTL ∈ {1,5}`) fed by several sub-15 permission/creep
+   flags; MED17's hold/decel path is cal-map driven to standstill with no equivalent state machine.
+   Whether Simos brakes to true 0 is decided by the CRUC state machine as a whole, which is untraced —
+   **do not assume a one-literal fix.** **[C mechanism / G on Simos engaged-to-0]**
+3. **The hold bit itself is no longer a source of divergence.** Same wire bit, same destination bit,
+   analogous gate. Confirm bit-exactness on a bus capture if it matters, but there is no structural
+   reason for the two to differ here.
+
+## To make them match
+
+- **MED17:** the ESP-side ECD constraint is the real barrier (`ecd_relay.md`). Zero the #208 permit
+  pair (`0x80389809` = 15 → 0 and `0x8038980e` = 7 → 0) so the monitor does not reimpose its own 15/7
+  boundary, recompute the cal-block checksum (`core/checksum`), and verify `TSK_Verzoeg_Anf`
+  (`0xd0008d5a`) actually goes non-zero below 15 km/h rather than only checking that TSK_04 grants.
+- **Simos 8.5:** zero `C_VS_MIN_CRU_MON`; the sub-15 CRUC creep/permission flags feed a state machine
+  rather than acting as one removable floor, so matching engaged-to-0 behaviour needs the CRUC machine
+  understood (`8013e8aa`/`8013e47c`), not just the `1000` literal patched.
+- **Both:** neither edit addresses the ESP. Below ~15 km/h the ESP declares ECD unavailable, and the
+  engine — either engine — obeys.
 
 ## Key addresses
-- Simos: `801383e8` (ACC_01 decode), `8013ef46` (relay + `STATE_CRU_CTL∈{1,5}` gate; `1000` launch-latch literal), `80137a00` (TSK_02 packer),
-  `C_VS_MIN_CRU_MON` 0x800794ef/f2, creep 0x800439f8/fa.
-- MED17: `80140922` (TSK_02 handler, a35c @:101), `800b0e94` (ACC-cluster decode, `d0000195.4 ← a59a.0` @:89-96),
-  cal#780 `0x803dba70[0x13]`=1 (Anhalten coding), L2 floor `0x80389809`=15 km/h. a9 = cal-object table 0x80103464.
+
+- **Simos:** `801383e8` (ACC_01 decode), `8013ef46` (relay + `STATE_CRU_CTL ∈ {1,5}` gate, `1000`
+  launch-latch literal), `80137a00` (TSK_02 packer), `C_VS_MIN_CRU_MON` `0x800794ef/f2`, creep
+  `0x800439f8/fa`.
+- **MED17:** boolean descriptors `0x80034a04` (ACC_01 57\|1) and `0x80034b58` (TSK_02 12\|1);
+  `FUN_800b0e94` (`a59b`.0 → `d0000113`.4); `FUN_801405d4` (`d000a33d`, `d0008d5a`); `FUN_80140922`
+  (internal standstill flag `d000a35c`, cal #780 `0x803dba70[0x13]` = 1); L2 floor `0x80389809`;
+  `a9` = cal-object table `0x80103464`.

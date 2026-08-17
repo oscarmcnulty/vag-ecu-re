@@ -1,63 +1,72 @@
-# A2L validation & change log — `med17_openpilot_lowspeed.a2l`
+# A2L validation — `med17_openpilot_lowspeed.a2l`
 
-Every CHARACTERISTIC is validated three ways (raw byte read at the claimed scale; `cal_objects.csv`
-membership; an actual decompiled read site). Firmware sha256
-`3f95531a0537cadd261e8d390f9e3c27dc26f1baa0ccfbdc94ff5566a086c4fe` (matches `ecu.conf` EXPECT_SHA). The A2L
-re-parses clean with `core/maps/a2l.py` and every value re-decodes.
+What the A2L is, what each CHARACTERISTIC has been checked against, and — important — what editing it
+will and will not achieve.
 
-> ## A2L scope — the L2-monitor min-speed model (12 cells)
-> The A2L carries 12 CHARACTERISTICs. `maps/l2_monitors.md` establishes:
-> - **The ACC min-speed gate is ONE hysteresis pair in cal #208: `0x80389809`=15 (SET) + `0x8038980e`=7
->   (CLEAR)**, gated on cruise-active. Both are live: `dc87` (the permit memory) is persistent (never reset),
->   SET at 15 / CLEAR at 7. **15 = arm-from-scratch** (with `dc87`=0 you must exceed 15 to arm); **7 = re-arm
->   floor** (once `dc87`=1 you can re-engage down to 7; below 7 it clears). The gate engages with `dc87`=0
->   below 15 (fresh engage / after dropping below 7). Set **15→0** (arm at any speed) **and 7→0** (never
->   clear) for a fully re-engage-robust fix. **Behaviour: SELF-RECOVERING** — below the floor the ECU just
->   withholds the ACC command (no fault) and resumes when speed exceeds 15 (a MED17 openpilot user sees
->   re-enable at ~15 = the SET edge). There is no key-off-on lockout on MED17 (the hard lockout is the Simos);
->   the permit lives in volatile RAM with no non-volatile store in the corpus. See `maps/l2_monitors.md`
->   "The fault mechanism".
-> - **The #148 / #215 cells are NOT the ACC floor** and are not in the primary group — #148 provably
->   self-disables below ~12 km/h, #215's crawl trip is a failsafe branch (signal 0x3fc stale).
-> - **The functional L1 cells and the L2 monitor are independent**; the gate is #208's 15/7 alone. Functional
->   cells are behavioural only.
+Firmware sha256 `3f95531a0537cadd261e8d390f9e3c27dc26f1baa0ccfbdc94ff5566a086c4fe` (matches `ecu.conf`
+`EXPECT_SHA`). The file re-parses clean with `core/maps/a2l.py` and every value re-decodes.
 
-## Validation results (current A2L, 12 CHARACTERISTICs)
+## Scope, honestly stated
 
-- **Raw byte + cal-object membership:** all PASS (e.g. `0x80389809` ∈ #208 `0x803896ec` +0x11d = 15;
-  `0x8038980e` +0x122 = 7).
-- **Decompiled read site:** all PASS — the #208 permit floor at `FUN_800f006c:737` (SET) / `:742` (CLEAR),
-  etc. Sites cited in each CHARACTERISTIC.
-- **`a9` chain re-derived from firmware:** `a9=0x80103464`; the folded pointers resolve to the exact cal
-  objects. Functional path reads `d0008f5e`/`d0008c22` (0.01 km/h); L2 monitors read `d0007b8a` (1/128 km/h)
-  — no function mixes them.
+The A2L describes the **EGAS Level-2 speed-monitor cells** (cal #208 and its neighbours) plus a few
+functional low-speed cells for reference. That is a real and useful thing to have: #208 is a genuine
+ECU-side speed gate, it is calibratable, and it will bite at 15/7 km/h on the monitor-path speed.
 
-## Finding 1 — the hard decel rail is NOT calibratable (firmware-patch only)
+**It is not the ACC minimum-speed floor.** The ~15 km/h floor is `ESP_05` (`0x106`) frame bit 33
+`ECD_nicht_verfuegbar`, declared by the ESP/ABS and relayed by the engine — see `ecd_relay.md`. No
+edit in this A2L changes an ESP decision. Flashing the #208 pair to 0 is a **necessary companion
+edit**, so that the monitor does not reimpose its own boundary once the ESP-side constraint is
+addressed; on its own it will change nothing observable.
 
-The internal ±500000 (≈±5.0 m/s²) decel authority ceiling is **hardcoded immediate literals**, not a cal read
-(`FUN_801434de:27-28`, `FUN_801455ae:241/242/283/338/339`); the on-wire `TSK_Verzoeg_Anf` saturates at
-−3.984 m/s² in the Com config. An A2L edit can reshape decel (#247/#269 maps) but not raise the ceiling —
-firmware patch only. Irrelevant to controlling to 0 (a min-*speed* problem, not a decel-*magnitude* one).
+Read `l2_monitors.md` for the #208 mechanism before editing.
+
+## Validation method
+
+Every CHARACTERISTIC is checked three ways:
+
+1. **Raw byte read** at the claimed address and scale — all PASS
+   (e.g. `0x80389809` = 15, `0x8038980e` = 7, `0x8038980a` = 17, `0x80389808` = 2, `0x8038a4ed` = 25,
+   `0x8038a5c9`/`ca` = 6, `0x803b528e` = 1000, `0x803b5a30` = 2000, `0x803b88ae` = 300).
+2. **`cal_objects.csv` membership** — all PASS (`0x80389809` ∈ #208 `0x803896ec` +0x11d;
+   `0x8038980e` +0x122).
+3. **A decompiled read site**, cited in each CHARACTERISTIC — all PASS (the #208 permit floor at
+   `FUN_800f006c:740` SET / `:745` CLEAR, etc.).
+
+The `a9` chain is re-derived from firmware: `a9 = 0x80103464`, and the folded pointers resolve to the
+exact cal objects (`a9_resolution.md`). The functional path reads `d0008f5e`/`d0008c22` (0.01 km/h)
+and the L2 monitors read `d0007b8a` (1/128 km/h); **no function mixes the two scales**, which is what
+makes the two COMPU_METHODs safe.
+
+## Finding 1 — the decel rail is not calibratable
+
+The internal ±500000 (≈ ±5.0 m/s²) decel authority ceiling is **hardcoded immediates**, not cal reads
+(`FUN_801434de:27-28`, `FUN_801455ae:241/242/283/338/339`), and the on-wire `TSK_Verzoeg_Anf`
+saturates at −3.984 m/s² because of its 8-bit range. An A2L edit can *reshape* decel through the
+#247/#269 maps but cannot raise the ceiling — that needs a firmware patch. Irrelevant to low-speed
+operation, which is a min-*speed* problem rather than a decel-*magnitude* one.
 
 ## Finding 2 — the `* 0x80` speed-vs-torque distinction
 
-`* 0x80` is used both for monitor speed (×128) **and** for torque/accel scaling, so `cal[off] * 0x80` is not
-by itself a speed floor. Each site resolves individually: e.g. #213's `0x8038a4d7/d8/d9`(16/18/16) and
-`0x8038a4ee`(12) are **torque-rail coefficients, not speeds**. Only genuine `veh_speed_MON_128` compares are
-speed floors — and only #208's 15/7 gates ACC. (The #215 `0x8038a5c9/ca`=6 cells are real speed compares but
-sit in the failsafe crawl branch, so they're in GROUP 3 "verify on bench", not the primary edit.)
+`* 0x80` scaling appears both for monitor speed (×128) and for torque/accel, so `cal[off] * 0x80` is
+not by itself a speed compare. Each site resolves individually: #213's `0x8038a4d7/d8/d9` (16/18/16)
+and `0x8038a4ee` (12) are **torque-rail coefficients**, not speeds. Only genuine `veh_speed_MON_128`
+compares are speed edges, and only #208's are gated on cruise/ACC being the active controller.
 
-## Finding 3 — `cal #260` window offsets (functional)
+## Finding 3 — cal #260 windows are plausibility, not floors
 
-`FUN_802c35d8` reads two paired plausibility windows on `d0008c22`: `[+0x8c=0, +0x8a=20]` (`:201`) and
-`[+0x90=80, +0x8e=140]` (`:517`). These are self-contained speed-signal plausibility windows, NOT ACC engage
-floors. No effect on the openpilot conclusion.
+`FUN_802c35d8` reads two paired windows on `d0008c22`: `[+0x8c = 0, +0x8a = 20]` (`:201`) and
+`[+0x90 = 80, +0x8e = 140]` (`:517`). Self-contained speed-signal plausibility checks with no cruise
+reference. No effect on low-speed control.
 
 ## Bottom line
 
-- **The openpilot edit = set #208 `0x80389809` (15) and `0x8038980e` (7) both to 0.** That arms the permit at any speed and holds it through standstill. GROUP 2 (#208 secondary bands) and GROUP 3 (#213's 25,
-  #215's crawl) only if a bench test shows a fault reappearing at a lower speed.
-- **Cal edits are necessary but openpilot still supplies the sub-floor request itself** — engagement is a
-  table-driven state machine with no speed gate (`maps/engage_state.md`), the functional decel/hold path is
-  cal-map-driven to standstill, and the B8 radar floor is a hardware property (openpilot injects ACC_01).
-- After any cal edit, **recompute the cal-block checksum** (`core/checksum`) or the ECU rejects the flash.
+- **The ECU-side edit is #208: `0x80389809` (15 → 0) and `0x8038980e` (7 → 0).** GROUP 2 (#208
+  secondary bands) and GROUP 3 (#213's 25, #215's crawl window) only if a bench test shows a fault
+  reappearing at a lower speed.
+- **That edit does not lift the floor by itself.** The ESP still declares ECD unavailable below
+  ~15 km/h and the engine still obeys. Expect no change from a #208-only flash, and do not read that
+  as the edit having failed to land.
+- **After any cal edit, recompute the cal-block checksum** (`core/checksum`) or the ECU rejects the
+  flash, and **read the bytes back over UDS** before drawing any conclusion from a test drive.
+- **Verify the right thing.** The meaningful test is whether `TSK_Verzoeg_Anf` (`0xd0008d5a`,
+  TSK_02 56\|8) goes non-zero below 15 km/h — not whether `TSK_04` reports a grant.

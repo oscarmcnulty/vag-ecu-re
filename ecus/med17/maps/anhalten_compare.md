@@ -9,7 +9,7 @@ Tags: **[C]** read code/bytes · **[M]** measured on-car · **[I]** inferred · 
 
 ## The answer: both are direct, gated relays of the same received bit
 
-### Simos 8.5 [C, from `simos85/maps/acc_flow.md` §6]
+### Simos 8.5 [C, from `simos85/maps/acc_flow.md` §7]
 
 ```
 ACC_01 (0x109) byte7·bit1  ->  decoder 801383e8 (E2E seed 0x08)

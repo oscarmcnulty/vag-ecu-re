@@ -1,6 +1,6 @@
 # research/ — exploration scripts (not maintained, not on the reproduce path)
 
-These produced findings recorded in the `ecus/*/maps/RESULTS.md` logs but are **not**
+These produced findings that now live in the `ecus/*/maps/` documents but are **not**
 part of the reproducible pipeline. Any corpus figure quoted in these files (function counts,
 coverage percentages) is a snapshot from when it was written and was not updated afterwards —
 treat `ecus/<ecu>/analysis/` as the authority for current numbers. `ecus/<ecu>/reproduce.sh` never calls anything here.
@@ -54,7 +54,9 @@ Task briefs written to hand a specific investigation to a fresh session — each
 was already established, what to build on, and which addresses to start from. They are
 historical working documents, not current documentation: the state they describe is the
 state at the time of writing, and none was revised afterwards. Useful as a record of how a
-line of investigation was framed; read `ecus/<ecu>/maps/RESULTS.md` for where it landed.
+line of investigation was framed; read `ecus/<ecu>/maps/` for where it landed. Note the handoff
+prompts below instruct writing findings back into a per-ECU `RESULTS.md` log; that convention has been
+retired for simos85, whose results are now organised by topic rather than chronologically.
 
 ## openpilot/
 
@@ -62,4 +64,4 @@ line of investigation was framed; read `ecus/<ecu>/maps/RESULTS.md` for where it
 (`rlog.zst`) to study the on-car −3.0 m/s² decel clamp. Takes segment paths as arguments and
 needs an openpilot checkout for `cereal/log.capnp` (`$OPENPILOT`); the drive logs it was
 written against are private, so supply your own. Kept as a record of how the on-car evidence
-in `RESULTS.md` was gathered.
+in the decel-limit documentation was gathered.

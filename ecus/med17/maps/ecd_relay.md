@@ -2,7 +2,8 @@
 
 ## The finding
 
-The MED17 has **no internal 15 km/h ACC threshold**. It relays a declaration made by the ESP/ABS:
+The MED17 has **no 15 km/h ACC threshold on the functional path**. It relays a declaration made by the
+ESP/ABS:
 
     ESP_05 (CAN 0x106) frame bit 33 = ECD_nicht_verfuegbar
 
@@ -150,7 +151,7 @@ external:
   **saturation clamp** passed as (lower, upper) to the integrators `FUN_8007ca62`/`FUN_8007c9f2` — not a
   gate.
 
-## A separate, real ECU-side gate: EGAS-L2 cal #208
+## The one internal 15: EGAS-L2 cal #208 (a shadow monitor, not the functional gate)
 
 Distinct from the ECD relay and **not** superseded by it. `FUN_800f006c` / `FUN_800f027c`
 (`EGAS_L2_cru_speed_monitor_A`/`_B`) compare the monitor speed `veh_speed_MON_128` (`0xd0007b8a`,

@@ -8,7 +8,7 @@ calibration region 0x40940–0x7a393; **zero code bytes differ**. (2) Consumers 
 `core/ghidra/TraceMapCalls.java` (→ `maps/map_calls.csv`) joined to the diff via
 `maps/gen_map_consumers.py` (→ `maps/map_consumers.csv`); low-region scalars additionally from
 `analysis/cal_reads.csv`. (3) Canonical names from the A2L catalog (`maps/a2l_catalog.csv`, generated from `maps/simos85.a2l`) where
-covered, else the FR family from the decompiled consumer (`analysis/decompiles_r|_extra/*.c`) +
+covered, else the FR family from the decompiled consumer (`../analysis/decompiles_r|_extra/*.c`) +
 `core/pdf/fr_search.py`.
 
 Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family from decompiled consumer ·
@@ -20,7 +20,6 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
    ceilings (`ip_tq_pow_max_*`), the torque model (`ip_tqi_ref` + the `EFF_TQI_COR` structure at
    0x48xxx), **several torque-limit/factor blocks** (0x55e64, 0x55f04, 0x57620 — all set toward
    their max/removed), plus fuel-rail pressure, rev limit, top-speed limit, and ignition advance.
-   (Consumer verification 2026-07-12 corrected the FR labels for those three — see the table notes.)
 
 2. **Stage1 and Stage2 are different philosophies.** Stage1 = higher peak torque (600 Nm),
    lightest touch, stays inside the stock safety monitors. Stage2 = lower peak (520 Nm) but
@@ -39,9 +38,9 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
 | 0x57bd4 | `ip_tqi_ref` — 16×12 torque model | ★★★ | — | peak 714 → **755** → 755 Nm |
 | 0x48c18 / 0x49114 / 0x4925c | `EFF_*` / `IP_EFF_TQI_COR_CUS` efficiency↔torque-correction structure; 0x49114 = `TQI_MAX`-type ceiling | ★★ | `FUN_800faef8` | 0x49114 +5% ceiling; 0x48c18 corner-lift; 0x4925c +30% rpm fill-curve |
 | 0x48dde | 1-D charge↔torque reference curve vs N (tqi model companion) | ★★ | `FUN_8014fe88` / `FUN_800fcd78` | raised |
-| 0x55e64 | factor block (unity 0x8000) — **consumer unresolved** (FAC_TQI_POW_MAX/FUN_800fed30 withdrawn on review; read nowhere in decompiles) | ★ | — | → unity (both stages): a reduction removed |
+| 0x55e64 | factor block (unity 0x8000) — **consumer unresolved**: read nowhere in the decompiles | ★ | — | → unity (both stages): a reduction removed |
 | 0x55f04 | `FAC_TQI` reserve/limit factor | ★★ | `FUN_801006d0` | **S1** → max; S2 stock |
-| 0x57620 / 0x5774e | upper torque-limit value → clamp `min(torque, af8·16)` (EFF_TQI_COR "biases torque up" reading **withdrawn** — it's a torque value, not a factor) | ★ | `FUN_8014e668` → `FUN_8011a6ac` | lowered 973→922 → slightly **tightens** the cap |
+| 0x57620 / 0x5774e | upper torque-limit **value** (not a factor) → clamp `min(torque, af8·16)` | ★ | `FUN_8014e668` → `FUN_8011a6ac` | lowered 973→922 → slightly **tightens** the cap |
 
 ## B. Limiters, monitors & protection — loosened so the extra torque passes
 
@@ -64,7 +63,7 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
 | 0x5ee5c | `ip_fup_sp_hom` — HPFP rail-pressure setpoint | ★★★ | — | ~115 → **129** bar |
 | 0x7865b / 0x7870e / 0x787c2 | **base ignition-timing bank** (IGA / Zündwinkel), 3 maps | ★★ | `FUN_8011d2b4` / `FUN_800cea0c` / `FUN_800d559c` | **+1…2° advance** |
 | 0x74084 | ignition / charge-time correction | ★ | (ignition cluster) | +2 all cells |
-| 0x6d3ac | factor/threshold block — **consumer unresolved** (MFF/`FUN_8017ecb8` binding withdrawn: the grids it reads are past the block) | ★ | — | S2 reshape |
+| 0x6d3ac | factor/threshold block — **consumer unresolved**: `FUN_8017ecb8` reads grids past the block, so it is not the consumer | ★ | — | S2 reshape |
 
 ## D. Other / honestly unidentified
 
@@ -81,8 +80,7 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
   accelerator-pedal characteristic (`CAN_STATE_TAR_EMS_SPT`), not a torque ceiling. See
   `performance_maps.md`. Both tunes neutralize the Efficiency-mode cut.
 - The `★` and low-`★★` FR members are **families**, not name-matched addresses — the FR gives
-  labels/units but no addresses, and the descriptor→FR join (`fr_alignment.md` Phase B/C) is not
-  complete. Auto-generated `FUN_*` / `process_*` symbol names are not FR names; identifications rest
+  labels/units but no addresses, and the descriptor→FR join is not complete (`fr_alignment.md`). Auto-generated `FUN_*` / `process_*` symbol names are not FR names; identifications rest
   on data-flow (output global), unity scalings (0x8000 / 4096 / 1024), the `(T+300)` gas-law
   signature, and the proven rpm index `DAT_d000b4f8 = N≫5`.
 
@@ -100,7 +98,6 @@ Confidence: **★★★** canonical (A2L/FR-verified) · **★★** FR family fr
   (the `*_40956 … *_7a38c` objects in `simos85.a2l`), so it now covers **50/50**. Per-object
   role/confidence lives in each A2L comment; the machine-readable per-block map can be
   regenerated any time by joining the diff to `maps/a2l_catalog.csv`.
-- **FR PDF not re-indexed:** `files.s4wiki.com` is egress-blocked and `pdftotext` is absent
-  this session, so the MED/LOW FR families rest on the committed FR docs. Refresh with
-  `core/pdf/fr_index.py` once `Simos8.5.pdf` is staged locally (e.g. a GitHub release asset,
-  which is reachable through the proxy).
+- **FR index:** the MED/LOW FR families rest on the committed FR extracts. To refresh, stage
+  `Simos8.5.pdf` locally and re-run `core/pdf/fr_index.py` (`files.s4wiki.com` is egress-blocked in
+  the sandbox; a GitHub release asset is reachable through the proxy).

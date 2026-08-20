@@ -63,6 +63,24 @@ if ((d890 & 2) && (ram_acc_vehicle_speed_mon <= *(byte*)(base+0x14f) * 0x80)) { 
   path is live, and the 15 km/h monitor outputs (`d79a`, `d7a7`, `d8ab`) are **not read anywhere in the
   CRUC state machine** (`acc_flow.md` §4.3). So mechanism A produces a fault and a CAN status, not a
   state-machine transition.
+- **Mechanism A is a *reported* status, not an internal actuation block (CONFIRMED).** Its whole output
+  chain terminates in the diagnosis cluster and the CAN publish, never in the actuators: the master-state
+  `d000d8ee` is read only inside the aggregator/diagnosis functions (`80102f60`, `801dfe06`, `801e3db0`,
+  `801e0012`), and the mapped status `TSK_Status_GRA_ACC` (`d000d91c` write-only; `d000d91d` →
+  `801df1e4` → `d000afef` → TSK CAN frames) goes to CAN, **not** to the torque path
+  (`801e9b86`/`8013e47c`) or the brake path (`8013c5d4`). Crucially the CRUC **fault input `d000a59c`**
+  (bit `0x08` → state 3) is written by the master-request producer `801408bc:302` from the ESP-mode /
+  override conditions — **not** by the 15 km/h monitor. So mechanism A latches
+  `TSK_Status_GRA_ACC = 3` on the bus, but does **not** stop the engine's internal accel/decel
+  regulation. On-car "it stops below 15" is therefore the *external master / cluster reacting to the
+  reported fault* (openpilot is the ACC master here), plus the ESP withdrawing decel (mechanism B) —
+  not the engine refusing to actuate.
+  - **Accel vs decel asymmetry:** the ECD gate (mechanism B) sits only on the brake-request path
+    (`8013c5d4`, the three `d000b296 == 2` sites); the accel/torque path is not routed through it, and
+    the CRUC machine regulates to 0 km/h (`acc_flow.md` §4.3). So structurally, below ~15 km/h **accel
+    authority persists and decel is what the ESP rejects** — exactly the split an external master would
+    want, *if* it tolerates the reported `TSK_Status_GRA_ACC = 3` (or avoids tripping it — the key-cycle
+    latch means avoidance beats recovery) and no other ECU inhibits on that status.
 - `da46` (the monitored accel) reads as measured/computed rather than raw command. **GAP:** which exact
   one of the 13 diagnoses latches below 15 km/h, and whether it is avoidable by sending different
   signals — the empty accel-band escape, `ACC_Anhalten`-hold versus raw decel — without a cal, coding or
@@ -221,6 +239,11 @@ of this: `ACC_01.ACC_Anhalten` → `TSK_Anhalten` is relayed whenever cruise is 
 ## 6. Open items
 
 1. Which of the 13 diagnoses latches below 15 km/h, and whether a signal-only escape exists (§1).
+   **Partly resolved:** mechanism A is reporting-only (its outputs never reach the actuators or the CRUC
+   fault input `a59c`), so the escape is about not *tripping* the CAN fault (the accel-plausibility band
+   `0x800794f8/fa/fc/fe`, `ACC_Anhalten`-hold vs raw decel) rather than surviving an actuation cut — a
+   signal-only question, no cal needed. Still open: the exact band values and whether an accel-only
+   command below 15 stays outside the trigger.
 2. Naming the relayed CAN diagnosis bits — 12 of the 13 aggregator feeders are 2-bit relayed symptoms;
    needs the ACC/brake DBC, which is external to this image.
 3. `0x80079536`'s FR label: `C_VS_MIN_AC_CTL_CRU` (accel-controller enable) versus `C_VS_LIM_HLD_AC_CTL`

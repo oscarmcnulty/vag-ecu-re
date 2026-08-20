@@ -16,7 +16,12 @@
 // durable artifact even if the harness around it dies.
 //
 //   analyzeHeadless <proj> <name> -process <bin> -noanalysis -scriptPath core/ghidra \
-//       -postScript DumpAllWrites.java <lo> <hi> <outfile> [storesOnly:true|false]
+//       -postScript DumpAllWrites.java <lo> <hi> <outfile> [storesOnly:true|false] [aN=0x.. ...]
+//
+// Pass the ECU's BASEREGS (from ecu.conf) as trailing aN=0x.. tokens, e.g.
+//   ... DumpAllWrites.java 0xd0000000 0xd0010000 out.csv true a0=0xd0008000 a1=0x80048000 a8=0x80088800
+// With NO tokens it falls back to MED17's base registers, which are WRONG for any other ECU (Simos85
+// resolves ~0x4420 off), so always pass BASEREGS unless the target really is MED17.
 //@category VAG-RE
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.listing.Function;
@@ -30,10 +35,17 @@ import java.util.regex.Pattern;
 
 public class DumpAllWrites extends GhidraScript {
 
-    // seeded base registers (ecus/med17/ecu.conf BASEREGS)
-    static final long[] SEED = new long[16];
-    static { for (int i=0;i<16;i++) SEED[i]=Long.MIN_VALUE;
-             SEED[0]=0xd000c420L; SEED[8]=0xd000c420L; SEED[1]=0x8002f298L; SEED[9]=0x80103464L; }
+    // Base registers to seed constant-propagation. Pass the ECU's BASEREGS as trailing
+    // aN=0x.. tokens (same form as SetBaseRegs.java), e.g. a0=0xd0008000 a1=0x80048000 a8=0x80088800.
+    // With no tokens this falls back to MED17's values -- WRONG for any other ECU (Simos85 is off by
+    // 0x4420), so always pass BASEREGS from ecu.conf. Populated per-run in run() from defaultSeed().
+    static long[] defaultSeed() {
+        long[] s = new long[16];
+        for (int i=0;i<16;i++) s[i]=Long.MIN_VALUE;
+        // ecus/med17/ecu.conf BASEREGS (fallback only)
+        s[0]=0xd000c420L; s[8]=0xd000c420L; s[1]=0x8002f298L; s[9]=0x80103464L;
+        return s;
+    }
 
     static final Pattern LEA   = Pattern.compile("^lea a(\\d+),\\[a(\\d+)\\]([+-]?(?:0x)?[0-9a-fA-F]+)$");
     static final Pattern MOVHA = Pattern.compile("^movh\\.a a(\\d+),#?([+-]?(?:0x)?[0-9a-fA-F]+)$");
@@ -57,6 +69,25 @@ public class DumpAllWrites extends GhidraScript {
         String out = args[2];
         boolean storesOnly = args.length < 4 || Boolean.parseBoolean(args[3]);
 
+        // Trailing aN=0x.. tokens override the base-register seed (BASEREGS from ecu.conf).
+        final long[] seed = defaultSeed();
+        boolean seededFromArgs = false;
+        for (int i = 3; i < args.length; i++) {
+            String a = args[i];
+            int eq = a.indexOf('=');
+            if (eq < 1) continue;
+            String name = a.substring(0, eq).trim();
+            if (!name.matches("a\\d+")) continue;               // address registers only
+            int rn = Integer.parseInt(name.substring(1));
+            if (rn < 0 || rn > 15) continue;
+            seed[rn] = Long.parseLong(a.substring(eq + 1).trim().replaceFirst("^0[xX]", ""), 16);
+            seededFromArgs = true;
+        }
+        println("DumpAllWrites: base-reg seed = "
+                + (seededFromArgs ? "from args" : "MED17 FALLBACK (pass BASEREGS if not MED17!)")
+                + " a0=0x" + Long.toHexString(seed[0]) + " a1=0x" + Long.toHexString(seed[1])
+                + " a8=0x" + Long.toHexString(seed[8]));
+
         int nf = 0, nhit = 0, nidx = 0;
         BufferedWriter w = new BufferedWriter(new FileWriter(out));
         w.write("kind,ea,insaddr,func,funcentry,mnemonic,text\n");
@@ -66,7 +97,7 @@ public class DumpAllWrites extends GhidraScript {
             Function fn = fit.next();
             nf++;
             String fname = fn.getName(), fentry = fn.getEntryPoint().toString();
-            long[] reg = SEED.clone();
+            long[] reg = seed.clone();
             InstructionIterator it = currentProgram.getListing()
                     .getInstructions(fn.getBody(), true);
             while (it.hasNext()) {

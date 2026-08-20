@@ -1,21 +1,27 @@
-# The sub-15 km/h floors — two independent mechanisms
+# The sub-15 km/h floors
 
-Cruise/ACC on this ECU stops working below ~15 km/h for **two separate reasons**, and they are not
-alternative descriptions of one thing. Editing either one alone leaves the other in place.
+**Revised 2026-08-20.** Earlier this doc described *two* engine mechanisms below ~15 km/h. A full
+data-flow trace (§1) shows only **one actually stops ACC**: the ESP's ECD withdrawal (Mechanism B).
+The engine-internal 15 km/h "L2 crawl monitor" (Mechanism A) exists and runs, but is **reporting-only**
+— it feeds a telltale field on frame 0x5C0 and some unread status bits; it does **not** latch a fault,
+set the status enum, or withdraw braking.
 
 | # | mechanism | where it lives | what it does |
 |---|---|---|---|
-| **A** | `C_VS_MIN_CRU_MON` = 15 km/h internal L2 crawl monitor | **inside this ECU**, cal `0x800794ef` / `0x800794f2` | latches a key-cycle ACC fault → `TSK_Status_GRA_ACC` = 3 |
-| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | withdraws brake-request authority inside `8013c5d4` |
+| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | **THE operative floor:** withdraws brake-request authority inside `8013c5d4` (via `d000b296`). ACC keeps reporting active (status 1); it just can't brake. |
+| **A** | `C_VS_MIN_CRU_MON` = 15 km/h internal L2 crawl monitor | **inside this ECU**, cal `0x800794ef` / `0x800794f2` | **reporting-only** — debounced `≤15 km/h` flag → telltale field `a35f` on frame 0x5C0 + unread `d88b` bits. Does NOT stop ACC or set status 3. See §1 correction. |
 
-**They are disjoint** (CONFIRMED): the whole mechanism-A latch chain — the aggregator body
-(`80102f60`, whose prologue falls through into `801dfe06`) and the status mapper `801eca44` — contains
-**zero `esp05_` references**. Conversely mechanism B travels entirely through
-`801408bc` → `d000b296` → `8013c5d4` and never touches the diagnosis accumulator.
+**No engine-internal speed threshold latches an ACC fault.** Neither status enum is speed-driven:
+`TSK_Status_GRA_ACC_01` (`b28d`, TSK_02) is the CRUC state (routes A/B/C, `maps/status3_routes.md`,
+no speed input); the 0x5C0 status enum (`d91d`, via `801eca44`) is driven by the 13-way relayed-symptom
+accumulator `d8e0`, also no speed input. A latching fault an external master sees below ~15 km/h
+therefore comes from the **ESP** (its own ACC/ECD DTC, relayed in as one of the 13 symptoms) or from a
+downstream consistency effect — **not** from this ECU measuring speed. **GAP:** confirming the ESP-side
+cause needs the ESP image or decoded on-car logs.
 
-Practical consequence: **editing `C_VS_MIN_CRU_MON` clears the latching fault but does not enable
-sub-15 km/h braking**, because the ESP still refuses ECD below ~15 km/h and that half is not in this
-ECU at all. See §5 for what the MED17.1.1 pack established about the ESP side.
+Practical consequence: **editing `C_VS_MIN_CRU_MON` (0x800794ef/f2) changes only the 0x5C0 telltale, not
+whether ACC brakes** — the operative floor is the ESP's ECD refusal, which is not in this ECU at all.
+See §5 for what the MED17.1.1 pack established about the ESP side.
 
 Addresses are load base `0x80000000`; file offset = `addr & 0x1FFFFFFF`. Ego speed working copy is
 `DAT_d000d644`, monitor copy `DAT_d000da54` (= FR `VS_MON`), both **1/128 km/h** (128 counts = 1.0 km/h).
@@ -28,7 +34,7 @@ Addresses are load base `0x80000000`; file offset = `addr & 0x1FFFFFFF`. Ego spe
 |---|---|---|---|
 | 1. coding / enable | `cruise_state_machine` | `0x80116e08` | reads coding byte `DAT_800443e1`; latches cruise-present/enabled per channel (GRA + DCC) → `LV_CRU_ENA` / `LV_DCC_ENA` (`d000a910-a929`). Pure config gate, no speed logic. |
 | 2. torque request | `cruise_torque_pi_controller` | `0x801e9b86` | builds the cruise engine-**torque** setpoint `DAT_d000e2e8` via a PI loop; owns the **3.0 km/h activation floor** |
-| 3. L2 monitor + diagnosis | `acc_status_error_aggregator` | `0x80102f60` | the L2 crawl monitor and 13-way ACC diagnosis coordinator; owns the **3.0 km/h creep discriminator**, the **15 km/h monitor floors** and the status-3 path (mechanism A) |
+| 3. L2 monitor + diagnosis | `acc_status_error_aggregator` | `0x80102f60` | the L2 crawl monitor and 13-way ACC diagnosis coordinator; owns the **3.0 km/h creep discriminator** and the **15 km/h crawl monitor** (reporting-only, §1). The status-3 path it *does* own (`d8e0→d744→d8b4→d8e2→801eca44→d91d`, frame 0x5C0) is fed by 13 **relayed** symptoms, none speed-derived — so it is NOT a speed floor. |
 | 4. brake-request formation | `acc_brake_request_formation` | `0x8013c5d4` | consumes the ESP's ECD permission via `d000b296` (mechanism B) |
 
 The FR calls the system **VHSC** (Vehicle Speed Control): plain cruise = GRA, distance/adaptive =
@@ -36,7 +42,7 @@ DCC/ACC.
 
 ---
 
-## 1. Mechanism A — the internal 15 km/h L2 crawl monitor (CONFIRMED)
+## 1. Mechanism A — the internal 15 km/h L2 crawl monitor (REPORTING-ONLY; see correction)
 
 Cal struct base for `80102f60` is `*0x80090f80` → `0x800793a0` (`cal_acc_l2monitor_struct`).
 
@@ -55,18 +61,33 @@ if ((d890 & 2) && (ram_acc_vehicle_speed_mon <= *(byte*)(base+0x14f) * 0x80)) { 
   matches everywhere. It can only be moved, not disabled, from the cal.
 - Full trigger also requires an accel-plausibility band (cals `0x800794f8/fa/fc/fe`) and, for the second
   compare, a lower band edge at `0x800794f3`.
-- **On-car it is a real key-cycle-latching L2 fault below ~15 km/h** (openpilot ground truth). Path:
-  the debounced monitor output feeds the 13-diagnosis accumulator inside `80102f60` → `d000d8e0 != 0` →
-  debounce → `d000d744` → **`d000d8b4`**, which gates recompute (`80102f60:718-731`: the accumulator is
-  only rebuilt while `d8b4 == 0`) = the key-cycle latch → `d8e2.bit2 = 0` → status 3 via `801eca44`.
-- The **deactivation** path (`d8e0 & cal(base+0x178)`) is dead — the fatal mask is 0. Only the status-3
-  path is live, and the 15 km/h monitor outputs (`d79a`, `d7a7`, `d8ab`) are **not read anywhere in the
-  CRUC state machine** (`acc_flow.md` §4.3). So mechanism A produces a fault and a CAN status, not a
-  state-machine transition.
-- `da46` (the monitored accel) reads as measured/computed rather than raw command. **GAP:** which exact
-  one of the 13 diagnoses latches below 15 km/h, and whether it is avoidable by sending different
-  signals — the empty accel-band escape, `ACC_Anhalten`-hold versus raw decel — without a cal, coding or
-  firmware change.
+- **CORRECTION (2026-08-20, full data-flow trace — supersedes the earlier claim that this monitor
+  latches status 3).** The debounced crawl-monitor outputs do **NOT** feed the 13-diagnosis accumulator
+  `d000d8e0`, and they do **NOT** reach any status-3 latch. Traced end to end:
+  - `d000d8e0` is built at `801dfe06:709` from **13 relayed CAN symptoms only** — the debouncer inputs
+    are `d5b5,d5bb,d62b,d5d8,d5f5,d670,d67f,d685,d693,d695,d680,d5fc,d683`, each copied in `801dec08`
+    from a relayed signal (`acc05_ACC_StartStopp_Info`, `esp05_ESP_StartStopp_Info`, `b100–b109`,
+    `b1a5`, `b400`; `d5fc` is constant 0). **None is speed- or crawl-derived** (verified: the writers'
+    only speed read is `801dec08`'s unrelated ego-speed mirror). So the status-3 producer chain
+    `d8e0 → d744 → d8b4 → d8e2.bit2 → 801eca44 → d91d` (status enum on frame **0x5C0**) carries **no
+    speed input** — same conclusion as the CRUC `b28d` path.
+  - The crawl-monitor outputs instead go to: `d79a → d000d88b bit5`, `d79e → d88b bit4`,
+    `d7a7/d794 → d88b bit3` — and **d88b bits 3/4/5 are never tested** (only bits 0/1/6/7 are read in
+    the aggregator). Separately `d8ab → 801031bc → d000a35f`, a status field packed into frame **0x5C0**
+    by `80137084:95`. That is the monitor's only escape: a **reporting/telltale field on 0x5C0**, not a
+    control gate, not a DTC event, not the status enum.
+  - **Net: the internal 15 km/h crawl monitor is reporting-only in this image. It does not stop ACC,
+    does not set status 3 (on TSK_02 or 0x5C0), and does not withdraw braking.** The earlier
+    "mechanism A latches status 3" reading conflated proximity inside `80102f60` with actual data flow.
+- **What actually makes ACC stop below ~15 km/h is Mechanism B alone** (§2, below): the ESP withdraws
+  ECD and the engine drops brake authority. That is external (the speed decision is in the ESP), and it
+  does **not** latch status 3 — the engine keeps reporting ACC active while silently losing decel.
+  Any latching CEL/fault an external master observes below 15 km/h therefore originates in the ESP
+  (an ESP-side ACC/ECD DTC, which would arrive as one of the 13 relayed symptoms) — **GAP**, needs the
+  ESP image or decoded logs; it is not produced by any engine-internal speed compare.
+- The **deactivation** path (`d8e0 & cal(base+0x178)`) is dead — the fatal mask is 0. The crawl-monitor
+  outputs (`d79a`, `d7a7`, `d8ab`) are read nowhere in the CRUC state machine (`acc_flow.md` §4.3) and,
+  per the correction above, nowhere in the status-3 latch either.
 - **INFERRED:** the cal base `0x800793a0` is reached through the runtime pointer `iRam80090f80` and has
   no static xref. Every `+offset` value is semantically consistent, but verify the base before relying
   on an absolute edit address.
@@ -172,9 +193,16 @@ branches and is one AND-term of the (dead) fatal-deactivation path.
   `C_VS_MAX_CRU` is *"Maximal vehicle speed for cruise activation"*. So 3.0 km/h is fully FR-consistent.
 - **`C_VS_MIN_CRU_MON`** (FR p.2196, ch.14.16 ECM2 process monitoring): verbatim *"Minimum threshold for
   vehicle speed control active"*, u8, res 1 km/h; *"Derived from level-1 calibration of
-  `C_VS_MIN_CRU_OFF` minus 2 km/h"* (p.2351). `VS_MON < C_VS_MIN_CRU_MON` sets the SR latch
-  `LV_CRU_MON_ACT_MON` → cruise off. It is an independent L2 monitor anchored to the **turn-off** speed —
-  a different quantity from the activation floor by design, so the 15-vs-3 split is expected.
+  `C_VS_MIN_CRU_OFF` minus 2 km/h"* (p.2351). **CORRECTED reading (2026-08-20), from the actual FR logic
+  on p.2202:** the comparator `VS_MON ⋛ C_VS_MIN_CRU_MON` drives **SET** of the SR latch
+  `LV_CRU_MON_ACT_MON` = *"Logical bit for **active monitoring** of cruise control"*, which is **RST** by
+  `STATE_CAN_CRUS_OFF`. So `C_VS_MIN_CRU_MON` is the **speed at which the L2 cruise monitor ARMS**
+  (active above ~15 km/h, hysteresis-off at `C_VS_MIN_CRU_OFF` ≈ 13 while decelerating), **not** a
+  "cruise off below 15" cutoff and **not** a fault trigger (the monitor's error output is the separate
+  `LV_ERR_CRU_MON`). The earlier "`VS_MON < MON` → cruise off" note here had the polarity inverted. This
+  is why there is **no** engine L2 fault below 15 km/h: below the threshold the monitor is *disarmed*.
+  The value 15 appears in the code both as the live `VS_MON`-vs-15 compare (`0x794ef`, §1, reporting-only)
+  and, in the L2 shadow path, as the monitor's debounce-counter timing (`0x456bd/c0`, in `8009c0b4`).
 - **`C_VS_MIN_AC_CTL_CRU`** (FR p.12502, Acceleration control): verbatim *"Lower limit of vehicle speed
   for acceleration control"*, res 0.01 km/h — the low-speed enable of the closed-loop acceleration
   controller that DCC/ACC drives. Best FR match for `0x80079536`.
@@ -220,7 +248,11 @@ of this: `ACC_01.ACC_Anhalten` → `TSK_Anhalten` is relayed whenever cruise is 
 
 ## 6. Open items
 
-1. Which of the 13 diagnoses latches below 15 km/h, and whether a signal-only escape exists (§1).
+1. ~~Which of the 13 diagnoses latches below 15 km/h~~ — **RESOLVED (2026-08-20): none.** The 13
+   accumulator feeders are relayed CAN symptoms (`801dfe06:709`, sources copied by `801dec08`), none
+   speed-derived; the 15 km/h crawl monitor does not feed `d8e0` (§1). There is no engine-internal
+   speed-latched ACC diagnosis. The (rare) latching fault an external master sees below 15 km/h would be
+   an **ESP-side** ACC/ECD DTC relayed in — confirming that needs the ESP image or decoded logs.
 2. Naming the relayed CAN diagnosis bits — 12 of the 13 aggregator feeders are 2-bit relayed symptoms;
    needs the ACC/brake DBC, which is external to this image.
 3. `0x80079536`'s FR label: `C_VS_MIN_AC_CTL_CRU` (accel-controller enable) versus `C_VS_LIM_HLD_AC_CTL`

@@ -153,10 +153,10 @@ ASAP2_VERSION 1 71
     /begin CHARACTERISTIC lpfp_max_duty "Maximum Fuel Pump Duty Cycle (lpfp_max_duty)"
       VALUE 0x80043256 RL_V_UBYTE 0 CM_L0 0 99.6094
     /end CHARACTERISTIC
-    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_EGAS_monitor_twin "15 km/h; verified (can-trace). EGAS-L2-monitor twin (referenced by egas_l2_monitor_cal_init@800a0c9c) -- NOT the operative cruise-speed floor (that is the u8 pair at file 0x794ef/0x794f2). EGAS-L2 monitor speed gate VS_MON < C_VS_MIN_CRU_MON; loaded by 0x800a0c9c (egas_l2_monitor_cal_init) with ^0xff ASIL verify; FR fig.14.16.5 p2202; stock-clean in Stage1/2."
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_EGAS_monitor_twin "15; verified (firmware+disasm 2026-08-20). EGAS-L2 shadow-RAM twin (loaded by egas_l2_monitor_cal_init@800a0c9c with ^0xff ASIL verify). CORRECTION: this is NOT a live speed compare -- in 8009c0b4 (egas_l2_cruise_torque_monitor) it is used as a DEBOUNCE COUNTER preset (disasm 8009ce4a: d9=d9-(d9!=0) countdown); that function reads NO ego speed. Per FR ch.14.16.2 p2202 the quantity C_VS_MIN_CRU_MON drives SET of the SR latch LV_CRU_MON_ACT_MON = 'active monitoring of cruise control' i.e. the monitor ARMING speed (~15, RST by STATE_CAN_CRUS_OFF), NOT a fault/cutoff. See low_speed_floors.md sec.1/4."
       VALUE 0x800456c0 RL_V_UBYTE 0 CM_L1 0 255
     /end CHARACTERISTIC
-    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_alt_EGAS_monitor_twin "15 km/h; verified (can-trace). EGAS-L2-monitor twin -- NOT the operative cruise-speed floor (u8 pair at file 0x794ef/0x794f2). Co-equal alternate to 0x456c0 (same L2 initializer); the separating literal compare runs in the non-decompiled monitor layer. FR fig.14.16.6 p2203."
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_L2_alt_EGAS_monitor_twin "15; verified (firmware+disasm 2026-08-20). EGAS-L2 shadow-RAM twin, co-equal alternate to 0x456c0 (same L2 initializer 800a0c9c). CORRECTION (supersedes 'separating literal compare in the non-decompiled monitor layer' -- that layer WAS decompiled+disassembled): there is NO speed compare against this cal anywhere. Every reader (8009c0b4, 8009cf94, 800a0c9c, 8014f794, 801930ac) uses it as a debounce-counter/ASIL-shadow value; none loads ego speed. See low_speed_floors.md sec.1/4."
       VALUE 0x800456bd RL_V_UBYTE 0 CM_L1 0 255
     /end CHARACTERISTIC
     /begin CHARACTERISTIC C_VS_MIN_CRU_OFF "13 km/h; medium confidence. Likely MON-2 hysteresis/clear threshold (15-2); read indexed by monitor code, not by 0x800a0c9c; FR p2351."
@@ -174,7 +174,7 @@ ASAP2_VERSION 1 71
     /begin CHARACTERISTIC c_vs_max_aeb_act "c_vs_max_aeb_act"
       VALUE 0x80043c38 RL_V_UBYTE 0 CM_L1 0 255
     /end CHARACTERISTIC
-    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_operative_0x794ef "15 km/h; verified (firmware u8=15). OPERATIVE cruise-speed floor: cal(0x800793a0+0x14f)=flash 0x800794ef, compared da54 <= cal*0x80 (<=15 km/h) at 80102f60:1583 -> debounce d000d79a -> d88b bit5. FR ch.14.16.5. This is the real 15 km/h floor (see acc_flow.md sec.3); distinct from the EGAS-L2 monitor twin at 0x456c0. = FR C_VS_MIN_CRU_MON (p.2196, 'Minimum threshold for vehicle speed control active', = C_VS_MIN_CRU_OFF-2 per p.2351). Move with 0x794f2."
+    /begin CHARACTERISTIC C_VS_MIN_CRU_MON_operative_0x794ef "15; verified (firmware u8=15). The live VS_MON<=15 compare: cal(0x800793a0+0x14f)=flash 0x800794ef, da54<=cal*0x80 at 80102f60:1583 -> debounce d000d79a. CORRECTION (2026-08-20): this is REPORTING-ONLY, NOT a fault/control floor -- d79a feeds d000d88b bit5 (never tested) and (via d8ab) the 0x5C0 telltale a35f; it does not reach the status-3 latch d8e0 nor gate braking. = FR C_VS_MIN_CRU_MON (p.2196), which per the p2202 logic is the monitor-ARMING speed for LV_CRU_MON_ACT_MON, not a cutoff. The actual sub-15 ACC loss is the ESP ECD withdrawal (external). See low_speed_floors.md sec.1/4."
       VALUE 0x800794ef RL_V_UBYTE 0 CM_L1 0 255
     /end CHARACTERISTIC
     /begin CHARACTERISTIC C_VS_MIN_CRU_MON_operative_0x794f2 "15 km/h; verified (firmware u8=15). OPERATIVE cruise-speed floor twin: cal(0x800793a0+0x152)=flash 0x800794f2, compared da54 <= cal*0x80 (DCC-masked) at 80102f60:1645 -> d000d8ab -> d7a7. Move together with 0x794ef to shift the 15 km/h floor."

@@ -321,8 +321,14 @@ additionally zeroes both if `d000ad7a == 0` (TSK not active) or forces decel →
   The fatal-**deactivation** path (`d8e0 & cal+0x178`) is dead (mask = 0). The aggregator body has two
   entry points: `80102f60` (which prologues `801eee40`/`801df81c`) falls through into `801dfe06`; they are
   the same code.
-- Two status signals carry the same 0..3 enum: **TSK_Status_GRA_ACC_01** (TSK_02 byte3, via `d91d`/`b28d`)
-  and **TSK_Status_GRA_ACC_02** (TSK_04 byte8 bits 6-7, via `d000d9c7`/`801e3f26`).
+- **Three** distinct signals carry a 0..3 status enum — do not conflate them (correction 2026-08-20):
+  - **TSK_Status_GRA_ACC_01** (TSK_02/0x10C byte3) ← **`b28d`** (`STATE_CRU_CTL_CAN`), the CRUC state
+    machine (routes A/B/C, `status3_routes.md`).
+  - **The 0x5C0 status enum** ← **`d91d`** (`801eca44` from `d8ee`+`d8e2`), published via `afef`,
+    packed by `80137084`. This is a **separate CAN channel**, driven by the relayed-symptom accumulator
+    `d8e0`. There is **no `d91d`→`b28d` write** — the earlier "via `d91d`/`b28d`" wording wrongly merged
+    these two channels. Both `b28d` and `d91d` are speed-independent (`low_speed_floors.md` §1).
+  - **TSK_Status_GRA_ACC_02** (TSK_04/0x10E byte8 bits 6-7) ← `d000d9c7` (`STATE_DCC`) via `801e3f26`.
 
 ## 7. Standstill hold — `TSK_Anhalten` (CONFIRMED)
 

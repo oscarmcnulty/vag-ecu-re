@@ -30,13 +30,22 @@ here; the performance/tuning calibration is covered second.
 | `tune_diff_analysis.md` | 3-way Original/Stage1/Stage2 diff: every changed cal block, attributed |
 | `simos85.a2l` + `a2l_catalog.csv`, `a2l_symbols.csv` | the canonical calibration store and its generated projections |
 | `map_calls.csv`, `cal_xref.csv`, `cal_ghidra_xref.csv`, `map_consumers.csv`, `perf_*.csv`, `diff_block_addrs.txt` | generated data behind the above |
+| `coding_cells.csv` + `gen_coding_labels.py` | the 49 long-coding cells (bit layout, factory value, per-cell rule, allowed values, destination flags) and the generator that rebuilds them from the image |
+
+### `labels/` — coding tools
+
+`8R0-907-551.LBL` — a VCDS-style label file for the **10-byte long coding**, generated from the
+image by `maps/gen_coding_labels.py`. Layout/rules/allowed values are firmware-derived; the
+English names are graded `CONFIRMED` / `PROBABLE` / `UNKNOWN`. See `analysis/coding_storage.md`.
 
 ### `analysis/` — method and machine-readable state
 
 `symbols_merged.csv` (function/data names), `function_entries.txt` (every entry vaddr),
 `RE_findings_checksum.md` (integrity model), `obd_read_feasibility.md` (why 8.5 is virtual-read only),
 `uds_dispatch.md` + `uds_dispatch_recovery.md`, `mode09_calid_cvn.md`,
-`CHECKSUM_COUNTER_VALIDATION.md`, `cal_read_method.md`, `symbol_name_audit.md`, `coverage.log`.
+`CHECKSUM_COUNTER_VALIDATION.md`, `cal_read_method.md`, `symbol_name_audit.md`, `coverage.log`,
+`coding_storage.md` (**where the long coding lives and what every coding bit reaches**),
+`uds_did_table.csv` (all 766 DID records, corrected layout).
 Decompiles (`decompiles_r/` and friends) are **generated, gitignored** — regenerate with `reproduce.sh`.
 
 ## Memory map (2 MB OBD image)
@@ -168,3 +177,9 @@ Canonical version-controlled inputs (RE metadata, not firmware code):
 - Full semantic naming of the `d8ce` engage-inhibit word and the `d890` ACC-state byte.
 - Import the remaining map catalog from the WinOLS `.ols` + Funktionsrahmen into the A2L.
 - Obtain a bench/boot read to study SBOOT/CBOOT (RSA, flash loader).
+- Name the remaining long-coding cells: 33 of the 49 are still `UNKNOWN`, and the cell-3 /
+  cell-24 hypotheses are unproven (`analysis/coding_storage.md` §5–6).
+- Resolve why the SID row at `0x80085f00` reads as `$22` while `0x801229b4` implements the DID
+  *write* semantics (`coding_storage.md` §1b).
+- Trace the NV record layer that backs the coding to the DFLASH banks call-by-call
+  (`coding_storage.md` §2 marks the DFLASH binding as inference).

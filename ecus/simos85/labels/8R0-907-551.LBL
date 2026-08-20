@@ -1,0 +1,336 @@
+;
+; VCDS Label File - Engine Electronics (01) - Simos 8.5
+;
+; Audi Q5 (8R) 3.0 TFSI / CTUC
+;
+; P/N: 8R0-907-551-F   (SW S8500L2000000, dataset CAS85L20)
+;
+; Long Coding only (10 bytes). Measuring blocks / adaptation are NOT in this file.
+;
+; SOURCE: reverse-engineered from the ECU flash image, not from a Ross-Tech file.
+;   layout    -> coding_unpack_cells    @0x801b4d64  (10 bytes -> 49 cells)
+;   semantics -> coding_decode_cruise_type @0x801b5900 (cells -> RAM flags)
+;   rules     -> coding_validate_and_apply @0x801b5520 + cal tables
+;   See ecus/simos85/analysis/coding_storage.md for the full derivation.
+;
+; READ THIS BEFORE TRUSTING A LINE:
+;   The BIT LAYOUT, the FACTORY VALUE, the ALLOWED VALUES and the LOCKED/CODEABLE
+;   state below are read straight out of the firmware and are reliable.
+;   The English NAMES are mostly *hypotheses* - each is tagged CONFIRMED / PROBABLE /
+;   UNKNOWN. Only the CONFIRMED ones have been traced end to end. Cells tagged
+;   UNKNOWN are real coding cells whose meaning is not established; they are listed
+;   so the layout is complete, not because the name is known.
+;
+; A cell marked LOCKED is refused by the ECU unless you send back the factory value,
+; so changing it in the Long Coding Helper will fail with a rejected coding write.
+;
+; HOW THIS ECU IS CODED (from the firmware):
+;   read  : UDS $22 DID 0x0600 -> 10 bytes   (0x0601 returns the length, = 10)
+;   write : UDS $2E DID 0x0600 + 10 bytes    (request length must be exactly 0x0D)
+;   The ECU REJECTS the coding write with NRC 0x24 unless a non-zero repair-shop /
+;   tester code has been written first via DID 0xF198. Tools that do a normal
+;   "Long Coding" transaction already do this.
+;
+; 19 of the 49 cells are hard-LOCKED by the dataset and 9 more accept only a single
+; value, so only 21 cells are genuinely changeable (cell 29 only once). Anything else
+; comes back as a rejected coding write no matter what you send.
+;
+; Record format: LC,<byte>,<bit>,<description>
+;
+;  Factory coding of this image: 2A2A0012052601060000
+;
+;---------------------------------------------------
+;
+; Long Coding
+;
+;---------------------------------------------------
+;
+;=== Byte 0  (factory 0x2A) ===
+;
+; cell 0  bit(s) 0-2  width 3  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=2  allowed=2  codeable (value must be in the allowed list)
+LC,00,0,Coding cell 0 - value bit 0 (weight 1) [only value 2 accepted]
+LC,00,1,Coding cell 0 - value bit 1 (weight 2) [only value 2 accepted]
+LC,00,2,Coding cell 0 - value bit 2 (weight 4) [only value 2 accepted]
+;
+; cell 1  bit(s) 3-5  width 3  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=5  allowed=5  codeable (value must be in the allowed list)
+LC,00,3,Coding cell 1 - value bit 0 (weight 1) [only value 5 accepted]
+LC,00,4,Coding cell 1 - value bit 1 (weight 2) [only value 5 accepted]
+LC,00,5,Coding cell 1 - value bit 2 (weight 4) [only value 5 accepted]
+;
+; cell 2  bit(s) 6-7  width 2  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,00,6,Coding cell 2 - value bit 0 (weight 1) [meaning not established]
+LC,00,7,Coding cell 2 - value bit 1 (weight 2) [meaning not established]
+;
+;=== Byte 1  (factory 0x2A) ===
+;
+; cell 3  bit(s) 0-2  width 3  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=2  allowed=2  codeable (value must be in the allowed list)
+;   decodes to d000a735..73b
+;   5 exclusive classes; 122 consumers - the widest-reaching cell. Contributes the last letter (D/A/G/M/J, +1 if cell 23) of the identifier built by 0x801bd36c.
+LC,01,0,Drivetrain/vehicle variant class - value bit 0 (weight 1) [only value 2 accepted]
+LC,01,1,Drivetrain/vehicle variant class - value bit 1 (weight 2) [only value 2 accepted]
+LC,01,2,Drivetrain/vehicle variant class - value bit 2 (weight 4) [only value 2 accepted]
+;
+; cell 4  bit(s) 3-5  width 3  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=5  allowed=5  codeable (value must be in the allowed list)
+LC,01,3,Coding cell 4 - value bit 0 (weight 1) [only value 5 accepted]
+LC,01,4,Coding cell 4 - value bit 1 (weight 2) [only value 5 accepted]
+LC,01,5,Coding cell 4 - value bit 2 (weight 4) [only value 5 accepted]
+;
+; cell 5  bit(s) 6  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,01,6,Coding cell 5 [LOCKED - must stay at factory]
+;
+; cell 6  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,01,7,Coding cell 6 [LOCKED - must stay at factory]
+;
+;=== Byte 2  (factory 0x00) ===
+;
+; cell 7  bit(s) 0-1  width 2  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=0  allowed=0  codeable (value must be in the allowed list)
+LC,02,0,Coding cell 7 - value bit 0 (weight 1) [only value 0 accepted]
+LC,02,1,Coding cell 7 - value bit 1 (weight 2) [only value 0 accepted]
+;
+; cell 8  bit(s) 2-3  width 2  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=0  allowed=0  codeable (value must be in the allowed list)
+LC,02,2,Coding cell 8 - value bit 0 (weight 1) [only value 0 accepted]
+LC,02,3,Coding cell 8 - value bit 1 (weight 2) [only value 0 accepted]
+;
+; cell 9  bit(s) 4  width 1  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=0  allowed=0  codeable (value must be in the allowed list)
+LC,02,4,Coding cell 9 [only value 0 accepted]
+;
+; cell 10  bit(s) 5  width 1  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,02,5,Coding cell 10 [meaning not established]
+;
+; cell 11  bit(s) 6  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,02,6,Coding cell 11 [LOCKED - must stay at factory]
+;
+; cell 12  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,02,7,Coding cell 12 [LOCKED - must stay at factory]
+;
+;=== Byte 3  (factory 0x12) ===
+;
+; cell 13  bit(s) 0  width 1  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,03,0,Coding cell 13 [meaning not established]
+;
+; cell 14  bit(s) 1-2  width 2  [PROBABLE]
+;   factory=1  allowed=0 1 2 3  codeable (value must be in the allowed list)
+;   decodes to d000b3b8
+;   0..3 selects the d000a786..789 / d000b3da flag block in 0x801b6558.
+LC,03,1,Equipment flag group - value bit 0 (weight 1) [probable]
+LC,03,2,Equipment flag group - value bit 1 (weight 2) [probable]
+;
+; cell 15  bit(s) 3  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a740
+;   Gates TX bit 0x80000000.
+LC,03,3,CAN TX group enable [probable]
+;
+; cell 16  bit(s) 4  width 1  [PROBABLE]
+;   factory=1  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a741
+;   Gates TX bits 0x2 and 0x4000000.
+LC,03,4,CAN TX group enable [probable]
+;
+; cell 47  bit(s) 5  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a742
+;   Gates TX bit 0x200.
+LC,03,5,CAN TX group enable [probable]
+;
+; cell 17  bit(s) 6-7  width 2  [UNKNOWN]
+;   factory=0  allowed=0 1 2 3  codeable (value must be in the allowed list)
+LC,03,6,Coding cell 17 - value bit 0 (weight 1) [meaning not established]
+LC,03,7,Coding cell 17 - value bit 1 (weight 2) [meaning not established]
+;
+;=== Byte 4  (factory 0x05) ===
+;
+; cell 18  bit(s) 0-2  width 3  [PROBABLE]
+;   factory=5  allowed=3 4 5  codeable (value must be in the allowed list)
+;   decodes to d000b3ba + d000a743..746
+;   Indexes six 8-entry calibration tables (0x8005b2d4/2dc/2e4/2ec/2f4, 0x80042c98) into d000b3c0..d000b3c5.
+LC,04,0,Variant parameter set index - value bit 0 (weight 1) [probable]
+LC,04,1,Variant parameter set index - value bit 1 (weight 2) [probable]
+LC,04,2,Variant parameter set index - value bit 2 (weight 4) [probable]
+;
+; cell 19  bit(s) 3-4  width 2  [UNKNOWN]
+;   factory=0  allowed=0 1 2 3  codeable (value must be in the allowed list)
+LC,04,3,Coding cell 19 - value bit 0 (weight 1) [meaning not established]
+LC,04,4,Coding cell 19 - value bit 1 (weight 2) [meaning not established]
+;
+; cell 20  bit(s) 5-6  width 2  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,04,5,Coding cell 20 - value bit 0 (weight 1) [meaning not established]
+LC,04,6,Coding cell 20 - value bit 1 (weight 2) [meaning not established]
+;
+; cell 21  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,04,7,Coding cell 21 [LOCKED - must stay at factory]
+;
+;=== Byte 5  (factory 0x26) ===
+;
+; cell 22  bit(s) 0  width 1  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,05,0,Coding cell 22 [meaning not established]
+;
+; cell 23  bit(s) 1  width 1  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=1  allowed=1  codeable (value must be in the allowed list)
+;   decodes to d000a74f/750
+;   Shifts the cell-3 letter by one (D->E, A->B, G->H, M->N, J->K).
+LC,05,1,Variant sub-class (variant letter second half) [only value 1 accepted]
+;
+; cell 24  bit(s) 2  width 1  [PROBABLE]
+;   factory=1  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a751/752/753
+;   d000a753 gates the ESP_05 (0x106) RX decoder and a 14-bit block of TX enables in can_tx_scheduler@0x80106ed8.
+LC,05,2,ESP/chassis CAN interface present [probable]
+;
+; cell 25  bit(s) 3  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a754
+;   Gates TX bit 0x800000.
+LC,05,3,CAN TX group enable [probable]
+;
+; cell 26  bit(s) 4  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a755
+;   Gates TX bit 0x1000000.
+LC,05,4,CAN TX group enable [probable]
+;
+; cell 27  bit(s) 5-6  width 2  [CONFIRMED]
+;   factory=1  allowed=0 1 2  codeable (value must be in the allowed list)
+;   decodes to d000a756/757/758
+;   0=none 1=GRA basic cruise 2=ACC 3=F2S(not implemented). Decoded by coding_decode_cruise_type@0x801b5900; a757=LV_DCC_ENA. This image is coded 1 (GRA); the validator also accepts 2.
+LC,05,5,Cruise control system type - value bit 0 (weight 1)
+LC,05,6,Cruise control system type - value bit 1 (weight 2)
+;
+; cell 28  bit(s) 7  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a759
+;   Gates TX bits 0x400/0x800.
+LC,05,7,CAN TX group enable [probable]
+;
+;=== Byte 6  (factory 0x01) ===
+;
+; cell 29  bit(s) 0  width 1  [PROBABLE]
+;   factory=1  allowed=0 1  codeable once (allowed list + refuses later changes)
+;   decodes to d000a75a
+;   Contributes letter A or B at 0x801b60d8; gates several TX enables.
+LC,06,0,Vehicle bus/equipment class A|B [probable]
+;
+; cell 30  bit(s) 1  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,06,1,Coding cell 30 [LOCKED - must stay at factory]
+;
+; cell 31  bit(s) 2  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,06,2,Coding cell 31 [LOCKED - must stay at factory]
+;
+; cell 32  bit(s) 3-4  width 2  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,06,3,Coding cell 32 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,06,4,Coding cell 32 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+;
+; cell 33  bit(s) 5-6  width 2  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,06,5,Coding cell 33 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,06,6,Coding cell 33 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+;
+; cell 34  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,06,7,Coding cell 34 [LOCKED - must stay at factory]
+;
+;=== Byte 7  (factory 0x06) ===
+;
+; cell 35  bit(s) 0-2  width 3  [FIXED]
+;   single allowed value - the ECU rejects anything else
+;   factory=6  allowed=6  codeable (value must be in the allowed list)
+;   decodes to d000b3bd
+;   Mapped through the 24-entry table at 0x8005afc8 to a letter at 0x801b611c.
+LC,07,0,Model/market code - value bit 0 (weight 1) [only value 6 accepted]
+LC,07,1,Model/market code - value bit 1 (weight 2) [only value 6 accepted]
+LC,07,2,Model/market code - value bit 2 (weight 4) [only value 6 accepted]
+;
+; cell 36  bit(s) 3-4  width 2  [UNKNOWN]
+;   factory=0  allowed=0 1 2 3  codeable (value must be in the allowed list)
+LC,07,3,Coding cell 36 - value bit 0 (weight 1) [meaning not established]
+LC,07,4,Coding cell 36 - value bit 1 (weight 2) [meaning not established]
+;
+; cell 37  bit(s) 5-6  width 2  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,07,5,Coding cell 37 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,07,6,Coding cell 37 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+;
+; cell 38  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,07,7,Coding cell 38 [LOCKED - must stay at factory]
+;
+;=== Byte 8  (factory 0x00) ===
+;
+; cell 39  bit(s) 0-2  width 3  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,08,0,Coding cell 39 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,08,1,Coding cell 39 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+LC,08,2,Coding cell 39 - value bit 2 (weight 4) [LOCKED - must stay at factory]
+;
+; cell 40  bit(s) 3  width 1  [PROBABLE]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+;   decodes to d000a75d
+;   Gates TX bit 0x10000.
+LC,08,3,CAN TX group enable [probable]
+;
+; cell 48  bit(s) 4  width 1  [UNKNOWN]
+;   factory=0  allowed=0 1  codeable (value must be in the allowed list)
+LC,08,4,Coding cell 48 [meaning not established]
+;
+; cell 41  bit(s) 5  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+;   decodes to d000a75e
+;   Gates TX bit 0x200000.
+LC,08,5,CAN TX group enable [LOCKED - must stay at factory]
+;
+; cell 42  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,08,7,Coding cell 42 [LOCKED - must stay at factory]
+;
+;=== Byte 9  (factory 0x00) ===
+;
+; cell 43  bit(s) 0-2  width 3  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,09,0,Coding cell 43 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,09,1,Coding cell 43 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+LC,09,2,Coding cell 43 - value bit 2 (weight 4) [LOCKED - must stay at factory]
+;
+; cell 44  bit(s) 3-4  width 2  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,09,3,Coding cell 44 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,09,4,Coding cell 44 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+;
+; cell 45  bit(s) 5-6  width 2  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,09,5,Coding cell 45 - value bit 0 (weight 1) [LOCKED - must stay at factory]
+LC,09,6,Coding cell 45 - value bit 1 (weight 2) [LOCKED - must stay at factory]
+;
+; cell 46  bit(s) 7  width 1  [LOCKED]
+;   factory=0  allowed=(none - factory value only)  LOCKED - rejected unless equal to the factory value
+LC,09,7,Coding cell 46 [LOCKED - must stay at factory]
+;
+; byte 8 bit 6 is never read by the unpacker - no cell maps to it.
+;

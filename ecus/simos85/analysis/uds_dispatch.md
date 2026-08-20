@@ -98,7 +98,7 @@ searching the image for a pointer to the behaviourally-confirmed handler `801229
 | `0x27` | SecurityAccess | `0x30` | `00000000` | → subfn sub-table `0x80085e38` (Target 2) |
 | `0x28` | CommunicationControl | `0x31` | `80123a28` | |
 | `0x01`–`0x0a` | (subfunction slots) | `0x30/70` | `80123a28` | secondary key space, shared handler |
-| `0x22` | ReadDataByIdentifier | `0x70` | `801229b4` | fixed-DID reads (the identify-for-VR surface) |
+| `0x22` | ReadDataByIdentifier | `0x70` | `801229b4` | see the correction note below |
 | `0x2e` | WriteDataByIdentifier | `0x30` | `00000000` | → DID sub-table `0x80085e4c` |
 | `0x85` | ControlDTCSetting | `0x31` | `00000000` | → sub-table `0x80085e40` |
 | `0x31` | RoutineControl | `0x30` | `00000000` | routine sub-dispatch |
@@ -108,6 +108,13 @@ searching the image for a pointer to the behaviourally-confirmed handler `801229
 | `0x19` | ReadDTCInformation | `0x70` | `801227ec` | |
 | `0x2f` | InputOutputControlByID | `0x30` | `00000000` | |
 | `0x3e` | TesterPresent | `0x71` | *(boundary)* | session-timing block follows the table |
+
+> **Correction (see `coding_storage.md` §1b).** `801229b4` is the **DID _write_** dispatcher, not
+> a read handler: it length-checks the payload that follows the DID, copies it into RAM, and
+> passes `0x2e` to the shared record helpers where the `$22` read handlers pass `0x22`. How the
+> SID row above selects it is unresolved; the function's behaviour is not. The read surface
+> verdict below is unaffected — the fixed-DID *read* tables are separate (766 records,
+> `analysis/uds_did_table.csv`), and none of them expose memory.
 
 **Decisive, table-level read-surface verdict** (upgrades §6b from "no handler body found"):
 - **`0x23` ReadMemoryByAddress is declared with a NULL handler** — recognised, but returns a

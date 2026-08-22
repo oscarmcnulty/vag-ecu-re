@@ -40,6 +40,7 @@ public class CoverageStat extends GhidraScript {
         String[] args = getScriptArgs();
         long lo = -1, hi = -1, calLo = -1, calHi = -1;
         boolean perBlock = false;
+        boolean erasedFF = false;   // also treat 0xFF fill as erased (Renesas/Bosch erase to 0xFF; Infineon to 0x00)
         String dumpPath = null;
         List<String> pos = new ArrayList<>();
         for (String a : args) {
@@ -47,6 +48,7 @@ public class CoverageStat extends GhidraScript {
                 String[] p = a.substring(6).split(":");
                 calLo = hex(p[0]); calHi = hex(p[1]);
             } else if (a.equals("--blocks")) perBlock = true;
+            else if (a.equals("--erased-ff")) erasedFF = true;
             else if (a.startsWith("--dump=")) dumpPath = a.substring(7);
             else pos.add(a);
         }
@@ -96,12 +98,14 @@ public class CoverageStat extends GhidraScript {
                 if (idx >= 0 && idx < total && cls[idx] == 0) cls[idx] = DATA;
             }
         }
-        // 4. everything left: erased (0x00) vs a genuine unaccounted gap
+        // 4. everything left: erased fill (0x00, and 0xFF when --erased-ff) vs a genuine gap
         byte[] raw = new byte[total];
         mem.getBytes(toAddr(lo), raw);
         for (int i = 0; i < total; i++) {
-            if (cls[i] == 0) cls[i] = (raw[i] == 0) ? ERASED : GAP;
+            if (cls[i] == 0)
+                cls[i] = (raw[i] == 0 || (erasedFF && (raw[i] & 0xff) == 0xff)) ? ERASED : GAP;
         }
+        String erasedLabel = erasedFF ? "  erased (0x00/0xff fill)" : "  erased (0x00 fill)";
 
         long[] n = new long[6];
         long[] nCal = new long[6];
@@ -120,14 +124,14 @@ public class CoverageStat extends GhidraScript {
         report("  in-function (decompiled)", n[FN], codeTotal);
         report("  disassembled, NO function", n[INSN], codeTotal);
         report("  defined data", n[DATA], codeTotal);
-        report("  erased (0x00 fill)", n[ERASED], codeTotal);
+        report(erasedLabel, n[ERASED], codeTotal);
         report("  UNACCOUNTED (undefined, non-zero)", n[GAP], codeTotal);
         if (calTotal > 0) {
             println("");
             println(String.format("CALIBRATION REGION [%08x,%08x) (%d bytes, %.1f%% of image)",
                     calLo, calHi, calTotal, pct(calTotal, total)));
             report("  defined data (typed maps)", nCal[DATA], calTotal);
-            report("  erased (0x00 fill)", nCal[ERASED], calTotal);
+            report(erasedLabel, nCal[ERASED], calTotal);
             report("  undefined, non-zero", nCal[GAP], calTotal);
             report("  in-function / disassembled", nCal[FN] + nCal[INSN], calTotal);
         }

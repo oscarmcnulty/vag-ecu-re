@@ -5,6 +5,16 @@
 *.frf
 *.odx-f
 ecus/*/firmware/*
+# --- per-variant ECU subfolders (e.g. ecus/esp8/<partno>/) -----------------
+# Same hard rule one level deeper: firmware and Ghidra projects never enter git.
+ecus/*/*/firmware/*
+ecus/*/*/ghidra_proj/
+ecus/*/*/frf/
+# Flash containers are firmware. .frf was already covered; .odx / .odx-f / .sgo are the
+# decrypted/unpacked forms of the same copyrighted image and must be ignored too.
+*.odx
+*.sgo
+*.sgm
 # comma/openpilot drive logs (large, private; not repo content)
 *.zst
 *--rlog*
@@ -82,3 +92,38 @@ ecus/*/analysis/indirect_branches.csv
 ecus/*/analysis/pointer_target_audit*.txt
 # bracketed-code recovery entries (regenerable via reproduce.sh step 4c / RecoverBracketedCode.java)
 ecus/*/analysis/bracketed_entries*.txt
+
+# nohup driver output (regenerable)
+ecus/*/analysis/reproduce.out
+
+# --- AL551 (SH-2A TCU): derived firmware VALUES -> gitignored, regenerable from committed scripts.
+# Map/axis CSVs carry firmware map contents (breakpoints, grids) -> derived work. Regenerate
+# with ecus/al551/analysis/extract_maps.py.
+ecus/al551/analysis/torque_maps.csv
+ecus/al551/analysis/shift_curves.csv
+ecus/al551/analysis/shift_blocks.csv
+ecus/al551/analysis/cal_axes.csv
+ecus/al551/analysis/cal_ptr_tables.csv
+# RAM base-pointer image, resolved by emulation (like dispatch_resolved.csv). Regenerate with
+# ecus/al551/analysis/gen_ram_bases.sh (InitEmu.java).
+ecus/al551/analysis/ram_bases.csv
+# reproduce.sh byproducts (regenerated every run)
+ecus/al551/analysis/indirect_branches.csv
+ecus/al551/analysis/orphan_entries_*.txt
+ecus/al551/analysis/bracketed_entries_*.txt
+ecus/al551/analysis/ptr_created_*.txt
+ecus/al551/analysis/pointer_target_audit_*.txt
+ecus/al551/analysis/basereg.log
+ecus/al551/analysis/_run.log
+
+# Repo-root firmware & decoded-plaintext (DERIVED from copyrighted firmware -- never commit).
+# .bin is already ignored; ignore the containing dirs + raw dumps explicitly (defense in depth).
+tcu_8R_plaintext/
+tcu_blocks/
+tcu_blocks_4H/
+benchdump/
+*.zip
+*.exe
+# AL551 flash prep outputs (firmware-derived block payloads)
+ecus/al551/flash/*.bin
+ecus/al551/flash/block_crc32.txt

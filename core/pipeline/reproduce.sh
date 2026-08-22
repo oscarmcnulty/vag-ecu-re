@@ -42,7 +42,7 @@ source "$ROOT/.env.sh"
 # Defaults BEFORE the conf so the conf can override them; arrays default to empty.
 PROCESSOR="tricore:LE:32:tc176x"
 MEMMAP=(); BASEREGS=(); CODE_RANGES=(); LOAD_IMAGE_RANGES=()
-ALIAS_BASE=""; ALIAS_LEN=""; CAL_LO=""; CAL_HI=""; A2L=""; TRACE_MAP_CALLS=""; RESOLVE_DISPATCH=""
+ALIAS_BASE=""; ALIAS_LEN=""; CAL_LO=""; CAL_HI=""; A2L=""; TRACE_MAP_CALLS=""; RESOLVE_DISPATCH=""; COV_FLAGS=""; RAM_DATA_IMAGE=""
 EXPECT_SHA="${EXPECT_SHA:-}"; IMAGE_HI=""
 # shellcheck source=/dev/null
 source "$HERE/ecu.conf"
@@ -223,6 +223,18 @@ else
   skip 6b "COM_DESC_CB not pinned in ecu.conf (signal bindings stay opaque)"
 fi
 
+if [ -n "$RAM_DATA_IMAGE" ] && [ -f "$HERE/$RAM_DATA_IMAGE" ]; then
+  echo "==> 6c apply boot-copied RAM .data pointer tables (SH-2A base-pointer resolution)"
+  # Surgically initialize ONLY the const descriptor pointer-table regions the init stubs
+  # populate, so RAM-base indirection (*(base+off) -> flash) resolves while mutable RAM
+  # scalars stay symbolic. Regenerate the CSV with analysis/extract_ram_bases.py.
+  run 06c_ramimage "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
+    -scriptPath "$SCRIPTS" -postScript ApplyRamDataImage.java "$HERE/$RAM_DATA_IMAGE"
+  say 06c_ramimage '^ApplyRamDataImage'
+else
+  skip 6c "no RAM_DATA_IMAGE (RAM base-pointer resolution disabled)"
+fi
+
 echo "==> 7 decompile every function + manifest (DERIVED WORK -- gitignored)"
 # Clear first: the decompile dir otherwise accumulates stale .c across runs (alias twins from
 # before canonicalization, functions from a reverted experiment), so the corpus on disk
@@ -285,7 +297,7 @@ echo "==> 11 byte-level coverage report -> analysis/coverage.log"
 CALARG=()
 if [ -n "$CAL_LO" ] && [ -n "$CAL_HI" ]; then CALARG=("--cal=$CAL_LO:$CAL_HI"); fi
 run 11_coverage "$PROJ" "$ECU_NAME" -process "$PROG" -noanalysis \
-  -scriptPath "$SCRIPTS" -postScript CoverageStat.java "$LOADBASE" "$IMAGE_HI" "${CALARG[@]}"
+  -scriptPath "$SCRIPTS" -postScript CoverageStat.java "$LOADBASE" "$IMAGE_HI" "${CALARG[@]}" ${COV_FLAGS}
 sed 's/.*java> //;s/ (GhidraScript).*//' "$LOGS/11_coverage.log" > "$HERE/analysis/coverage.log"
 sed -n '/=== image/,/^$/p;/LIVE CONTENT/,/NOT accounted/p' "$HERE/analysis/coverage.log" | sed 's/^/    /'
 

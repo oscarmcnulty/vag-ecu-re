@@ -1,0 +1,56 @@
+address,name,type,comment,source
+0x786960,can_rx_pretask,LABEL,"RX pre/post helper reached from the ISR path; per-index fn-pointer dispatch via table at local 0x47f5 (CALL [0x47f5,IY]).",re-trace
+0x7869cc,can_rx_isr,FUNCTION,"MSCAN0 RX interrupt handler. Reads received ID from CANRXFG (0x160/0x161), rejects RTR/IDE; dispatch loop (count=0x1c) compares (ID<<5 & 0xfff8) against can_rx_accept_id_table (local 0x4857). On match stores index->0x109f and calls can_rx_copy_msg. Clears CANRFLG RXF (0x144<-1).",re-trace
+0x786a5c,can_rx_copy_msg,FUNCTION,"Per-message RX copy: indexed by matched msg index; reads can_rx_dlc_table (0x48cb) + can_rx_bufptr_table (0x48e8), copies CANRXFG data (0x164+) into the message RAM buffer (MOVB loop). Has a fn-pointer hook table at local 0x4922.",re-trace
+0x78aa5c,can_page_dispatch_stub,FUNCTION,"Small stub forwarding to page-0xe3/0xfc routines; part of the RX copy path.",re-trace
+0x7e4846,com_extract_bitfield,FUNCTION,"COM signal bit-field extractor: takes a descriptor ptr, shifts/masks a sub-field out of a source byte. Used by the per-message signal decoders.",re-trace
+0x7e4c15,acc05_epb_decode,FUNCTION,"Decodes ACC_05 (0x10D) byte7 (acc05_rxbuf+7 = 0x10dd) into the CAN signal image: bit4(0x10)=ACC_Betaetigung_EPB -> acc_epb_req_state.0 (+0x2800.1); 3-bit field(mask 0x0e) -> acc_epb_req_state.1-3 (graded status/type, NOT a force cmd); bit6(0x40) -> .4. Sets freshness 0x2805.80/0x2807.1/.2.",re-trace
+0x7e4f7f,esp05_epb_decode,FUNCTION,"Decodes ESP_05 (0x106) byte7 (esp05_rxbuf+7 = 0x10d5): 2-bit ESP_Anforderung_EPB -> esp_epb_req/0x27fc (0/1/2, 3=nicht-verfuegbar -> error clears 0x2804.0); Autohold/Konsistenz bits -> esp_flags(0x283e), validity -> esp_flags_valid(0x283f). Preceded (0x20fc7) by 10-bit ESP pressure decode: (raw-100)*3 -> esp_pressure(0x283b), 0x3ff=invalid.",re-trace
+0x78c8f0,pwm_init,FUNCTION,"PWM peripheral init: PWME(0x300)/POL(0x301)/CLK(0x302)/PRCLK(0x303), prescaler PWMSCLA(0x308), period PWMPER0(0x314).",re-trace
+0x78ce42,pwm_output_set,FUNCTION,"Low-level actuator PWM output setter (channel arg B, <3). Loads duty from per-channel config table (local 0x13e3[idx]) -> PWMDTY0 (0x31c); resets PWMCNT0 (0x30c); enables/disables PWME ch0 (0x300.0) per direction bit from 0x13e2[idx]. Preset/controlled duty -> motor drive (force regulated by current, not duty).",re-trace
+0x78cbf1,actuator_output_driver,FUNCTION,"Iterates the 3 output channels (0..2): per-channel state 0x13e2[ch] + config 0x4c20+, per-channel fault checks (open-load/short/over-current), then calls pwm_output_set + enable helper.",re-trace
+0x78cc67,actuator_channel_diag,FUNCTION,"Per-output-channel diagnostic/fault evaluator (config tables local 0x4c20/0x4c22/0x4c24/0x4c25); sets/clears per-channel fault bits in 0x13e2.",re-trace
+0x78e50a,motor_apply_task,FUNCTION,"Scheduled cyclic task driving the actuator output layer (-> actuator_output_driver). No direct CALL/JSR caller -> invoked via the scheduler function-pointer table (indirect dispatch).",re-trace
+0x78ceb6,clock_pll_init,FUNCTION,"CRG/PLL init: SYNR(0x34)/REFDV(0x35), waits CRGFLG LOCK (0x37.8), enables PLL (0x39.80).",re-trace
+0x78636a,uds_readmem_by_desc,FUNCTION,"UDS ReadMemoryByAddress/DID service: sets up a {src-addr,len} descriptor (0x1075<-addr,0x1073<-len), serves the transfer, scales via EMUL(#0x100); emits UDS NRCs 0x37/0x24/0x12/0x35 on error.",re-trace
+0x004857,can_rx_accept_id_table,LABEL,"CAN RX acceptance-ID table (fixed-low page 0xFD, local 0x4857). 28 x u16, each = (11-bit ID<<5) in RXIDR0:IDR1 form; masked ANDY #0xfff8 before compare. 27 subscribed msgs incl ACC_05(0x10D) ESP_05(0x106) ESP_01(0x100) Getriebe_03(0x102) Motor_03(0x105) Klemmen(0x3C0). See analysis/can_rx_matrix.csv.",re-trace
+0x0048cb,can_rx_dlc_table,LABEL,"Per-message DLC table (local 0x48cb), 1 byte/msg, parallel to can_rx_accept_id_table.",re-trace
+0x0048e8,can_rx_bufptr_table,LABEL,"Per-message dest RAM-buffer pointer table (local 0x48e8), u16/msg; where can_rx_copy_msg deposits each payload (buffers 0x10a0..0x115e).",re-trace
+0x000144,CAN0_CANRFLG,LABEL,"MSCAN0 receive flag register (RXF bit0).",re-trace
+0x000160,CAN0_CANRXFG,LABEL,"MSCAN0 receive foreground buffer (RXIDR0:1 = received ID; +0x164 = data bytes).",re-trace
+0x000170,CAN0_CANTXFG,LABEL,"MSCAN0 transmit foreground buffer.",re-trace
+0x000300,PWM_PWME,LABEL,"PWM enable register (bit0 = motor channel 0).",re-trace
+0x000314,PWM_PWMPER0,LABEL,"PWM channel 0 period.",re-trace
+0x00031c,PWM_PWMDTY0,LABEL,"PWM channel 0 duty (motor drive level).",re-trace
+0x0010a0,can_rx_buffers,LABEL,"Base of the per-message CAN RX RAM buffers (0x10a0..0x115e).",re-trace
+0x0010ce,esp05_rxbuf,LABEL,"ESP_05 (0x106) received payload buffer (8 bytes).",re-trace
+0x0010d6,acc05_rxbuf,LABEL,"ACC_05 (0x10D) received payload buffer (8 bytes).",re-trace
+0x002800,can_sig_image,LABEL,"Base of the decoded CAN RX signal image (RTE/COM style; consumers read via base pointer).",re-trace
+0x002806,acc_epb_req_state,LABEL,"ACC EPB request state: .0=ACC_Betaetigung_EPB, .1-3=graded 3-bit field, .4=aux.",re-trace
+0x00283b,esp_pressure,LABEL,"Decoded ESP_05 brake pressure/decel (10-bit, (raw-100)*3).",re-trace
+0x00283d,esp_epb_req,LABEL,"ESP_Anforderung_EPB (2-bit: 0/1/2, 3=nicht-verfuegbar).",re-trace
+0x00283e,esp_flags,LABEL,"ESP_05 Autohold/Konsistenz boolean flags.",re-trace
+0x00283f,esp_flags_valid,LABEL,"ESP_05 flag validity/freshness bits.",re-trace
+0x7988c9,rte_timer_service,LABEL,"Generic per-instance timer/counter service (INCW struct+0x11 capped at 0xc8=200); called ~115x with a handle arg (LDD #id then CALL 0x88c9,0xe6) - a debounce/timeout primitive, NOT actuator-specific (earlier over-labelled actuator_state_proc).",re-trace
+0x7f47ad,epb01_tx_descriptor,LABEL,"EPB_01 (0x104) transmit descriptor in the fixed-low TX message table: value 0x2080 = (0x104<<5) in TXIDR form. EPB_01 carries EPB_Status(0=open,1=closed,2=moving,3=fault), EPB_Spannkraft(clamp force kN), EPB_Schalterposition(driver switch).",re-trace
+0x78cbb1,epb_actuator_set_channel,FUNCTION,"Actuator per-channel command setter: sets DIRECTION (0x13e2[ch] bit1 = apply vs release) and DUTY (0x13e3[ch] from arg). Called (computed) by the apply logic to command a motor channel.",re-trace
+0x78cb80,epb_actuator_ch_enable,FUNCTION,"Sets channel ENABLE bit (0x13e2[ch] bit0). Motor channel on.",re-trace
+0x78cccb,epb_actuator_ch_disable,LABEL,"Clears channel ENABLE bit (0x13e2[ch] bit0). Called by the per-channel fault handler.",re-trace
+0x78cd37,epb_actuator_ch_enable_b,FUNCTION,"Sets channel ENABLE bit (0x13e2[ch] bit0); alt entry called by 3 apply-logic sites (0x78972d,0x7e88c1,0x7eec4c).",re-trace
+0x78cc78,epb_actuator_ch_fault,FUNCTION,"Per-output-channel fault evaluator (open-load/short/over-current from config 0x4c20+); disables the channel on fault.",re-trace
+0x7e4022,rte_copy_sig_image,FUNCTION,"RTE bulk getter: copies 0x44 words of the decoded CAN signal image (from acc_epb_req_state 0x2806) into a caller snapshot struct. The arbitration reads the snapshot, not the live image.",re-trace
+0x7e4a9e,com_rx_indication,FUNCTION,"Generic AUTOSAR-COM RX-indication handler dispatched per message from can_rx_copy_msg via the hook table 0x4922 (every real msg incl ACC_05 idx20 / ESP_05 idx21 points here). Takes the message descriptor; runs the deadline/alive update + E2E/DLC check (DLC vs can_rx_dlc_table), indexes per-msg config (handle tbl 0x5250, state 0x272c, threshold tbl 0x5277). Signal unpack (acc05_epb_decode etc.) is a separate periodic COM task reached via runtime-computed pointers.",re-trace
+0x7e496d,com_deadline_check,FUNCTION,"Per-message COM deadline/timeout state machine: loops the msg-state array (0x272c flags, counter 0x2731 +10 cap 0xfff5) vs per-msg threshold (0x5277); sets stale flag (0x272d.0) on timeout, resets on receive; handles a consistency branch. Gates whether a received signal is 'alive'.",re-trace
+0x788ae7,rte_input_snapshot_task,FUNCTION,"Cyclic task: enters a critical section, snapshots the CAN signal image (rte_copy_sig_image -> buffer 0x1251 = copy of 0x2806, i.e. the ACC EPB request+status), copies other signal groups (0x123a-0x123c), then runs the processing supervisor (JSR 0x7890a6).",re-trace
+0x788ead,rte_get_acc_betaetigung_epb,FUNCTION,"RTE read accessor: returns ACC_Betaetigung_EPB = snapshot 0x1251 bit0 (the ACC EPB-close request). Invoked by the arbitration SWC through an RTE function-pointer port (no static caller).",re-trace
+0x788eb9,rte_get_acc_epb_field,FUNCTION,"RTE read accessor: returns the ACC_05 3-bit status/mode field = snapshot 0x1251 bits1-3 (>>1). Qualifies the ACC EPB request.",re-trace
+0x788eb3,rte_get_acc_freshness,FUNCTION,"RTE read accessor: returns snapshot 0x1252 bit0 = ACC_05 freshness/validity (set by acc05_epb_decode as 0x2807).",re-trace
+0x78b796,com_rx_unused_trap,LABEL,"SWI-trap stub (block of SWI opcodes) that the RX-indication hook table points to for the len-0 placeholder message slots (idx0/1, ids 0x752/0x700) -- traps if an unused slot is ever dispatched.",re-trace
+0x004922,com_rx_indication_table,LABEL,"Per-message RX-indication callback table (fixed-low, local 0x4922; {addr16 windowed,page8,pad8}). idx follows can_rx_accept_id_table; real msgs -> com_rx_indication(0x7e4a9e), placeholders -> com_rx_special_handler(0x78b796).",re-trace
+0x005277,com_rx_deadline_thresholds,LABEL,"Per-message RX deadline/timeout thresholds (fixed-low, local 0x5277), indexed by msg; used by com_deadline_check.",re-trace
+0x005250,com_msg_handle_table,LABEL,"Per-message COM handle/config index table (fixed-low, local 0x5250), indexed by message.",re-trace
+0x7e544c,com_unpack_3,FUNCTION,"CAN signal-unpack routine (page 0xf9) dispatched from the COM bytecode config table (opcode 0xc2 03 00 len addr). One of 6 per-message unpack callbacks alongside acc05_epb_decode/esp05_epb_decode.",re-trace
+0x7e4dd9,com_unpack_4,FUNCTION,"CAN signal-unpack routine (page 0xf9), COM bytecode-dispatched (0xc2). See com_unpack_bytecode_table.",re-trace
+0x7e4d41,com_unpack_5,FUNCTION,"CAN signal-unpack routine (page 0xf9), COM bytecode-dispatched (0xc2).",re-trace
+0x7e541a,com_unpack_6,FUNCTION,"CAN signal-unpack routine (page 0xf9), COM bytecode-dispatched (0xc2).",re-trace
+0x005340,com_unpack_bytecode_table,LABEL,"COM signal-unpack config as a BYTECODE stream (fixed-low, ~local 0x5340). Opcode 0xc2 03 00 <len> <addr16> = 'call unpack routine at addr, page 0xf9'. This is how acc05_epb_decode(0x7e4c15)/esp05_epb_decode(0x7e4f7f) + 4 others are reached -- the runtime dispatch that had NO static pointer. Resolved statically by parsing 0xc2 records; also runnable via ghidra_scripts/EmulS12X.java.",re-trace

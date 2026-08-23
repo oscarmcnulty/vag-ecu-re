@@ -1,0 +1,5 @@
+can_id,name,dlc,role,source_signals
+0x104,EPB_01,8,"primary EPB status broadcast (10ms)","EPB_Status(0=open/1=closed/2=moving/3=fault) + EPB_Spannkraft(clamp force kN) + EPB_Schalterposition(driver switch) + BZ counter + XOR checksum (seed 0x05)"
+0x5EF,diag_resp,8,"UDS diagnostic response (physical, VCDS addr 53)","tester-present / DID / routine responses"
+0x6FF,diag_resp_fn,8,"UDS functional/broadcast diag response","-"
+0x6D9,diag_resp_2,1,"diag/network mgmt","-"

@@ -127,3 +127,9 @@ benchdump/
 # AL551 flash prep outputs (firmware-derived block payloads)
 ecus/al551/flash/*.bin
 ecus/al551/flash/block_crc32.txt
+
+# frf_extract/: unpacked flash blocks are firmware-derived. The .bin/.odx forms are already
+# ignored above; the extension-less block dumps (FD_0/FD_1/... from odx_extract) dodge those rules.
+ecus/*/frf_extract/FD_*
+# ad-hoc decompile-run stdout logs (JVM banner + DecompileAll output; regenerable, not metadata)
+ecus/*/analysis/redecomp*.out

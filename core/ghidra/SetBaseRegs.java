@@ -32,7 +32,9 @@ public class SetBaseRegs extends GhidraScript {
             int eq = a.indexOf('=');
             if (eq < 1) { println("SetBaseRegs: ignoring unparsable arg '" + a + "'"); continue; }
             String name = a.substring(0, eq).trim();
-            if (!name.matches("[ad]\\d+")) { println("SetBaseRegs: not a register: " + name); continue; }
+            // Accept any register the target processor defines: TriCore a0-a15/d0-d15, and
+            // also V850 gp/tp/ep/r0-r31 etc. getRegister(name) below is the real validator.
+            if (!name.matches("[a-z][a-z0-9]*")) { println("SetBaseRegs: not a register: " + name); continue; }
             regs.put(name, Long.parseLong(a.substring(eq + 1).trim().replaceFirst("^0[xX]", ""), 16));
         }
         if (regs.isEmpty()) {

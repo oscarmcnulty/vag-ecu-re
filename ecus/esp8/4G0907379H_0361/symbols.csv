@@ -1,0 +1,19 @@
+address,name,type,comment,source
+0x00146afc,irq_handler,FUNCTION,"ARM IRQ entry (vector 0x18); reads the interrupt source byte from 0xFFFFFE03 and BXes through irq_handler_table (pointer at 0x146b90).",re-trace
+0x00179eb4,irq_handler_table,DATA,"Per-source interrupt handler pointers; 24/24 valid only under load base 0x18000 (3/24 under base 0).",re-trace
+0x0015e23c,e2e_xor_checksum,FUNCTION,"VAG MLB XOR checksum, byte 0 skipped. Identical 0x1a-byte body to 0190's 0x14b720.",re-trace
+0x0015e268,e2e_crc8h2f,FUNCTION,"AUTOSAR CRC8H2F over bytes 1..n with a per-frame data ID; table at 0x1728a8 (copy 0x1729a8).",re-trace
+0x001728a8,crc8h2f_table,DATA,"CRC8H2F lookup table (poly 0x2F); second copy at 0x1729a8.",re-trace
+0x0015e298,e2e_verify_xor,FUNCTION,"RX XOR checksum verify.",re-trace
+0x0015e2bc,e2e_verify_crc8h2f,FUNCTION,"RX CRC8H2F verify.",re-trace
+0x00158118,crc8h2f_stackcopy,FUNCTION,"Second CRC8H2F variant: copies the 256-byte table to the stack and processes ALL bytes (no byte-0 skip) -- not the CAN E2E path; likely a memory/flash integrity check.",re-trace
+0x001546dc,e2e_tx_crc_D4,FUNCTION,"TX E2E wrapper, CRC8H2F data ID 0xD4.",re-trace
+0x00154724,e2e_tx_crc_AC,FUNCTION,"TX E2E wrapper, CRC8H2F data ID 0xAC.",re-trace
+0x00154770,e2e_tx_xor_91,FUNCTION,"TX E2E wrapper, XOR seed 0x91.",re-trace
+0x001547c0,e2e_tx_xor_02,FUNCTION,"TX E2E wrapper, XOR seed 0x02 -> 0x103 (ESP_03).",re-trace
+0x0015480c,e2e_tx_xor_AA,FUNCTION,"TX E2E wrapper, XOR seed 0xAA -> ESP_02 (0x101).",re-trace
+0x00136d8c,e2e_rx_xor_a,FUNCTION,"RX E2E handler (XOR); one of five. Seed not yet extracted.",re-trace
+0x00136e5c,e2e_rx_xor_b,FUNCTION,"RX E2E handler (XOR); seed not yet extracted.",re-trace
+0x00137058,e2e_rx_xor_c,FUNCTION,"RX E2E handler (XOR); seed not yet extracted.",re-trace
+0x00137158,e2e_rx_xor_d,FUNCTION,"RX E2E handler (XOR); seed not yet extracted.",re-trace
+0x00137254,e2e_rx_xor_e,FUNCTION,"RX E2E handler (XOR); seed not yet extracted.",re-trace

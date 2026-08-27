@@ -1,0 +1,31 @@
+address,name,type,comment,source
+0x00100834,irq_handler,FUNCTION,"ARM IRQ entry (vector table @0x18000+0x18). Switches mode via MSR CPSR_c, saves state, calls irq_dispatch, returns with SUBS pc,lr,#4.",re-trace
+0x0010080c,fiq_handler,FUNCTION,"ARM FIQ entry. Same shape as irq_handler; body at 0x1094d4.",re-trace
+0x00102f90,irq_dispatch,FUNCTION,"Vectored-interrupt dispatcher. Reads the current source number from MMIO 0xFFFFFE03 (controller base 0xFFFFFE04), looks up irq_prio_table[src] (halfword) and writes it to +0x3e, then calls irq_handler_table[src]. Sources <=9 are called directly (BX); >9 go via 0x1074a4.",re-trace
+0x00133ff8,irq_handler_table,DATA,"Per-source interrupt handler pointers (u32). 24/24 entries resolve to code; unused sources share the default handler 0x102dcc. Thumb entries have bit0 set. THIS TABLE PROVES the image load base is 0x18000.",re-trace
+0x00136594,irq_prio_table,DATA,"Per-source priority/mask halfwords consumed by irq_dispatch.",re-trace
+0x00102dcc,irq_default_handler,FUNCTION,"Default (unused-source) interrupt handler; occupies 14 of 24 table slots.",re-trace
+0x0010d7a0,os_isr_enter,FUNCTION,"AUTOSAR/OSEK OS ISR prologue hook, called by every category-2 ISR stub with the ISR descriptor pointer.",re-trace
+0x0010d7de,os_isr_exit,FUNCTION,"AUTOSAR/OSEK OS ISR epilogue hook (pairs with os_isr_enter).",re-trace
+0x00118038,e2e_xor_checksum,FUNCTION,"VAG MLB XOR checksum: chk = seed; for(i=1..len-1) chk ^= data[i]; return chk. Byte 0 (the checksum itself) is skipped. Same algorithm as the verified Q5 bus seeds.",re-trace
+0x00118064,e2e_crc8h2f,FUNCTION,"AUTOSAR CRC8H2F: crc=0xFF; for(i=1..len-1) crc = tab[crc ^ data[i]]; return ~tab[crc ^ dataID]. Table at 0x134304 (second copy 0x134404). Byte 0 skipped; per-frame data ID folded in last.",re-trace
+0x00134304,crc8h2f_table,DATA,"CRC8H2F lookup table (poly 0x2F), 256 bytes. Second copy at 0x134404.",re-trace
+0x00118096,e2e_verify_xor,FUNCTION,"RX check: recompute e2e_xor_checksum over the frame and compare against byte 0. Returns match; also writes the computed value back into byte 0.",re-trace
+0x001180b2,e2e_verify_crc8h2f,FUNCTION,"RX check: recompute e2e_crc8h2f and compare against byte 0. Same write-back quirk as e2e_verify_xor.",re-trace
+0x0010129c,sig_pack,FUNCTION,"Generic signal PACK primitive: sig_pack(buf, value, startBit, bitLen, msbFirstFlag, frameLen). Builds a mask from bitLen<<(startBit&7) and merges bytewise; flag!=1 selects the mirrored (big-endian) byte order.",re-trace
+0x0010138a,sig_unpack,FUNCTION,"Generic signal UNPACK primitive; mirror of sig_pack, used by the RX handlers to extract the checksum (bit 0 len 8) and counter (bit 8 len 4).",re-trace
+0x00121bb6,e2e_counter_next,FUNCTION,"Rolling-counter increment; each TX frame owns a counter state byte (DAT_001065f8 and neighbours).",re-trace
+0x00121bc8,e2e_counter_check,FUNCTION,"RX counter/sequence check; compares the received 4-bit counter against the stored expectation.",re-trace
+0x00106494,e2e_tx_crc_D4,FUNCTION,"TX E2E wrapper: counter -> sig_pack(bit8,len4), then e2e_crc8h2f with data ID 0xD4 -> sig_pack(bit0,len8). 8-byte frame.",re-trace
+0x001064d6,e2e_tx_crc_AC,FUNCTION,"TX E2E wrapper, CRC8H2F data ID 0xAC, 8-byte frame.",re-trace
+0x0010651a,e2e_tx_xor_91,FUNCTION,"TX E2E wrapper, XOR seed 0x91, 8-byte frame.",re-trace
+0x00106562,e2e_tx_xor_02,FUNCTION,"TX E2E wrapper, XOR seed 0x02 -> CAN id 0x103 (ESP_03) by the MLB seed rule (hi^lo).",re-trace
+0x001065a6,e2e_tx_xor_AA,FUNCTION,"TX E2E wrapper, XOR seed 0xAA -> ESP_02 (0x101), a known MLB magic Startwert.",re-trace
+0x000d842a,e2e_rx_crc_F5,FUNCTION,"RX E2E handler: unpack byte0, e2e_verify_crc8h2f with data ID 0xF5, then unpack the 4-bit counter and run e2e_counter_check. Sets status bit 2 (0x04) on checksum failure, bit 3 (0x08) on counter failure, then invokes the registered callback.",re-trace
+0x000d82a4,e2e_rx_xor_10,FUNCTION,"RX E2E handler, XOR seed 0x10, DLC 8.",re-trace
+0x000d8508,e2e_rx_xor_C3,FUNCTION,"RX E2E handler, XOR seed 0xC3, DLC 4 (the only short protected frame).",re-trace
+0x000d85c8,e2e_rx_xor_82,FUNCTION,"RX E2E handler, XOR seed 0x82, DLC 8.",re-trace
+0x000d8694,e2e_rx_xor_1A,FUNCTION,"RX E2E handler, XOR seed 0x1A, DLC 8.",re-trace
+0x000d8764,e2e_rx_xor_86,FUNCTION,"RX E2E handler, XOR seed 0x86, DLC 8.",re-trace
+0x0006b7ac,com_pack_frame_a,FUNCTION,"Per-frame signal composer: copies application signals into the TX frame buffer bit by bit, choosing between live value and replacement value per signal via a status byte bit7 (AUTOSAR COM invalid/substitute handling), double-buffered (+0xe8 / +0x174). Calls e2e_tx_crc_AC at the end.",re-trace
+0x0006b5f6,com_pack_frame_b,FUNCTION,"Second per-frame signal composer; calls e2e_tx_crc_D4.",re-trace

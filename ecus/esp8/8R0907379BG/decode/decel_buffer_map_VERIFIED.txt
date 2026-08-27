@@ -1,0 +1,38 @@
+# VERIFIED decel/ECD signal buffer map (2026-08-23) — from com_decel_double_buffer (0x64ce4)
+# code trace, NOT the invalidated 0xb6a44 descriptor decode. mem_copy(dst<-src, len) per group.
+# src = staging (written upstream), dst = current/stable snapshot consumers read.
+# Known anchors: #10 comfort input 0x403a7c; #15 decel_src_type4(ANB) 0x407bb4;
+#                #18 decel_src_type1 0x403fac; #25 decel_src_type5 0x403d76;
+#                #23 ecd_decel_reference 0x4075a4; #14 anb_request_struct area 0x407c02.
+#  #  dst(current)   src(staging)   len
+   0  0x403a0d       0x403a0a       3
+   1  0x400864       0x400836       46
+   2  0x40144c       0x40141e       46
+   3  0x401a40       0x401a12       46
+   4  0x400e58       0x400e2a       46
+   5  0x403e2a       0x403e20       10
+   6  0x403d66       0x403d5e       8
+   7  0x403fa1       0x403fa0       1
+   8  0x407c14       0x407c10       4
+   9  0x403ab8       0x403ab4       4
+  10  0x403a7c       0x403a6c       16   <- comfort decel input (ecd_decel_request_mag group)
+  11  0x403a30       0x403a28       8
+  12  0x403a3c       0x403a38       4
+  13  0x403ae8       0x403ae4       4
+  14  0x407c02       0x407bf4       14   <- anb_request_struct area
+  15  0x407bb4       0x407bac       8    <- decel_src_type4 (ANB)
+  16  0x407bc0       0x407bbc       4
+  17  0x407743       0x407740       3
+  18  0x403fac       0x403fa4       8    <- decel_src_type1
+  19  0x403fb8       0x403fb4       4
+  20  0x407f52       0x407f50       2
+  21  0x407886       0x407880       6
+  22  0x403f9f       0x403f9e       1
+  23  0x4075a4       0x40759e       6    <- ecd_decel_reference
+  24  0x4075b9       0x4075b8       1
+  25  0x403d76       0x403d6e       8    <- decel_src_type5
+  26  0x403d82       0x403d7e       4
+  27  0x403d00       0x403cfc       4
+  28  0x404080       0x40407c       4
+  29  0x4039f8       0x4039e8       16
+  30  0x403d58       0x403d54       4

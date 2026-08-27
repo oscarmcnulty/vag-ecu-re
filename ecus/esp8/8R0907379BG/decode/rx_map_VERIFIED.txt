@@ -1,0 +1,66 @@
+# ESP8 8R0907379BG — RX documentation (2026-08-23)
+# Attempted: emulate COM init to materialize the runtime RX routing table and dump it.
+# Result: NOT achievable (see §1). Delivered instead: the RX inventory (§2), the verified
+# openpilot brake RX chain (§3), and the RX signal-buffer identification method + list (§4).
+# Every entry below traces to a code path or emulated RAM — no fabricated mappings.
+
+## §1  Emulation attempt — VERDICT: init does not materialize a dumpable table
+- Stubbed the RTOS allocator (FUN_000a29dc/a2a3c/a11ee — handle-based, uses LR-relative
+  computed dispatch `(*(code*)((in_lr&~3)+0x5fc))()`) with a bump allocator and ran the three
+  COM-init orchestrators (FUN_0006bb22, FUN_000892a0, FUN_0006b936) under Unicorn.
+- All ran to completion but wrote ONLY small queue-state fields (0x4069d0-0x4069e7), NOT the
+  0x40a1a8 descriptor table. The real table-builder is reached THROUGH the allocator/handle
+  path (which had to be stubbed) and is not one of the reachable orchestrators.
+- Confirmed from the static side too: the ACC_10 decel signal 0x405462 has NO static writer —
+  it is deposited by the runtime COM routing at a computed address. So neither emulation
+  (of the orchestrators) nor static xref yields the per-ID {message->buffer} routing table.
+- To materialize it would require faithfully emulating the entire COM/PDU init tree incl. the
+  handle allocator with LR-relative trampolines — out of scope / high risk, low incremental
+  value for the openpilot goal (the brake path is fully traced, §3).
+
+## §2  RX/COM message inventory (msg-config 0xa9fc0, 214 valid IDs, f0=CAN ID — VERIFIED)
+Direction is NOT cleanly encoded in one field; f2>>24 = handler/E2E class (anchors:
+ACC_10 0x117 RX -> class 0x01; ESP_08 0x11e TX -> class 0x02):
+  class 0x01 (128): 0x98,0x99,0x9a,0xb5,0xb7,0xb8,0xbc,0xbd,0xbe,0xc7,0xc9,0xca,0xcf,0xd1,0xd3,
+    0xd4,0xd5,0xd7-0xdf,0xe0,0xe1,0xe3,0xe4,0xe5,0xe7,0xe9,0xeb,0xed,0xef,0xf1-0xf4,0xf6,0x117,
+    0x119,0x11d,0x11f-0x123,0x127-0x129,0x12d,0x133,0x135-0x137,0x13f-0x164(subset),0x17d-0x17f,
+    0x18a,0x18f,0x193,0x1a5-0x1ab,0x1bd,0x1c5-0x1da(even),0x220-0x24a(subset)  [incl ACC_10 RX]
+  class 0x02 (29): 0xb6,0xbf,0xc4,0xc6,0xc8,0xd0,0xd2,0xd6,0xe2,0xe6,0xe8,0xea,0xee,0xf0,0xf5,
+    0x118,0x11e,0x124,0x12a,0x12e,0x134,0x155,0x161,0x18b,0x190,0x221,0x236,0x23a,0x23e  [incl ESP_08 TX]
+  class 0x05 (41): 0xba,0xbb,0xc0,0xc1,0xc2,0x125,0x126,0x12b,0x12c,0x12f-0x131,0x180-0x185,0x18c,
+    0x191,0x192,0x1ac-0x1b0,0x1b4-0x1b8,0x229-0x22d,0x254-0x258
+  class 0x21 (9): 0x1a3,0x1a4,0x243-0x249      class 0x64 (3): 0x142,0x15f,0x1c0
+  class 0x76 (4): 0x233,0x234,0x264,0x265      (diag/special)
+Full per-ID list reproducible from 0xa9fc0 (223 recs x0x14, f0=id, f4=state_ram 0x404554+4i).
+
+## §3  Verified openpilot brake RX chain (code-traced, HIGH confidence)
+  ACC_10 (CAN 0x117, RX)
+    -> [runtime COM deposit, computed-addr] -> 0x405462  (CAN-side decel signal; no static writer)
+    -> decel_stage_writer (0x57044)  [reads 0x405462,0x403a48,0x403ab4,0x403ddc]
+    -> staging 0x403a70/72/74/76  -> com_decel_double_buffer (0x64ce4)
+    -> 0x403a7c..0x403a8c  -> decel_src_comfort_calc (0x88a88) -> decel_src_comfort (type2)
+    -> decel_req_assemble (0x86798) -> decel_req_arbitrate (0x94a70) -> ecd_state_machine (0x633fc)
+    -> ecd pressure executors -> 6 setpoints 0x403d94.
+  (full decel/ECD buffer list: decode/decel_buffer_map_VERIFIED.txt)
+
+## §4  RX signal-buffer identification (method + partial list)
+RX signal buffers have the signature: READ by consumer fns, NO static writer (COM deposits them
+by computed address). This DISTINGUISHES real RX buffers from work/filter vars (which have a
+static RMW writer). Enumerated for 0x405400-0x405fff: 259 such buffers. Notable:
+  0x405462-66  ACC_10 decel signal (readers FUN_0001ef4c,25c88,2de5c,3488c) -> §3
+  0x40542c-5a  (readers FUN_00012590,2a9b8,35d24,43228) large multi-signal block
+  0x40550e-18, 0x4055ba-ca, 0x4055e8-ef, 0x4055fa-60c  conditioned RX signal blocks (ANB/ESP inputs)
+  0x405d1b-30  decel-source status block (-> decel_src_status_gateway 0x9d9f8)
+  0x405e42-ebd TX signal storage (readers=com_signal_compose) — ESP_05 @0x405e81 lives here (TX)
+NOTE: this signature IDs RX *storage* but does NOT attribute each buffer to a CAN ID — that link
+is the runtime routing (§1) which is not statically recoverable. Per-ID attribution requires a
+per-consumer trace (as done for ACC_10 in §3) for each message of interest.
+
+## Bottom line
+- A complete, statically-attributed {CAN ID -> signal -> buffer} RX table does NOT exist to
+  recover: the routing is runtime-built (handle allocator) and the final signal deposit is at
+  computed addresses. Both emulation-of-orchestrators and static xref confirm this.
+- What IS documented: the 214-ID RX/COM inventory (§2), the RX signal-buffer set + method (§4),
+  and the fully-traced ACC_10 brake path (§3) — which is what the openpilot goal needs.
+- To document any additional specific message: per-consumer trace from its signal buffer
+  (find no-writer buffer -> its reader fns -> follow to meaning), the §3 method.

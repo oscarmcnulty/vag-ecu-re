@@ -1,0 +1,38 @@
+# RX routing materialization attempt (#3, recording-allocator emulation) — 2026-08-23
+# RESULT: DID NOT converge. The raw CAN-frame -> RX-buffer routing was NOT materialized.
+# No {CAN-ID -> RX buffer} rows are asserted below — none could be proven, and none are fabricated.
+
+## What was tried
+1. Boot-from-reset (map-on-demand, 5M insn): 0 RAM writes — the reset path needs PLL/watchdog/
+   peripheral bring-up the function-level harness doesn't provide; it never reaches COM init.
+2. Recording/backing bump-allocator over FUN_000a29dc/a2a3c/a11ee, then run the COM-init
+   orchestrators (FUN_0006bb22/000892a0/0006b936): BLOCKED — see mechanism below.
+3. Marked-frame through can_rx_indication (0x8e3ec): it copies the frame to the dest ptr PASSED IN
+   (register r5) by the dispatcher; it does NOT self-derive the buffer. So the buffer binding lives
+   in the dispatcher/runtime table, not in this function.
+
+## PROVEN blocker (mechanism, not just "it failed")
+- The COM allocator FUN_000a29dc is a Thumb->ARM interworking veneer (bytes 4778 46c0 = `bx pc;nop`)
+  with LR-relative computed dispatch — cannot be executed straight in the function-level harness.
+- It returns a 2-BYTE HANDLE that callers store as a 2-byte field. PROVEN in FUN_0006b908:
+      undefined2 *puVar1 = DAT_0006bbf0;
+      uVar2 = FUN_000a29dc(2);      // uVar2 is undefined2 (16-bit)
+      *puVar1 = uVar2;              // stored as 2 bytes
+  => A backing bump-allocator returning a full 32-bit RAM address FAILS: the address truncates to
+     16 bits when stored. The routing tables (0x4069b4->0x40a1a8, and the runtime group table) are
+     HANDLE-INDEXED, so materializing them requires emulating the full handle-allocation AND
+     handle->address resolution machinery (the veneer + resolver), not just an identity stub.
+     This is the same wall the prior stub attempt hit, now with the exact cause identified.
+
+## Why the static flash table doesn't substitute
+- Flash group table @0xb6a44 (stride 0x18) has 23 records with a RAM buffer in +0, BUT those are the
+  SAME internal work/filter vars already invalidated (0x40918a, 0x408f1e, 0x408e4a ...), not raw RX
+  frame buffers. And its +0x16/+0x17 fields do NOT match the {type in 4/5, sel in 1/2} that
+  FUN_000501d4 tests -> FUN_000501d4 matches on the RUNTIME (handle-resolved) table, not this flash
+  one. So static decode of 0xb6a44 does not yield {CAN-ID -> RX buffer} either.
+
+## Honest verdict
+RX routing is not materializable with the available function-level emulation. To crack it one would
+need EITHER a full-system emulation that survives peripheral bring-up and runs real init (so the real
+allocator/resolver populate the tables), OR a bench/live capture. Every static heuristic and this
+emulation converge on the same structural cause: 2-byte-handle, runtime-resolved COM routing.

@@ -1,0 +1,268 @@
+# ============================================================================
+# !!! INVALIDATED 2026-08-23 — DO NOT USE AS A CAN RX MAP !!!
+# Writer-verification pass (EspRefsRange over all 173 buffers) proved these
+# addresses are NOT received-CAN signal destinations:
+#   - 0 / 173 overlap the addresses com_signal_compose actually writes (the real
+#     COM signal storage = compact clusters 0x405e42-0x405ebd [holds ESP_05
+#     @0x405e81], 0x406cd2-0x406d4a, 0x408ef1-0x408f06, ...).
+#   - 99 / 173 are RMW internal work/filter vars (the 0x40926c pattern, written+read
+#     by one control fn); 44 are computed outputs; 30 have no writer.
+# => the 0xb6a44 "{count,buffer,encoding}" decode does NOT bind CAN bytes to RX
+#    buffers. Most likely 0xb6a44 is a measurement/DAQ signal-pointer table
+#    (pointers to internal signals for a measurement tool), not an RX descriptor.
+# This is the SAME error that produced the 0x40926c->0x110 misidentification —
+# now shown systemic, not isolated. Rebuild any signal map from com_signal_compose's
+# write targets + msg-config 0xa9fc0, not from this file.
+# ============================================================================
+# ESP8 8R0907379BG COM RX signal map -- reconstructed from flash descriptors (0xb6a44 stream)
+# format: {count, buffer, encoding} triples; frame-byte offset implicit in order; enc=0 = msg terminator
+# 173 signal descriptors
+
+MSG 0: 12 frame-bytes
+    byte[0..0] -> 0x406cc8
+    byte[1..1] -> 0x406cc9
+    byte[2..5] -> 0x406ccc
+    byte[6..11] -> 0x407cdc
+
+MSG 1: 8 frame-bytes
+    byte[0..5] -> 0x407ca8
+    byte[6..6] -> 0x407cc0
+    byte[7..7] -> 0x407cc1
+
+MSG 2: 8 frame-bytes
+    byte[0..0] -> 0x407cc2
+    byte[1..1] -> 0x407cc3
+    byte[2..2] -> 0x407ccc
+    byte[3..3] -> 0x407ccd
+    byte[4..5] -> 0x407cd0
+    byte[6..7] -> 0x407cd2
+
+MSG 3: 5 frame-bytes
+    byte[0..0] -> 0x407cce
+    byte[1..1] -> 0x407cb9
+    byte[2..2] -> 0x407cba
+    byte[3..4] -> 0x407cbc
+
+MSG 4: 8 frame-bytes
+    byte[0..0] -> 0x408718
+    byte[1..1] -> 0x408719
+    byte[2..2] -> 0x40871a
+    byte[3..3] -> 0x40871b
+    byte[4..4] -> 0x40871c
+    byte[5..5] -> 0x40871d
+    byte[6..6] -> 0x40871e
+    byte[7..7] -> 0x40871f
+
+MSG 5: 9 frame-bytes
+    byte[0..0] -> 0x408720
+    byte[1..1] -> 0x408721
+    byte[2..2] -> 0x408722
+    byte[3..3] -> 0x408723
+    byte[4..4] -> 0x408724
+    byte[5..8] -> 0x408728
+
+MSG 6: 8 frame-bytes
+    byte[0..0] -> 0x40584c
+    byte[1..1] -> 0x405867
+    byte[2..2] -> 0x4058ce
+    byte[3..3] -> 0x4058cf
+    byte[4..4] -> 0x4058d0
+    byte[5..6] -> 0x4058d2
+    byte[7..7] -> 0x4058d5
+
+MSG 7: 7 frame-bytes
+    byte[0..0] -> 0x4058d6
+    byte[1..1] -> 0x4058eb
+    byte[2..2] -> 0x4058ec
+    byte[3..3] -> 0x4059f0
+    byte[4..4] -> 0x4059f1
+    byte[5..5] -> 0x4059f2
+    byte[6..6] -> 0x4059ea
+
+MSG 8: 8 frame-bytes
+    byte[0..0] -> 0x407084
+    byte[1..1] -> 0x407086
+    byte[2..2] -> 0x407087
+    byte[3..3] -> 0x407089
+    byte[4..4] -> 0x40708c
+    byte[5..5] -> 0x407065
+    byte[6..6] -> 0x407066
+    byte[7..7] -> 0x40706c
+
+MSG 9: 4 frame-bytes
+    byte[0..1] -> 0x407070
+    byte[2..2] -> 0x407072
+    byte[3..3] -> 0x407078
+
+MSG 10: 9 frame-bytes
+    byte[0..1] -> 0x409014
+    byte[2..2] -> 0x409016
+    byte[3..4] -> 0x409018
+    byte[5..6] -> 0x40901a
+    byte[7..8] -> 0x40901c
+
+MSG 11: 8 frame-bytes
+    byte[0..1] -> 0x40901e
+    byte[2..3] -> 0x409020
+    byte[4..5] -> 0x409022
+    byte[6..7] -> 0x409024
+
+MSG 12: 11 frame-bytes
+    byte[0..1] -> 0x409026
+    byte[2..2] -> 0x409028
+    byte[3..10] -> 0x4080cc
+
+MSG 13: 8 frame-bytes
+    byte[0..7] -> 0x4080d4
+
+MSG 14: 4 frame-bytes
+    byte[0..3] -> 0x40918c
+
+MSG 15: 8 frame-bytes
+    byte[0..1] -> 0x40918a
+    byte[2..2] -> 0x409181
+    byte[3..3] -> 0x409182
+    byte[4..4] -> 0x409183
+    byte[5..5] -> 0x409184
+    byte[6..6] -> 0x409185
+    byte[7..7] -> 0x409186
+
+MSG 16: 8 frame-bytes
+    byte[0..0] -> 0x409187
+    byte[1..1] -> 0x408f1e
+    byte[2..2] -> 0x408f1f
+    byte[3..3] -> 0x408f20
+    byte[4..4] -> 0x408f21
+    byte[5..5] -> 0x408f22
+    byte[6..6] -> 0x408f23
+    byte[7..7] -> 0x408f24
+
+MSG 17: 1 frame-bytes
+    byte[0..0] -> 0x408f25
+
+MSG 18: 8 frame-bytes
+    byte[0..0] -> 0x408e4a
+    byte[1..1] -> 0x408e4e
+    byte[2..2] -> 0x408e4f
+    byte[3..3] -> 0x408e50
+    byte[4..4] -> 0x408e51
+    byte[5..5] -> 0x408e52
+    byte[6..6] -> 0x408e53
+    byte[7..7] -> 0x408e56
+
+MSG 19: 8 frame-bytes
+    byte[0..3] -> 0x4090d0
+    byte[4..7] -> 0x4090d4
+
+MSG 20: 5 frame-bytes
+    byte[0..0] -> 0x4090d8
+    byte[1..4] -> 0x4090dc
+
+MSG 21: 8 frame-bytes
+    byte[0..0] -> 0x4090e0
+    byte[1..1] -> 0x4090e1
+    byte[2..2] -> 0x4090e2
+    byte[3..3] -> 0x4085d8
+    byte[4..5] -> 0x408610
+    byte[6..6] -> 0x408612
+    byte[7..7] -> 0x408613
+
+MSG 22: 3 frame-bytes
+    byte[0..0] -> 0x408614
+    byte[1..2] -> 0x408616
+
+MSG 23: 8 frame-bytes
+    byte[0..0] -> 0x4088fa
+    byte[1..1] -> 0x4088fc
+    byte[2..2] -> 0x4088fd
+    byte[3..3] -> 0x4088fe
+    byte[4..4] -> 0x4088ff
+    byte[5..5] -> 0x408900
+    byte[6..6] -> 0x4091fc
+    byte[7..7] -> 0x4091fd
+
+MSG 24: 4 frame-bytes
+    byte[0..0] -> 0x4091fe
+    byte[1..1] -> 0x4091f4
+    byte[2..2] -> 0x4091f7
+    byte[3..3] -> 0x4091f8
+
+MSG 25: 6 frame-bytes
+    byte[0..0] -> 0x4039ac
+    byte[1..1] -> 0x4039ad
+    byte[2..2] -> 0x4039af
+    byte[3..3] -> 0x4039b0
+    byte[4..4] -> 0x4039b1
+    byte[5..5] -> 0x4039b2
+
+MSG 26: 8 frame-bytes
+    byte[0..0] -> 0x40926a
+    byte[1..2] -> 0x40926c  <== radar AEB decel target (anb_target_from_can 0x8390c)
+    byte[3..4] -> 0x40926e
+    byte[5..6] -> 0x409270
+    byte[7..7] -> 0x409272
+
+MSG 27: 6 frame-bytes
+    byte[0..0] -> 0x409273
+    byte[1..1] -> 0x40773c
+    byte[2..2] -> 0x40773d
+    byte[3..3] -> 0x407735
+    byte[4..4] -> 0x40773a
+    byte[5..5] -> 0x40773b
+
+MSG 28: 8 frame-bytes
+    byte[0..3] -> 0x408e7c
+    byte[4..4] -> 0x408e79
+    byte[5..5] -> 0x408e7a
+    byte[6..6] -> 0x408e64
+    byte[7..7] -> 0x408e65
+
+MSG 29: 5 frame-bytes
+    byte[0..0] -> 0x408f54
+    byte[1..1] -> 0x408f55
+    byte[2..2] -> 0x408f40
+    byte[3..3] -> 0x408f41
+    byte[4..4] -> 0x408f42
+
+MSG 30: 5 frame-bytes
+    byte[0..0] -> 0x409469
+    byte[1..1] -> 0x40946a
+    byte[2..2] -> 0x40946b
+    byte[3..3] -> 0x40946c
+    byte[4..4] -> 0x40946d
+
+MSG 31: 3 frame-bytes
+    byte[0..0] -> 0x4092f8
+    byte[1..2] -> 0x4092fa
+
+MSG 32: 2 frame-bytes
+    byte[0..1] -> 0x4092fc
+
+MSG 33: 2 frame-bytes
+    byte[0..0] -> 0x4092fe
+    byte[1..1] -> 0x4092ff
+
+MSG 34: 5 frame-bytes
+    byte[0..0] -> 0x409191
+    byte[1..1] -> 0x409192
+    byte[2..3] -> 0x409194
+    byte[4..4] -> 0x409196
+
+MSG 35: 4 frame-bytes
+    byte[0..0] -> 0x40947c
+    byte[1..1] -> 0x40947d
+    byte[2..2] -> 0x40947e
+    byte[3..3] -> 0x40947f
+
+MSG 36: 8 frame-bytes
+    byte[0..0] -> 0x408a8a
+    byte[1..1] -> 0x408a8c
+    byte[2..2] -> 0x408a8e
+    byte[3..3] -> 0x408a90
+    byte[4..4] -> 0x409110
+    byte[5..5] -> 0x409112
+    byte[6..6] -> 0x409118
+    byte[7..7] -> 0x40911a
+
+MSG 37: 2 frame-bytes
+    byte[0..1] -> 0x407424

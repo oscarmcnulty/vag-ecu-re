@@ -1,0 +1,20 @@
+address,name,type,comment,source
+0x00133eac,irq_handler,FUNCTION,"ARM IRQ entry (vector 0x18). Saves state, calls 0x135f5c, then reads the interrupt source byte from 0xFFFFFE03 and BXes through irq_handler_table. Same controller as the ESP9 image.",re-trace
+0x001aa05c,irq_handler_table,DATA,"Per-source interrupt handler pointers (u32); pointer held at 0x133f40. All 24 entries resolve to code only with load base 0x18000 -- this is what pins the base.",re-trace
+0x0014b720,e2e_xor_checksum,FUNCTION,"VAG MLB XOR checksum: chk = seed; for(i=1..len-1) chk ^= data[i]. Byte 0 skipped. Functional twin of the ESP9's 0x118038 (identical 0x1a-byte body).",re-trace
+0x0014b74c,e2e_crc8h2f,FUNCTION,"AUTOSAR CRC8H2F: crc=0xFF; for(i=1..len-1) crc=tab[crc^data[i]]; return ~tab[crc^dataID]. Table at 0x1a24d4 (copy 0x1a25d4). Twin of the ESP9's 0x118064.",re-trace
+0x001a24d4,crc8h2f_table,DATA,"CRC8H2F lookup table (poly 0x2F); second copy at 0x1a25d4.",re-trace
+0x0014b77c,e2e_verify_xor,FUNCTION,"RX check: recompute the XOR checksum and compare against byte 0 (writes the computed value back). Twin of the ESP9's 0x118096.",re-trace
+0x0014b7a0,e2e_verify_crc8h2f,FUNCTION,"RX check: recompute CRC8H2F and compare against byte 0. Twin of the ESP9's 0x1180b2.",re-trace
+0x0012d27c,sig_pack,FUNCTION,"Generic signal pack primitive (buf, value, startBit, bitLen, msbFirstFlag, frameLen). Equivalent of the ESP9's 0x10129c.",re-trace
+0x00150184,e2e_counter_next,FUNCTION,"Rolling-counter increment per TX frame; state bytes around DAT_00141c7c.",re-trace
+0x00141af0,e2e_tx_crc_D4,FUNCTION,"TX E2E wrapper: counter -> sig_pack(bit8,len4); e2e_crc8h2f data ID 0xD4 -> sig_pack(bit0,len8). Same data ID as the ESP9's 0x106494.",re-trace
+0x00141b38,e2e_tx_crc_AC,FUNCTION,"TX E2E wrapper, CRC8H2F data ID 0xAC. Same as the ESP9's 0x1064d6.",re-trace
+0x00141b84,e2e_tx_xor_91,FUNCTION,"TX E2E wrapper, XOR seed 0x91.",re-trace
+0x00141bd4,e2e_tx_xor_02,FUNCTION,"TX E2E wrapper, XOR seed 0x02 -> CAN id 0x103 (ESP_03) by the MLB seed rule.",re-trace
+0x00141c20,e2e_tx_xor_AA,FUNCTION,"TX E2E wrapper, XOR seed 0xAA -> ESP_02 (0x101), a known MLB magic Startwert.",re-trace
+0x00127358,e2e_rx_crc_F5,FUNCTION,"RX E2E handler, CRC8H2F data ID 0xF5 -- same as the ESP9's 0xd842a.",re-trace
+0x001271a8,e2e_rx_xor_10,FUNCTION,"RX E2E handler, XOR seed 0x10, DLC 8.",re-trace
+0x00127278,e2e_rx_xor_8B,FUNCTION,"RX E2E handler, XOR seed 0x8B, DLC 8. NOT present in the ESP9 image (which instead carries 0xC3 and 0x86).",re-trace
+0x0012746c,e2e_rx_xor_82,FUNCTION,"RX E2E handler, XOR seed 0x82, DLC 8.",re-trace
+0x0012756c,e2e_rx_xor_1A,FUNCTION,"RX E2E handler, XOR seed 0x1A, DLC 8.",re-trace

@@ -1,0 +1,54 @@
+plaintext image: base 0x008010, len 0xB7FF0, end 0x0C0000
+
+# entropy map (16 KB windows)
+  0x00008010  ent 7.80
+  0x0000C010  ent 7.78
+  0x00010010  ent 7.89
+  0x00014010  ent 7.58
+  0x00018010  ent 7.73
+  0x0001C010  ent 7.76
+  0x00020010  ent 7.93
+  0x00024010  ent 7.87
+  0x00028010  ent 7.93
+  0x0002C010  ent 7.90
+  0x00030010  ent 7.86
+  0x00034010  ent 7.92
+  0x00038010  ent 7.81
+  0x0003C010  ent 7.93
+  0x00040010  ent 7.93
+  0x00044010  ent 7.89
+  0x00048010  ent 7.91
+  0x0004C010  ent 7.87
+  0x00050010  ent 7.91
+  0x00054010  ent 7.94
+  0x00058010  ent 7.91
+  0x0005C010  ent 7.82
+  0x00060010  ent 7.93
+  0x00064010  ent 7.92
+  0x00068010  ent 7.35
+  0x0006C010  ent 7.05
+  0x00070010  ent 5.84
+  0x00074010  ent 6.85
+  0x00078010  ent 6.78
+  0x0007C010  ent 3.93
+  0x00080010  ent -0.00
+  0x00084010  ent -0.00
+  0x00088010  ent -0.00
+  0x0008C010  ent -0.00
+  0x00090010  ent -0.00
+  0x00094010  ent -0.00
+  0x00098010  ent -0.00
+  0x0009C010  ent -0.00
+  0x000A0010  ent -0.00
+  0x000A4010  ent -0.00
+  0x000A8010  ent -0.00
+  0x000AC010  ent -0.00
+  0x000B0010  ent -0.00
+  0x000B4010  ent -0.00
+  0x000B8010  ent -0.00
+  0x000BC010  ent 0.27
+
+# instruction-alignment heuristic
+  zero-byte density by offset%%4: 0:0.363, 1:0.361, 2:0.361, 3:0.362
+  recurring 'd9 34' opcode: 223 occurrences; gap histogram (gap:count) top: [(37, 8), (27, 10), (14, 12), (12, 14), (10, 16), (9, 20), (7, 26), (6, 22)]
+  -> even gaps dominate => 2-byte instruction alignment; flat mod-4 => not 4-byte PPC

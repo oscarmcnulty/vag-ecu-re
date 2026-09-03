@@ -1,0 +1,6 @@
+part    : 8R0907468___0060
+version : 0060
+block 0 : addr=0x008010 crypt=0x01 len=0xB7FF0 (declen=0xB7FF0)
+
+descrambled 753648 bytes; flash base 0x008010, end 0x0C0000
+round-trip byte-exact: True

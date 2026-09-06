@@ -99,3 +99,109 @@ structural reason the wall persists.
   because handles weren't backed.)
 - **#10 full static init reversal**: hand-reverse the init table-walk over the 0x503c0 island +
   0xa7e48/0xaea38 PB-config. Tedious but no emulation risk.
+
+## SESSION 2026-09-02 — COM engine structure decoded; the wall is now precisely localized
+
+Goal: a software-only decode of CAN-ID -> signal buffer (esp. EPB_01 -> the type5 decel source).
+Progress this session narrows the wall from "the whole COM layer" to ONE specific mechanism.
+
+### What is now PROVEN static (decodable without a bench)
+- **Descriptor format (from the consumer code).** `com_signal_commit` (0x4fee8) descriptor =
+  `{[0]=init/value(<<0x12 encoded), [2]=SRC ptr, [3]=group-ready bit, [4]=DEST ptr, [5]=len}`;
+  it byte-copies `SRC -> DEST+8` for `len` bytes. `com_group_ready` (0x4fff8): group table stride
+  **0x18**, `+4`=ready mask, `+0x10`=status-obj ptr (status at `+8`).
+- **The per-message COM handlers reference STATIC FLASH tables.** `com_pdu_router_9546e` (0x9546e,
+  handles PDU-handle `<0xd`, group `0x3d`) loads `com_pdu_descriptor` **0xb6ffc** and
+  `com_sig_group_table` **0xb6a44** directly from its literal pool (0x95544/0x95548). So the
+  **src/dest/len signal-commit routing is static**, not runtime-allocated.
+- **0xb6ffc is used by exactly one function** (the router); **0xb6a44 is the central table**, walked
+  by ~9 COM-engine fns (0x503d4/0x5f5e8/0x7648c/0x82884/0x95548/...). The COM engine is centralized.
+
+### The residual wall — localized to ONE edge
+The static descriptors give **SRC -> DEST** commit copies (internal plumbing). The part that is NOT
+static is the **raw CAN frame -> first SRC buffer** deposit:
+- `can_rx_indication` (0x8e3ec) copies the frame to a buffer resolved via
+  `*(routing_table_0x4069b4 + handle*0x10 + 8)` — a **runtime-allocated, 2-byte-handle-indexed** table
+  (`0x4069b4 -> 0x40a1a8`), populated at init by the handle allocator `FUN_000a29dc` (returns a
+  16-bit handle; Thumb->ARM veneer + LR-relative dispatch).
+- The decel sources confirm it: `type5` current `0x403d76` <- staging `0x403d6e` (static double-buffer
+  `com_decel_double_buffer` 0x64ce4), but **`0x403d6e` has NO static writer and NO flash-descriptor
+  dest pointer** -> it is deposited at the runtime-resolved address. Same for the `type5` enable
+  `0x403d7d`. So **EPB_01 -> type5 cannot be closed by static xref** — only the deposit edge is missing.
+
+### The two software-only ways to close that one edge (no bench/car)
+1. **Recording allocator + resolver stub (definitive; prior attempt stopped exactly here).** In the
+   Unicorn harness, hook `FUN_000a29dc` to return an incrementing **16-bit** handle while recording
+   `handle -> a real backing address` in a side map, AND hook the **resolver** (handle->address; the
+   `0x4069b4[handle*0x10+8]` dereference path used by `can_rx_indication`) to return the backing
+   address. Then run COM init so `0x4069b4/0x40a1a8` and the group table materialize; dump
+   `{handle -> buffer}`. Prior stub failed only because it returned 32-bit addresses that truncated to
+   the 2-byte handle field — the fix is the separate side-map + resolver hook. Then a marked-frame
+   injection through `can_rx_indication` per handle gives `{handle -> SRC buffer}`, and the handle's
+   CAN-id comes from the mailbox/id-array. TARGETS: alloc `0xa29dc`, routing `0x4069b4`, resolver in
+   `0x8e3ec`, id-array `0xafae0`.
+2. **Per-handler marked emulation (partial; covers statically-descriptored PDUs only).** Seed the
+   group-state RAM + a marked SRC, run a per-message handler (e.g. `com_pdu_router_9546e`), and read
+   where the commit writes (`DEST` from the static descriptor). Binds the handle-`<0xd` group's
+   signals without the allocator, but not the runtime-deposited SRC edge.
+
+VERDICT: a purely STATIC decode is blocked at the single runtime-handle frame-deposit edge; the
+software-only crack is build #1 (resolver-stub recording emulation), which is a bounded harness task
+with all targets identified above. Ties [[esp8-abs-firmware]] SBOOT note (a BDM/SBOOT dump hands you
+these same runtime tables directly, and also the valve MMIO map).
+
+## CORRECTION (same session, later) — the "runtime-handle wall" was a DECOMPILER ARTIFACT
+
+The section immediately above (and the 18-turn prior belief in an unresolvable 2-byte-handle COM
+allocator) is **WRONG**. Disassembled raw, the "allocator veneers" are trivial Thumb->ARM thunks:
+- `FUN_000a29dc` bytes `4778 46c0 eafe9d26` = `bx pc; mov r8,r8; b 0x49e80` -> **0x49e80 = byteswap16**
+  `((x&0xff)<<8)|((x>>8)&0xffff)`.
+- `FUN_000a2a3c` -> `0x49e64` = **memset(ptr,0,n)**.
+- `FUN_000a29e4` -> `0x4a48c` = **bounds check** `x < *0x4069fc`.
+The decompiler mis-rendered the `bx pc` interworking thunk as an `(lr&~3)+0x5fc` computed call, and
+prior work read that as an opaque handle allocator. There is **no runtime handle allocator**.
+
+**The real mechanism (config-driven, software-recoverable):**
+- `FUN_0006b936` is a **bump allocator**: it iterates messages via the object table (`*0x4069b4`,
+  stride 0x10: `+6`=signal count, `+8`=descriptor-array ptr, `+0xf` bit5 valid), and per signal
+  computes a size from the descriptor (`+0xd`=byte count) then assigns `descriptor[2] = bump_ptr`
+  and advances. `FUN_000a29dc` inside it is just the byteswap that stores the size big-endian.
+- The object table + signal descriptors are **`.data` globals initialized from flash** (the
+  `*0x4069b4` base is not written by any code that references the literal -> C-runtime `.data` copy).
+- The COM PB-config with **explicit RAM signal-buffer addresses is in flash ~0xb5da0-0xb7790**
+  (records `{type, RAM signal-buffer addr, config=…46c0}`; the recurring `0x46c0` COM constant marks
+  them). This region holds `com_sig_group_table` (0xb6a44) and `com_pdu_descriptor` (0xb6ffc).
+
+**Consequence:** the CAN-ID -> signal-buffer routing IS recoverable **software-only** — no bench, no
+handle modeling. Two finish options, both bounded:
+1. **Emulate** the `.data` init + `FUN_000892a0`/`FUN_0006b936` (all clean ARM; the byteswap/memset
+   "veneers" run as-is — do NOT stub them, which is why the prior emulation returned nothing) and
+   dump the `descriptor[2]` buffer assignments; then marker-inject per message for CAN-ID -> buffer.
+2. **Replicate** the bump allocation in Python from the flash `.data` object table + descriptors +
+   the explicit-address PB-config at 0xb5da0-0xb7790.
+
+STATUS: mechanism fully corrected and de-risked; the multi-format PB-config parse / init emulation is
+the remaining (bounded) execution step. The earlier "SBOOT/BDM dump required" conclusion is
+**downgraded** — it is a convenience, not a necessity, for the RX routing.
+
+## CORRECTION 2 (bootstrap-emulation result, 2026-09-02) — SBOOT is NEEDED after all (for grouping + type5)
+
+The bootstrap emulation partly WALKS BACK Correction-1's "software-only, SBOOT downgraded to
+convenience." Result:
+- **Confirmed** by emulation: 0x49e80=byteswap16, 0x49e64=memset (no handle allocator). Solid.
+- **Recovered software-only:** the signal->buffer half — flash COM signal table `0xb03fc` (43 recs,
+  stride 0x10 {sig_id, len, flags, RAM_buffer 0x405xxx-0x409xxx, extraction_link}); see
+  `decode/com_signal_table.txt` + `docs/com_routing_decoded.md`.
+- **BLOCKED (real, pinned):** `_start` (0x8f440) bootstraps via **SBOOT monitor SVCs** (10 SVCs in
+  200 insns; svc #0x13-0x16,#0xff10). The `.data` COM config — object table `*0x4069b4`, runtime
+  signal descriptors, message count, AND the **PDU->CAN-ID grouping** — is SBOOT-initialized and
+  ABSENT from this ASW image (reset vec `b #0`). `FUN_0006b936` from zeroed RAM allocates nothing
+  (3 writes). So config-init/bump-allocator emulation **cannot bootstrap** here.
+- **type5/EPB weaker than thought:** every type5 address (`0x403d76`/`0x403d6e`/`0x403d66`/`0x403d7d`)
+  appears ONLY in code literals, NEVER in flash config, no static writer — whereas type1 (`0x403fa2`)
+  and type4 (`0x407ce8`) COM sources ARE in the flash config table. So "type5 = EPB pass-through" is
+  now a **weaker** inference, not a stronger one.
+
+**Net:** wall bisected — signal->buffer = software-recoverable (partial table done); CAN-ID grouping +
+type5/EPB feed = need the **SBOOT-resident .data** (SBOOT/BDM dump) or an on-car `EPB_01`<->`ESP_05`
+lever-hold capture. SBOOT is a NECESSITY for those two, not merely a convenience.

@@ -33,7 +33,7 @@ decel_req_arbitrate (0x94a70)  <- decel_req_array 0x405a90/94/a0/ac
    ^
 decel_req_assemble (0x86798)   4 TYPED requests: type 1/2/4/5
    |   each gated by status byte 0x405dcd[i] == 0x10  AND an enable bit 0x80
-   |   type1 raw 0x403fac | type2 raw 0x403a36 + extra 0x403a40 | type3 0x407bb4 | type4 0x403d76
+   |   type1 raw 0x403fac | type2 0x403a40 | type4 0x407bb4 | type5 0x403d76
    ^
 decel_req_preprocess (0x7f4ec) 4 sources; extrapolates between frames
    |   out = raw - (staleness*gradient)>>2,  staleness = 3-(counter&3), counter @0x400804
@@ -41,7 +41,7 @@ decel_req_preprocess (0x7f4ec) 4 sources; extrapolates between frames
    ^
 decel_src_comfort_calc (0x88a88) -> decel_src_comfort 0x403a40
    |   reads 0x403a80, 0x403a86 (values), 0x403ab8 (flags), 0x403a2e (status),
-   |   gain 0x40545c, calibration via *(0x40081c)+0x11c, limits +-0x8000/0x7fff
+   |   calibration via *(0x40081c)+0x11c, limits +-0x8000/0x7fff
    ^
 com_decel_double_buffer (0x64ce4)  mem_copy(0x403a7c <- 0x403a6c, 0x10)
    |   this copy is what writes 0x403a80 and 0x403a86
@@ -49,11 +49,13 @@ com_decel_double_buffer (0x64ce4)  mem_copy(0x403a7c <- 0x403a6c, 0x10)
 decel_stage_writer (0x57044)  writes staging 0x403a70/72/74/76
    |   inputs: 0x405462, 0x403a48, 0x403ab4, 0x403ddc
    ^
-??? producer of 0x405462   <-- THE REMAINING GAP
-       0x405462 has 8 code readers (0x2dff4, 0x34ccc, 0x3fe08, 0x40224, 0x4b7bc, 0x4efe4,
-       0x5738c, 0x62b74) but NO write at that exact address -- it is written by a wider store
-       covering 0x405460. The two functions that write 0x405460 are FUN_0005ee10 and
-       FUN_0008c1e8; check those first.
+0x405462 = the comfort CAN request   <-- COM-index-written; the CAN-frame edge is not static
+       0x405462 has code readers (0x2dff4, 0x34ccc, 0x3fe08, 0x40224, 0x4b7bc, 0x4efe4, 0x5738c,
+       0x62b74 ...) but NO code store at that address and no dataset config pointer, so it is
+       written only by the index-driven COM layer. (The adjacent 0x405460 is a DIFFERENT field:
+       the ECU's internal wheel-speed-derived measured deceleration, 5-tap history at 0x4053c8,
+       written by veh_ref_wheel_estimator 0x5ee10 + decel_mode_state_set 0x8c1e8 -- feedback, not
+       the request.) The frame binding therefore needs on-car observation / bench RAM read (§5).
 ```
 
 ## 4. Why the last link resists static tracing

@@ -1,0 +1,8 @@
+# .data alignment attack raw evidence
+com_sig_group_table 0xb6a44: all_u32_occurrences=['0x6e68', '0xa868', '0x3ab90', '0x50110', '0x503d4', '0x5f5e8', '0x7648c', '0x82884', '0x95548']  (all <0xa2000 => code literal pools => .rodata, NOT .data)
+com_pdu_descriptor 0xb6ffc: all_u32_occurrences=['0x95544']  (all <0xa2000 => code literal pools => .rodata, NOT .data)
+bump_limit 0xbda34: all_u32_occurrences=['0x6bbf8', '0x7a168', '0x815b8', '0x8a10c', '0x8dc14', '0x8f128', '0x8ff58']  (all <0xa2000 => code literal pools => .rodata, NOT .data)
+sig_table 0xb038c: all_u32_occurrences=[]  (all <0xa2000 => code literal pools => .rodata, NOT .data)
+pdu_table 0xb06f0: all_u32_occurrences=[]  (all <0xa2000 => code literal pools => .rodata, NOT .data)
+
+# Conclusion: no contiguous .data image; config is .rodata direct-addressed; object table runtime-built. Alignment attack N/A.

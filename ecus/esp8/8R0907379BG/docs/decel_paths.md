@@ -20,11 +20,12 @@ CAN frame ── can_rx_indication (0x8e3ec, generic: raw bytes -> record state_
                                                           index-driven signal extract│   runtime-indexed
                                                           com_pdu_router (0x9546e ..) │   -> NO static xref)
                                                                                     ▼
-   4 raw decel sources in RAM, each built by its own producer:
-     type1  decel_src_type1     0x403fac
-     type2  decel_src_comfort   0x403a40   <- decel_src_comfort_calc  (0x88a88)  [comfort/ECD]
-     type4  decel_src_type4     0x407bb4   <- anb_decel_request_build (0x4bf3c)  [ANB/emergency]
-     type5  decel_src_type5     0x403d76
+   4 raw decel sources in RAM. com_decel_double_buffer (0x64ce4) snapshots each `decel_src`
+   (current) from a staging address the producer writes (see four_channels_source_binding.md):
+     type1  decel_src_type1     0x403fac  <- staging 0x403fa4  [internal: 0x2b568/43228/45060/474bc]
+     type2  decel_src_comfort   0x403a40  <- decel_src_comfort_calc  (0x88a88)  [comfort/ECD]
+     type4  decel_src_type4     0x407bb4  <- staging 0x407bac <- anb_decel_request_build (0x4bf3c) [ANB]
+     type5  decel_src_type5     0x403d76  <- staging 0x403d6e  [INACTIVE: no producer writes staging]
         each gated by status byte 0x405dcd[i]==0x10  AND  enable bit 0x80  AND  value>0
  → decel_req_preprocess (0x7f4ec): 4-tick slew interp  out = raw-((3-(ctr&3))*grad>>2), enable bit0x40
         writes decel_req_array 0x405a90 (type1@+0, comfort@+4, type4@+0x10, type5@+0x1c)
@@ -67,12 +68,19 @@ but as a flat step (rough) rather than the comfort ramp. This is the code-level 
 "emergency/ANB braking works below 15 km/h with a rougher loop".
 
 ## 4. Source producers (VERIFIED) and the ONE COM-indirect link
+- **type1** is internal: staging 0x403fa4 is assembled by 0x2b568/0x43228/0x45060/0x474bc
+  (`status_assembler_474bc`) from status/plausibility flags around 0x403f9e–0x403fac — not a
+  single-frame decode.
 - **type2 / comfort** `decel_src_comfort_calc` (0x88a88): computes 0x403a40 from raw inputs
-  0x403a80/0x403a86 (the same 0x403a86 the speed gate consumes), gain 0x40545c, clamp ±0x7fff/−0x8000.
-  Its raw inputs arrive via `com_decel_double_buffer` (0x64ce4) staging.
-- **type4 / ANB-emergency** `anb_decel_request_build` (0x4bf3c): builds 0x407bb4 with a 0xcd0/0xcd
-  first-order ramp filter and a large ANB plausibility/fault-bit bank; inputs are COM-extracted
-  signals (0x405abe, 0x40553b, 0x405cac, 0x4055b4 …) + calib base 0x40081c.
+  0x403a80/0x403a86 (the same 0x403a86 the speed gate consumes), clamp ±0x7fff/−0x8000. Its raw
+  inputs arrive via `com_decel_double_buffer` (0x64ce4) staging (0x403a6c block). The comfort CAN
+  request field is 0x405462 (COM-index-written, no static writer); the adjacent 0x405460 is the
+  ECU's internal wheel-speed-derived measured deceleration (feedback), not the request.
+- **type4 / ANB-emergency** `anb_decel_request_build` (0x4bf3c): builds 0x407bb4 (via staging
+  0x407bac) with a 0xcd0/0xcd first-order ramp filter and a large ANB plausibility/fault-bit bank;
+  inputs are COM-extracted signals (0x405abe, 0x40553b, 0x405cac, 0x4055b4 …) + calib base 0x40081c.
+- **type5** is inactive on this variant: its staging 0x403d6e has no producer, so `decel_src_type5`
+  is always 0.
 
 **What is NOT closable statically:** which CAN frame feeds each producer's COM-signal inputs.
 `can_rx_indication` only copies raw frame bytes into the record's `state_ram` (ACC_10 → 0x404588);
@@ -101,3 +109,4 @@ will not smooth a stepped request for you.
 ---
 Symbols: `ecus/esp8/8R0907379BG/symbols.csv` (apply via `core/ghidra/ApplySymbols.java`).
 15 km/h floor proof: `docs/ECD_path.md`.  ACC_10 reception: `docs/acc10_read_path.md`.
+

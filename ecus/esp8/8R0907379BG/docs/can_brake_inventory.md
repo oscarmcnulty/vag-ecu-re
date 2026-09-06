@@ -5,9 +5,10 @@ can drive brake pressure. Sourced from the two on-chip receive tables (not the D
 sparse for MLB — only 3/214 IDs are even named in `vw_mlb.dbc`).
 
 ## Two receive subsystems (VERIFIED)
-1. **`0xafae0` id-array** — a flat *index→CAN-id* array for the hardware message objects of the
-   "core" powertrain/chassis cluster **0x100–0x116**: ESP_01–05 (TX), **TSK_01/02/04/05**,
-   ACC_01, **ACC_05 (0x10d)**. Routed by message-object index through parallel index-keyed tables.
+1. **`0xafae0` id-array** — a flat *index→CAN-id* array (136 ids) for the hardware message objects
+   of the "core" powertrain/chassis cluster **0x080–0x116**: ESP_01/02/03/05/08 (the ESP's own TX),
+   EPB_01 (0x104), ACC_01 (0x109), **TSK_01/02/05**, Motor_01–04/10, Getriebe_01–03. Routed by
+   message-object index. **NOTE: ACC_05 (0x10d) is NOT here** — see the correction below.
 2. **`0xa9fc0` config table** — 223 records ×0x14 `{id, timeout_pair, flags, routine=can_rx_indication,
    state_ram}`, covering **214 further IDs** incl. **ACC_10 (0x117)**. `state_ram(i)=0x404554+4*i`
    is a per-message 4-byte status slot (`can_msg_state_ram_base`); the frame payload is copied by
@@ -22,9 +23,14 @@ request* that reaches that pipeline are:
 
 | CAN id | msg | signal (DBC) | channel/type | executor | speed-gated? |
 |---|---|---|---|---|---|
-| **0x10d** | ACC_05 | `ACC_Verz_anf` (0.005, −7.22) + `ACC_Freigabe_Verzanf` | comfort/**type2** (via COM) | `ecd_decel_pressure_calc` (ramp) | **YES — off <15 km/h** |
-| **0x117** | ACC_10 | `ANB_Zielbrems_Teilbrems_Verz_Anf` + `ANB_*_Freigabe`, `AWV1_ECD_Anlauf` | ANB/**type4** (via COM) | `ecd_emergency_pressure` (flat) | **NO — works <15 km/h** |
-| 0x10c | TSK_02 | `TSK_Verzoeg_Anf` (0.024, −3.984) | drivetrain coordinator → engine torque, **not** ESP hydraulics | — | n/a |
+| **0x117** | ACC_10 | `ANB_Zielbrems_Teilbrems_Verz_Anf` + `ANB_*_Freigabe`, `AWV1_ECD_Anlauf` | ANB/**type4** freigabe (magnitude internal) | `ecd_emergency_pressure` (flat) | **NO — works <15 km/h** |
+| **0x104** | EPB_01 | `EPB_Verzoeg_Anf` (0.048, −7.968) + `EPB_Freig_Verzoeg_Anf` | EPB dynamic-brake request (separate path) | — | — |
+| 0x10c | TSK_02 | `TSK_Verzoeg_Anf` | drivetrain coordinator → engine torque, **not** ESP hydraulics | — | n/a |
+
+**ACC_05 (0x10d) is NOT received** by this ESP (in neither `0xafae0` nor `0xa9fc0`; see
+`can_message_inventory.md`). So the type2/comfort channel is not fed by ACC_05; comfort ACC
+longitudinal is handled off-ESP (engine). The ESP's CAN-sourced decel inputs are EPB_01, ACC_10
+(ANB freigabe), TSK_01/02/05, ACC_01.
 
 Notes / honest bounds:
 - The exact `CAN-id → type` binding is made by the **index-driven AUTOSAR COM signal layer** and is
@@ -38,7 +44,7 @@ Notes / honest bounds:
 
 ## Practical answer for openpilot (below 15 km/h)
 - **The below-15 brake command is ACC_10** (ANB/type4 → `ecd_emergency_pressure`), which is *not*
-  speed-gated. ACC_05 comfort is hard-gated off below 15 km/h.
+  speed-gated. (There is no ACC_05 comfort path on this ESP — ACC_05 is not received.)
 - That path applies a **flat pressure step** (all 6 setpoints equal), so it is inherently rough.
 - Smoothing must happen upstream (openpilot) — see `docs/decel_paths.md` §6.
 

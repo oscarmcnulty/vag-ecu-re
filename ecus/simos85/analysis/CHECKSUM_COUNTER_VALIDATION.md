@@ -12,11 +12,9 @@ the 2 MB image.
   3. **XOR checksum** — openpilot's method for most periodic messages (incl. ACC_01). No dedicated XOR
      function has been located, and where ACC_01's validator lives is **still open** (see the
      "dynamically assigned?" section — it most likely runs on the CAN-RX interrupt path, or is done by
-     the gateway). NOTE: an earlier draft's claim that "ACC_01 checksum is a stub / not enforced" was
-     based on a MIS-identified Com record field and is retracted.
-- **Correction:** `process_ecu_command_800af8bc` (the "generic RX" I chased earlier) is actually the
-  **ISO-TP / ISO-15765-2 segmentation handler** for diagnostic channels (SF/FF/CF), NOT the periodic
-  signal unpacker. That is why the earlier index-sweep wrote no signal mirrors.
+     the gateway).
+- `process_ecu_command_800af8bc` is the **ISO-TP / ISO-15765-2 segmentation handler** for diagnostic
+  channels (SF/FF/CF), NOT the periodic signal unpacker.
 
 ## openpilot's two VW-MLB methods (the reference)
 From `mlbcan.py::volkswagen_mlb_checksum`:
@@ -62,8 +60,8 @@ d5 = (d5 >> 8) ^ table16[(byte ^ d5) & 0xff];   // per byte; table16 @0x800808ec
   signal messages like ACC_01 at the application layer.** Bus-level E2E is the gateway's job; the
   engine consumes the decoded signals.
 
-## Per-message Com record fields — CORRECTION: record+0x20 is NOT the checksum
-An earlier draft called the record `+0x20` field the "CHKSUM fn". That is WRONG: reading the 3 records
+## Per-message Com record fields — record+0x20 is not a checksum
+The record `+0x20` field is not a checksum. Reading the 3 records
 that hold non-stub values there (0x801b63fc/0x801b6534/0x801c6110) shows they are message
 **receive-notification / state hooks** (set a RAM flag, call `check_and_process_map`, snapshot state) —
 not checksum routines. So there is **no static per-message checksum function** in the Com records, and

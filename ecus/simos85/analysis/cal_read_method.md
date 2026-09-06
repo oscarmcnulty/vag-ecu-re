@@ -89,15 +89,13 @@ across a large share of the corpus. Top consumers e.g. `update_control_flags_800
   framework pass) → `maps/map_calls.csv`, which resolves the map data-ptr + axis args passed to
   every interpolator. Join to the tuner-diff blocks with `maps/gen_map_consumers.py`.
 
-  **CORRECTION (2026-07-12): the Path-C "pointer-table" theory was mostly wrong for these maps.**
-  `TraceMapCalls` was extended to follow each argument's decompiler pcode through
+  `TraceMapCalls` follows each argument's decompiler pcode through
   `COPY/CAST/INT_ADD/PTRADD/LOAD` (a `LOAD` from a constant address reads the pointer value from
   program memory and normalizes the 0xa0→0x80 alias). Over the full 0x40000–0x80000 region it now
   resolves **~3984 map-arg addresses (vs 17 for the old constant-only scan)** — but **only 1 of
   those goes through a pointer-table load.** So the 0x48000+ maps use **inline-immediate addresses**
   (`movh.a`+`lea`/`addi`, sometimes via a cast/add the old pass couldn't fold), not the 13 pointer
-  tables. The pointer tables (Path C below) are real but account for very few of the perf maps; the
-  effective enhancement was pcode-following, not pointer-table seeding.
+  tables. The pointer tables (Path C below) are real but account for very few of the perf maps.
 
 ## Known exception: runtime-indexed cal arrays (e.g. the decel-limit table)
 The decel-limit curve at **0x8004dd90** (see `../maps/decel_limit_flow.md`) is reached by **none**
@@ -107,14 +105,14 @@ blocks (functional + monitor):
 - axis @0x8004dd90 = [4370,9170,13970,15570,17170,20370]
 - values @0x8004dda0 & @0x8004ddb0 = [−7.5,−3.25,**−3.0**,−2.0,−1.565,−1.25] m/s² (×0.005)
 This is three N-headed s16 sub-blocks: axis `{6,x[6]}`@0x4dd90, functional `{6,y[6]}`@0x4dda0, monitor
-`{6,y[6]}`@0x4ddb0. **CORRECTION (2026-07-05): the −3.0 is a FIXED ceiling, not speed-interpolated** —
+`{6,y[6]}`@0x4ddb0. **The −3.0 is a fixed ceiling, not speed-interpolated:**
 on-car the engine output tracks the ACC command then hard-caps at exactly −3.000 and latches TSK_04=3,
 and multiple examples clamp at the same −3.0 (a fixed limit, not a speed curve). The −3.0 is selected
 by a selector that is constant in normal ACC operation (a discrete mode/profile idx, not vehicle
-speed); the earlier "selector = speed / 0.005 km/h axis" reading is **withdrawn**. The byte-axis readers
+speed). The byte-axis readers
 `find_previous_index`@800a2bd0 / `read_map_descriptor`@800a2c48 cannot read this s16 table, and the s16
 interpolators (801f0f88/0914) expect a contiguous `{N,x,y}` block, which this isn't — so the reader
-stays non-analyzed. See `../maps/decel_limit_flow.md` (2026-07-05 CORRECTION).
+stays non-analyzed. See `../maps/decel_limit_flow.md`.
 
 **Static route now EXHAUSTIVELY closed** by `core/ghidra/ScanCalIndexed.java` (new). It runs
 `SymbolicPropogator` per function with two detectors beyond `ResolveCalReads`: **REG** — any address

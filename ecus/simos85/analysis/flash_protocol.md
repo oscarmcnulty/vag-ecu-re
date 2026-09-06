@@ -94,11 +94,11 @@ possible):
 |---|---|---|
 | 1 | SecurityAccess level 0x11/0x12 | **MATCH** |
 | 2 | ALFID 0x41, 1-byte block-id addressing | **MATCH** |
-| 3 | eraseMemory 0xFF00 argument | **CORRECTED** → `01 03` (was `03`) |
-| 4 | precond/checkMem/depend RIDs 0x0203/0x0202/0xFF01 | **MATCH**; checkMemory arg **CORRECTED** → zero-header `01 03 00 04 00000000` (Simos ignores the UDS value) |
+| 3 | eraseMemory 0xFF00 argument | **Confirmed** `01 03` |
+| 4 | precond/checkMem/depend RIDs 0x0203/0x0202/0xFF01 | **MATCH**; checkMemory arg **Confirmed** zero-header `01 03 00 04 00000000` (Simos ignores the UDS value) |
 | 5 | TransferData framing | **MATCH** (raw stream on the wire, no 0x1e00 CRC-16 framing — the 0x1e00 CRC-16 is a loader-internal staging check, as §4 held). Chunk cap set to 0xFFD |
 | 6 | diag ids 0x7E0/0x7E8 | **MATCH** (OBD Mode-04 on the functional id) |
-| 7 | dataFormatIdentifier / compression | **CORRECTED** → DFI **0xAA** with LZSS+rolling-XOR (`flash/simos_codec.py`), RequestDownload size = uncompressed length (was DFI 0x00 raw). Our static RE only saw the app-resident raw writer; the decompress step is in CBOOT (blank over OBD), which the test resolved. |
+| 7 | dataFormatIdentifier / compression | **Confirmed** DFI **0xAA** with LZSS+rolling-XOR (`flash/simos_codec.py`), RequestDownload size = uncompressed length; the decompress step is in CBOOT (blank over OBD). |
 
 **SA2 (the headline):** our first interpreter used a wrong register-file model. Replaced
 with the correct single-register loop+branch VM (`flash/sa2.py`); **re-verified against

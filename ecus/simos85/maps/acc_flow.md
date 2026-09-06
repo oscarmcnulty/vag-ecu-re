@@ -203,7 +203,7 @@ Inputs are bits of the condition word `uRamc0001118` built each cycle in `8013ef
   ACC/GRA-coded (or ACC_05 mode is selected) everything clears, `STATE_CRU_CTL` → 3 or 0, and the launch
   latch `d000118a` re-arms to 1.
 
-### 4.3 The machine stays regulating to 0 km/h (CONFIRMED)
+### 4.3 The machine has no internal speed floor — but an ESP inhibit deactivates it at ~15 km/h
 
 A grep of the whole machine (`8013ef46`, `8013e8aa` and all four sub-handlers) for every ego-speed
 variable (`Ramd0005618` raw, `Ramd0007ce8` filtered, `d000d644`, `d000da54`) and for the 15 km/h-monitor
@@ -234,14 +234,14 @@ if (... Ramd0007ce8 < WORD_ARRAY_80043c5c[0xe] /* 0x80043c78 = 300 */ ...) d0001
   of speed at ~15 km/h (§2). What the machine lacks is an *internal* speed threshold, not immunity to a
   speed-driven input.
 
-**Consequence:** every exit from {1,5} is a fault, permission loss, inhibit, driver override or lateral
-sub-state split — none of them keyed on an internally measured low ego speed. With ACC engaged and no
-fault, override or ESP-brake intervention, `STATE_CRU_CTL` **stays in {1,5} down to 0 km/h**, so the hold
-relay and the decel relay remain live to true standstill. Braking authority below ~15 km/h is a separate
-question, decided by the ESP's ECD permission and by the internal L2 crawl monitor
-(`low_speed_floors.md`), not by this state machine.
+**Consequence:** the CRUC has **no internal speed compare** — every exit from {1,5} is a fault,
+permission loss, inhibit, override or lateral sub-state split. But one of those inputs is ESP-derived and
+speed-correlated: below **~15 km/h** the ESP asserts `ECD_nicht_verfuegbar`, which `801408bc` debounces
+into `d000b296 = 0` and the `a5a2` inhibit, and the machine then **deactivates `1→0`** (confirmed on-car,
+`low_speed_floors.md` Mechanism B). So in practice ACC drops out at ~15 km/h — via an ESP input, not an
+engine speed floor — taking accel down with it. The lever is the ESP's ECD threshold, not an engine cal.
 
-**Residual (GAP, low):** the permission/inhibit *inputs* to `8013ef46` — `a587`, `a593/594`, `a5a2`, the
+**Residual (GAP, low):** the permission/inhibit *inputs* to `8013ef46` — `a587`, `a593/594`, the
 `d000b1c7` ESP flag, `a335`, the `0x80086b00/b50/bc0` pedal switches and the ESP feedback bits — are
 computed outside the CRUC chain and were not each traced to root. None is read from ego speed *within*
 the machine, but an upstream input that is itself standstill-correlated (an ESP autohold flag, a driver
@@ -321,13 +321,12 @@ additionally zeroes both if `d000ad7a == 0` (TSK not active) or forces decel →
   The fatal-**deactivation** path (`d8e0 & cal+0x178`) is dead (mask = 0). The aggregator body has two
   entry points: `80102f60` (which prologues `801eee40`/`801df81c`) falls through into `801dfe06`; they are
   the same code.
-- **Three** distinct signals carry a 0..3 status enum — do not conflate them (correction 2026-08-20):
+- **Three** distinct signals carry a 0..3 status enum — do not conflate them:
   - **TSK_Status_GRA_ACC_01** (TSK_02/0x10C byte3) ← **`b28d`** (`STATE_CRU_CTL_CAN`), the CRUC state
     machine (routes A/B/C, `status3_routes.md`).
   - **The 0x5C0 status enum** ← **`d91d`** (`801eca44` from `d8ee`+`d8e2`), published via `afef`,
     packed by `80137084`. This is a **separate CAN channel**, driven by the relayed-symptom accumulator
-    `d8e0`. There is **no `d91d`→`b28d` write** — the earlier "via `d91d`/`b28d`" wording wrongly merged
-    these two channels. Both `b28d` and `d91d` are speed-independent (`low_speed_floors.md` §1).
+    `d8e0`. There is **no `d91d`→`b28d` write**; the two channels are independent. Both `b28d` and `d91d` are speed-independent (`low_speed_floors.md` §1).
   - **TSK_Status_GRA_ACC_02** (TSK_04/0x10E byte8 bits 6-7) ← `d000d9c7` (`STATE_DCC`) via `801e3f26`.
 
 ## 7. Standstill hold — `TSK_Anhalten` (CONFIRMED)

@@ -1,14 +1,13 @@
 # The sub-15 km/h floors
 
-**Revised 2026-08-20.** Earlier this doc described *two* engine mechanisms below ~15 km/h. A full
-data-flow trace (§1) shows only **one actually stops ACC**: the ESP's ECD withdrawal (Mechanism B).
-The engine-internal 15 km/h "L2 crawl monitor" (Mechanism A) exists and runs, but is **reporting-only**
+Only **one** engine-related mechanism below ~15 km/h actually stops ACC: the ESP's ECD withdrawal
+(Mechanism B). The engine-internal 15 km/h "L2 crawl monitor" (Mechanism A) runs, but is **reporting-only**
 — it feeds a telltale field on frame 0x5C0 and some unread status bits; it does **not** latch a fault,
 set the status enum, or withdraw braking.
 
 | # | mechanism | where it lives | what it does |
 |---|---|---|---|
-| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | **THE operative floor:** withdraws brake-request authority inside `8013c5d4` (via `d000b296`). ACC keeps reporting active (status 1); it just can't brake. |
+| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | **THE operative floor + DEACTIVATOR:** `ECD_nicht_verfuegbar` is a clean 15 km/h gate (asserted 100%% below 15 km/h, 0%% above 16). Debounced in `801408bc` it forces `d000b296 = 0` (decel authority withdrawn) and co-sets the `a5a2` inhibit; the CRUC then **deactivates** `STATE_CRU_CTL 1→0` ~50 ms later, which kills accel too (the whole ACC drops to standby). |
 | **A** | `C_VS_MIN_CRU_MON` = 15 km/h internal L2 crawl monitor | **inside this ECU**, cal `0x800794ef` / `0x800794f2` | **reporting-only** — debounced `≤15 km/h` flag → telltale field `a35f` on frame 0x5C0 + unread `d88b` bits. Does NOT stop ACC or set status 3. See §1 correction. |
 
 **No engine-internal speed threshold latches an ACC fault.** Neither status enum is speed-driven:
@@ -61,8 +60,7 @@ if ((d890 & 2) && (ram_acc_vehicle_speed_mon <= *(byte*)(base+0x14f) * 0x80)) { 
   matches everywhere. It can only be moved, not disabled, from the cal.
 - Full trigger also requires an accel-plausibility band (cals `0x800794f8/fa/fc/fe`) and, for the second
   compare, a lower band edge at `0x800794f3`.
-- **CORRECTION (2026-08-20, full data-flow trace — supersedes the earlier claim that this monitor
-  latches status 3).** The debounced crawl-monitor outputs do **NOT** feed the 13-diagnosis accumulator
+- **This monitor is reporting-only.** The debounced crawl-monitor outputs do **NOT** feed the 13-diagnosis accumulator
   `d000d8e0`, and they do **NOT** reach any status-3 latch. Traced end to end:
   - `d000d8e0` is built at `801dfe06:709` from **13 relayed CAN symptoms only** — the debouncer inputs
     are `d5b5,d5bb,d62b,d5d8,d5f5,d670,d67f,d685,d693,d695,d680,d5fc,d683`, each copied in `801dec08`
@@ -77,8 +75,7 @@ if ((d890 & 2) && (ram_acc_vehicle_speed_mon <= *(byte*)(base+0x14f) * 0x80)) { 
     by `80137084:95`. That is the monitor's only escape: a **reporting/telltale field on 0x5C0**, not a
     control gate, not a DTC event, not the status enum.
   - **Net: the internal 15 km/h crawl monitor is reporting-only in this image. It does not stop ACC,
-    does not set status 3 (on TSK_02 or 0x5C0), and does not withdraw braking.** The earlier
-    "mechanism A latches status 3" reading conflated proximity inside `80102f60` with actual data flow.
+    does not set status 3 (on TSK_02 or 0x5C0), and does not withdraw braking.**
 - **What actually makes ACC stop below ~15 km/h is Mechanism B alone** (§2, below): the ESP withdraws
   ECD and the engine drops brake authority. That is external (the speed decision is in the ESP), and it
   does **not** latch status 3 — the engine keeps reporting ACC active while silently losing decel.
@@ -193,13 +190,12 @@ branches and is one AND-term of the (dead) fatal-deactivation path.
   `C_VS_MAX_CRU` is *"Maximal vehicle speed for cruise activation"*. So 3.0 km/h is fully FR-consistent.
 - **`C_VS_MIN_CRU_MON`** (FR p.2196, ch.14.16 ECM2 process monitoring): verbatim *"Minimum threshold for
   vehicle speed control active"*, u8, res 1 km/h; *"Derived from level-1 calibration of
-  `C_VS_MIN_CRU_OFF` minus 2 km/h"* (p.2351). **CORRECTED reading (2026-08-20), from the actual FR logic
-  on p.2202:** the comparator `VS_MON ⋛ C_VS_MIN_CRU_MON` drives **SET** of the SR latch
+  `C_VS_MIN_CRU_OFF` minus 2 km/h"* (p.2351). **From the FR logic on p.2202:** the comparator `VS_MON ⋛ C_VS_MIN_CRU_MON` drives **SET** of the SR latch
   `LV_CRU_MON_ACT_MON` = *"Logical bit for **active monitoring** of cruise control"*, which is **RST** by
   `STATE_CAN_CRUS_OFF`. So `C_VS_MIN_CRU_MON` is the **speed at which the L2 cruise monitor ARMS**
   (active above ~15 km/h, hysteresis-off at `C_VS_MIN_CRU_OFF` ≈ 13 while decelerating), **not** a
   "cruise off below 15" cutoff and **not** a fault trigger (the monitor's error output is the separate
-  `LV_ERR_CRU_MON`). The earlier "`VS_MON < MON` → cruise off" note here had the polarity inverted. This
+  `LV_ERR_CRU_MON`).This
   is why there is **no** engine L2 fault below 15 km/h: below the threshold the monitor is *disarmed*.
   The value 15 appears in the code both as the live `VS_MON`-vs-15 compare (`0x794ef`, §1, reporting-only)
   and, in the L2 shadow path, as the monitor's debounce-counter timing (`0x456bd/c0`, in `8009c0b4`).
@@ -248,7 +244,7 @@ of this: `ACC_01.ACC_Anhalten` → `TSK_Anhalten` is relayed whenever cruise is 
 
 ## 6. Open items
 
-1. ~~Which of the 13 diagnoses latches below 15 km/h~~ — **RESOLVED (2026-08-20): none.** The 13
+1. ~~Which of the 13 diagnoses latches below 15 km/h~~ — **None.** The 13
    accumulator feeders are relayed CAN symptoms (`801dfe06:709`, sources copied by `801dec08`), none
    speed-derived; the 15 km/h crawl monitor does not feed `d8e0` (§1). There is no engine-internal
    speed-latched ACC diagnosis. The (rare) latching fault an external master sees below 15 km/h would be

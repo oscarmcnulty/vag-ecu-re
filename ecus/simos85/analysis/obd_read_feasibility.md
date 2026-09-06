@@ -220,10 +220,8 @@ slave that (a) is present in production firmware and (b) does not gate `UPLOAD` 
 `GET_SEED`/`UNLOCK` you don't have. The AL551's `UPLOAD` was ungated; that is a per-firmware
 config choice, not a protocol guarantee.
 
-**Correction to §2.** The earlier framing treated the OBD read as impossible without a
-signature bypass. That is the Door-2 story; Door 3 is a second OBD avenue the signature
-argument doesn't touch. The reason 8.5 still has no OBD read is **not** that Door 3 is
-theoretically closed — it is that Door 3 is **empirically absent** on this ECU (§6).
+**Door 3 is a second OBD avenue** the signature argument (Door 2) doesn't touch. The reason 8.5 still
+has no OBD read is not that Door 3 is theoretically closed — it is **empirically absent** on this ECU (§6).
 
 **Command bytes** (so the §6 search is auditable): CCP CRO byte[0] `CONNECT=0x01,
 SET_MTA=0x02, DNLOAD=0x03, UPLOAD=0x04, SHORT_UP=0x0F, GET_SEED=0x12, UNLOCK=0x13`. XCP byte[0]

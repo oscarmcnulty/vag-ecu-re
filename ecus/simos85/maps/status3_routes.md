@@ -233,7 +233,7 @@ through Route B, via `ESP_Fahrer_bremst` (driver braking), not via its 15 km/h E
 
 ---
 
-## Appendix — the acceleration side & the "L2 monitor / 15 km/h" story (2026-08-20)
+## Appendix — the acceleration side & the "L2 monitor / 15 km/h" story
 
 Two questions that arise alongside the routes above, resolved by tracing:
 
@@ -247,8 +247,7 @@ inject positive torque only with `ACC_Status_ACC ∈ {3,4}` and it stays quiet. 
 `C_VS_MIN_CRU` floor the cruise-torque PI resets its integrator — a floor, not a fault; and the OEM
 standstill launch-torque path (`80141528`, ACC_05) is cal-gated off on the Q5.)
 
-**Why did earlier notes think "the L2 EGAS monitors flag under 15 km/h"?** An inverted reading of the
-FR. The cals named `C_VS_MIN_CRU_MON` (=15) live in the EGAS-L2 layer, but:
+**The L2 EGAS monitors do not flag under 15 km/h.** The cals named `C_VS_MIN_CRU_MON` (=15) live in the EGAS-L2 layer, but:
 - In `8009c0b4` the 15/13 constants are **debounce-counter presets**, not speed compares (disasm
   `8009ce4a: d9 = d9 - (d9!=0)` — a countdown). No reader of `0x456bd/c0/c3` or their shadow copies
   compares them against vehicle speed.

@@ -34,7 +34,7 @@ leaf handler.
 | `0x08` | in-use performance tracking | `FUN_801ba7f8` |
 | `0x0a` | ECU name | `FUN_801ba830` |
 
-> Correction to an easy mislead: `FUN_801ba9c8` is the **mode** dispatcher, not an InfoType
+> Note (easy to misread): `FUN_801ba9c8` is the **mode** dispatcher, not an InfoType
 > dispatcher, and the `*pcVar4 == 0x04` branch in `80123a28` is **Mode 04 (ClearDTC)**, not
 > CALID InfoType 04. The CALID/CVN selection is the separate `0x8008DEF0` table above.
 

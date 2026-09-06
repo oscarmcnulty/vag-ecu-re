@@ -227,7 +227,7 @@ to the bench route.** Evidence:
   code you're trying to read; and (c) if it worked it would yield the same image the
   bench SBOOT/BSL dump gives directly and deterministically.
 - **Caveat / open item:** the actual ISO-TP transport routine is **not yet isolated**
-  in this corpus (the earlier `0x801e7540` guess was wrong — see §B note). A rigorous
+  in this corpus (see §B note). A rigorous
   "is the reassembly buffer bounded?" answer needs that function pinned down first. If
   we ever want to close the RCE angle for real, that is the prerequisite — but it
   ranks below the bench dump on the priority list.

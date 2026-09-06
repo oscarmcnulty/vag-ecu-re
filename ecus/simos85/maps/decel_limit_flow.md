@@ -103,9 +103,10 @@ d0001551 = (d000154b != 0);                   // debounced plausibility-fault fl
   because the input is *achieved* decel, road grade and load matter — downhill the achieved decel
   overshoots the command, so a command below −3.0 can still trip it, uphill it may not. The boundary is
   not predictable from the command alone.
-- Fault routing: the debounced flag `d0001551` feeds the ACC status. The monitor is otherwise
-  functionally isolated — `c0001732` and all its fault outputs (`154b-f`, `1550`, `1551`) are read by
-  nothing except this function and the resets in `80172658`/`801b498c`.
+- **Fault routing:** the debounced flags `d0001551`/`d000154b`/`d0001550` are read by nothing except
+  this function and the resets `80172658`/`801b498c`, so `800c553c` is **isolated — DTC-only**: it does
+  not feed the ACC status or the status-3 latch. The latching fault at −3.0 is a **separate** mechanism
+  — the EGAS-L2 torque monitor (§6). No status-3 route reads the decel value.
 - **GAP (minor):** which motion sensor feeds the GPTA capture (wheel speed versus engine/drivetrain), and
   the exact command→byte rounding. Both need an on-car sweep or an XCP log of `d000b4fa`. The
   commanded-versus-achieved question itself is resolved: achieved.
@@ -148,3 +149,40 @@ The full lever table across all topics is in `edit_targets.md`.
 | `C_T_ERR_AC_MIN_CRU_H/_L`, `C_T_ERR_AC_DCRU_PLAUS_H/_L` | fault debounce timers (0.02 s steps) | — | not pinned |
 
 Scripts: `analyze_decel_fault.py` (repo root); rlog CAN extraction/decoding runs in a session scratchpad.
+
+## 6. The latching fault: root cause and how to observe it
+
+The latching ACC fault at −3.0 (`TSK_Status_GRA_ACC_01`/`_02` → 3, held until re-arm or key cycle) is the
+**EGAS-L2 engine-torque monitor**, not a deceleration monitor. On-car (rlog `00000178--40`, t=54.61 s): the
+status latches within a few cycles of the demand reaching −3.0, `ESP_05.ECD_nicht_verfuegbar = 0`
+throughout (the ESP is granting decel), and no CAN input flips — the trigger is engine-internal.
+
+**Route (code-traced):**
+```
+status 3 (0x10C b28d / 0x10E STATE_DCC)
+  <- Route A bit3 = a59c!=0 || b298==3           (8013ef46:731 ; 8013e8aa:8013e926)
+  <- a03b = a03c || a040 || d1856                (8009c0b4:837)  [the only engine-internal Route-A term]
+  <- a040: permitted torque < requested engine torque, 12-cycle debounce (cal 0x8004566d)
+  <- permitted forced to 0 when the EGAS-L2 permit timer runs down
+  <- a02e (egas_l2_torque_permit_deauth) sets    (800996a8: a7bb || a02f || a9a5)
+```
+**It watches torque, not deceleration.** `8009c0b4` reads `acc_engine_torque_request` (`d0007ce0`), which
+on the Q5 (`a5a8=0`) is `Ramd0007ccc` passthrough ← `Ramd0007caa` (the ACC engine-torque request from the
+CRUC), *not* the decel command. So the −3.0 decel clamp never bounds it; the −3.0 demand and the fault
+coincide only because both are driven by the same maximum-longitudinal-authority state. The fault is a
+torque-**authorization withdrawal** (a plausibility monitor asserts → `a02e` pulls the permit → any live
+engine-torque request then reads permitted(0) < requested → `a040`), not a value-over-limit.
+
+**Emulation** (`ghidra_scripts/EmuL2Torque.java`): armed on `ACC_Status_ACC=3`, `8009c0b4` does not
+false-trip under authorized torque; with the permit withdrawn it latches `a040`→`a03b` after exactly the
+12-cycle debounce.
+
+**Observing "available (permit) vs commanded" torque.** Both are RAM-only. The Simos 8.5 has **no live-RAM
+read** (no UDS `$23`, no CCP/XCP slave — `obd_read_feasibility.md`) and broadcasts neither, so the options
+are: (1) **bench + JTAG/OCDS** on the TC1796 — read `d0007ce0` (command), `d0007ccc`/`d0007caa` (source),
+the permit timer `d0001840`, debounce `d000ae35`, `d000a02e`+sources `d000a7bb`/`a02f`/`a9a5`, and
+`d000a040`/`a03c`/`a03b`; (2) a **custom measurement reflash** broadcasting those on a spare CAN id
+(write path is RSA-signed, so hard); (3) **off-car emulation** of the torque path + monitor.
+
+**Open:** which of `a7bb`/`a02f`/`a9a5` asserts during a −3.0 event, and confirmation the permit was
+withdrawn while torque was requested — internal, needs a bench/RAM trace.

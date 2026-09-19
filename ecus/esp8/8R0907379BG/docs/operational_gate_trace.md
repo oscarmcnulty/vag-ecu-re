@@ -100,6 +100,40 @@ Ran on the powered bench (SM2 present, `PassThruOpen` OK, ECU ACKs). Tools: `ben
   the wake needs either per-message *valid E2E content* (real sensor-cluster data, not filler) or a
   ComM-user request — not merely recognized CAN ids being present.
 
+## How the NM data actually arrives (deeper trace, session 2 cont.)
+
+Chased the source of the NM status word `0x408f10` through the RX path:
+
+- `FUN_00040950` (NM processor) is called from two places: `FUN_0001c5ec` with event **2**
+  (timeout — the only branch that runs on the bench: writes `0x408f10=0x1000000`, clears flags),
+  and **`FUN_000689e4`** with event **1** (NM message received).
+- `FUN_000689e4` is a **container/transport RX handler** (has ISO-TP FF/CF nibble handling,
+  `buf+0xd & 0xf0 ∈ {0x10,0x20}`). It reassembles a payload into the channel buffer at
+  `0x4050e8 + 0x108`, reads a **16-bit sub-PDU tag** from payload bytes 2..3, and **only when that
+  tag == `0x600`** does it assemble the 4 following bytes and call `FUN_00040950(&data, 1)`. So the
+  NM data is a **sub-PDU (tag 0x600) multiplexed inside a container/transport message**, not a
+  standalone CAN frame — which is exactly why session 1's frame replay and this session's 225-id
+  filler replay both did nothing (they never carried a `0x600`-tagged sub-PDU with valid content).
+- The 4-byte NM data must then pass `FUN_00040950`'s checks: source node-id (byte0) recognized in
+  the node table, and mask checks against `0xbda3c/0xbda3e` (`byte0 & ~mask == 0`, etc.).
+
+### Why the container CAN-id can't be pinned statically (confirmed dead ends this session)
+- **msgcfg `0xa9fc0`** (223 recs) all use one generic routine (`0x8e3ec`); none has state-RAM near
+  `0x408f10` — the NM/container message is not in the generic COM RX table.
+- The NM config pointers (`DAT_00040a40→0xbd83c` node table, the `0xbd774/0xbd790` id tables) all
+  land **inside the seg2 code region** (file `0xbb045`+, VMA=file+3); read as data they are ARM
+  instructions, not clean `{id,len}` tables — Ghidra mis-types data refs into seg2, so these
+  "tables" don't decode. A −3-shifted read still yields code, not CAN-ids.
+- `com_config_walker` (`0x49f38`) decompiles as **mixed-ISA garbage** ("bad instruction data"),
+  so the walker logic can't be read from the decompile to replay the config statically.
+- Everything in this COM/NM stack is invoked through **RAM function pointers** wired by the
+  object-table init — no direct callers — i.e. the same runtime blocker documented across sessions.
+
+### Live-bench negatives (session 2)
+- 225-id filler replay (valid J1850 CRC), 12 s @10 Hz → no wake.
+- Container-format sweep (225 ids × 3 layouts embedding sub-id `0x0600`, node 0), 15 s → no wake
+  (expected: node 0 fails `FUN_00040950` node-id validation, and the container id/layout are guesses).
+
 Conclusion refinement: the wall is not NM-0x4xx and not "no traffic"; it is that no partner delivers
 the *specific valid content* that drives the ComM channel request (netmode `param`) off zero. The
 most probable single trigger is the **ESP sensor cluster (G419)** data the ESP polls via its 0x060

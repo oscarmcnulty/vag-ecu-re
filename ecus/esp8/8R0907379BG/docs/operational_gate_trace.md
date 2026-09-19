@@ -82,7 +82,31 @@ This is the E2E profile the ECU applies to its own status TX and the most likely
 partner frames it expects (a per-message data-id may prepend the RX form — confirm against a real
 captured partner frame).
 
-## Bench experiments this unlocks (needs the SM2 + 32-bit Python re-provisioned)
+## Bench results (session 2, SM2 live on the bench)
+
+Ran on the powered bench (SM2 present, `PassThruOpen` OK, ECU ACKs). Tools: `bench/can_raw.py`.
+
+- **State confirmed:** sniff shows **only CAN 0x060 at ~98 Hz** (nothing else) — pre-operational,
+  exactly as the handoff described. Fresh 0x060 samples (CTR 0x06..0x0f) **validate the CRC-8/J1850
+  solution out-of-sample** (all 10 match, incl. counters never in the original 8-sample set).
+- **Accepted-RX-ID list extracted from firmware** (`0xafae0`, big-endian): **225 ids, max 0x258,
+  and ZERO in the 0x4xx range.** The ECU does not accept standard VW NM (0x400+node) on this
+  private chassis/sensor CAN — so the handoff's "0x441 NM" lead is a dead end. The NM PDU / signal
+  0x046f arrives on one of these ≤0x258 ids, object-table-routed.
+- **Full-network replay does NOT wake it (decisive negative).** Transmitting **all 225 accepted
+  ids** as valid counter+CRC frames (J1850, byte6=counter) at 10 Hz for 12 s produced **no new tx
+  id** — the ECU stayed on 0x060 only (TX verified: writes return STATUS_NOERROR and are ACKed).
+  This is a stronger negative than session 1's 33-id replay. **Bus presence alone is insufficient**;
+  the wake needs either per-message *valid E2E content* (real sensor-cluster data, not filler) or a
+  ComM-user request — not merely recognized CAN ids being present.
+
+Conclusion refinement: the wall is not NM-0x4xx and not "no traffic"; it is that no partner delivers
+the *specific valid content* that drives the ComM channel request (netmode `param`) off zero. The
+most probable single trigger is the **ESP sensor cluster (G419)** data the ESP polls via its 0x060
+sync — reproducing that needs the sensor-cluster message id + valid signal/E2E, or the RAM-write
+fallback below.
+
+## Bench experiments still to try (needs the SM2 + 32-bit Python re-provisioned)
 
 1. **NM-wake sweep.** Broadcast a plausible partner NM PDU on candidate chassis-CAN IDs (VW NM is
    commonly `0x400 + node`; also try the `0x441` NM-range mailbox already noted, and the sensor

@@ -72,6 +72,23 @@ for addr in cands:
             rows[a]=v; wrote+=1
 print(f"ran {ran}/{len(cands)} stubs; captured {len(rows)} distinct RAM pointer slots ({wrote} writes)")
 
+# --- targeted: variant_cfg_select(0x11) installs the calibration base pointers (0x40081c..0x40082c).
+# This build's boot path (variant_init_fixed 0x87410) calls it with the compile-time constant 0x11,
+# so the cal bases are deterministic. Run it directly with r0=0x11 and capture the RAM installs so
+# the ~85 cal-base readers fold to the concrete dataset. (variant_cfg_select @0x872cc is ARM.)
+_e=Emu()
+_cal=[]
+def _on_cal(uc,access,a,size,val,ud):
+    if 0x40081c<=a<=0x400830 and size==4: _cal.append((a,val & 0xffffffff))
+_e.uc.hook_add(UC_HOOK_MEM_WRITE, _on_cal)
+try:
+    _e.call(0x872cc, args=(0x11,), thumb=mode.get(0x872cc, True), maxinsn=20000)
+except Exception:
+    pass
+for a,v in _cal:
+    if is_ptr(v): rows[a]=v
+print(f"variant_cfg_select(0x11): captured {len(set(a for a,_ in _cal))} cal-base installs")
+
 # --- write ram_bases.csv ---
 with open(OUTCSV,'w') as w:
     w.write("ram_addr,value\n")

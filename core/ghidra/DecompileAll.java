@@ -64,6 +64,13 @@ public class DecompileAll extends GhidraScript {
         new File(outDir).mkdirs();
 
         DecompInterface dec = new DecompInterface();
+        // Respect read-only memory so the decompiler constant-folds reads of RO data/flash and of
+        // RO-marked RAM base-pointer slots (e.g. the ApplyRamDataImage + EspRoRamPtrs pointer tables:
+        // *0x4069b4 -> com_obj_table 0x40a1a8, cal_base -> dataset). Default options leave this off.
+        ghidra.app.decompiler.DecompileOptions opts = new ghidra.app.decompiler.DecompileOptions();
+        opts.grabFromProgram(currentProgram);
+        opts.setRespectReadOnly(true);
+        dec.setOptions(opts);
         dec.openProgram(currentProgram);
 
         StringBuilder manifest = new StringBuilder("addr,name,bytes,status,elapsed_ms,reason\n");

@@ -69,10 +69,39 @@ say 06_syms '^ApplySymbols'
 run 06b_comsig  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
                  -postScript EspDecodeComSignals.java
 say 06b_comsig '^EspDecodeComSignals'
+# --- RAM base-pointer fold (two-pass decompile) ---
+# The decompiler constant-folds *(base+off) to concrete addresses only for RO-marked initialized RAM,
+# which dissolves the "runtime-only" COM/config/DID routing (obj-table base 0x4069b4->0x40a1a8, ECD/
+# config bases into the dataset, variant-0x11 cal installs 0x40081c..). ram_bases.csv is firmware-
+# derived (gitignored) and REGENERATED here by emu/capture_ram_bases.py (Unicorn: runs the boot
+# pointer-install stubs + variant_cfg_select(0x11)). Because that harvester reads the decompiled
+# corpus to find install stubs, we decompile once (07a) to seed it, capture, apply+RO, then decompile
+# again (07e) with the fold live. If the emu venv is absent the fold is skipped and 07a stands.
+EMUPY="$HERE/emu/.venv/bin/python"
 rm -rf "$HERE/analysis/decompiles_r"
-run 07_decomp    "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
+run 07a_decomp1  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
                  -postScript DecompileAll.java "$HERE/analysis/decompiles_r" "$BARE"
-say 07_decomp '^DecompileAll'
+say 07a_decomp1 '^DecompileAll'
+if [ -x "$EMUPY" ] && "$EMUPY" -c "import unicorn,capstone" 2>/dev/null; then
+  echo "==> 07b_rambases (emu/capture_ram_bases.py)"
+  ( cd "$HERE/emu" && "$EMUPY" capture_ram_bases.py ) >"$LOGS/07b_rambases.log" 2>&1 \
+    && say 07b_rambases 'wrote|cal-base installs' \
+    || { echo "  capture_ram_bases failed (see $LOGS/07b_rambases.log)"; }
+  if [ -f "$HERE/analysis/ram_bases.csv" ]; then
+    run 07c_ramimage "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
+                     -postScript ApplyRamDataImage.java "$HERE/analysis/ram_bases.csv"
+    say 07c_ramimage '^ApplyRamDataImage'
+    run 07d_ramro    "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
+                     -postScript EspRoRamPtrs.java
+    say 07d_ramro 'RO:'
+    rm -rf "$HERE/analysis/decompiles_r"
+    run 07e_decomp2  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
+                     -postScript DecompileAll.java "$HERE/analysis/decompiles_r" "$BARE"
+    say 07e_decomp2 '^DecompileAll'
+  fi
+else
+  echo "==> 07b_rambases SKIPPED: emu venv absent (create with: cd emu && uv venv .venv && uv pip install unicorn capstone). Decompiles from 07a stand (no RAM-base fold)."
+fi
 run 08_cov       "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
                  -postScript CoverageStat.java "$LOADBASE" "$IMAGE_HI"
 sed 's/.*java> //;s/ (GhidraScript).*//' "$LOGS/08_cov.log" > "$HERE/analysis/coverage.log" || true

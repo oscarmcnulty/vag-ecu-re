@@ -31,6 +31,11 @@ class Emu:
         self.uc.mem_write(FLASH_BASE, self.fw)
         self.uc.mem_map(RAM_BASE, RAM_SIZE)
         self.uc.mem_map(STACK_BASE, STACK_SIZE)
+        # High peripheral space (valve/pump 0xfff7xxxx, status regs up to 0xffffff00). Pre-mapped
+        # because the on-demand pager cannot map the top page (0xfffff000+0x1000 wraps the 32-bit
+        # space). Reads return 0 = idle/ready, which satisfies the hardware wait-loops (e.g.
+        # FUN_0008760a polls *0xffffff00 until bits[15:11] != 0x1f; 0 already passes).
+        self.uc.mem_map(0xfff00000, 0x00100000)
         self.writes = []          # (pc, addr, size, value)
         self.mmio   = {}          # addr -> {'r':n,'w':n,'wvals':[]}
         self.mapped_extra = set()

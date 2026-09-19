@@ -133,3 +133,23 @@ ecus/al551/flash/block_crc32.txt
 ecus/*/frf_extract/FD_*
 # ad-hoc decompile-run stdout logs (JVM banner + DecompileAll output; regenerable, not metadata)
 ecus/*/analysis/redecomp*.out
+
+# --- Two-level packs (e.g. ecus/esp8/<variant>/): the derived-work rules above are one dir
+# deeper here. Firmware + ghidra_proj already have ecus/*/*/ patterns; mirror the DERIVED
+# analysis outputs too, so a two-level pack's decompiles/logs/manifests never enter git.
+# COMMITTED metadata (address-only) stays trackable: analysis/function_entries.txt + symbols_merged.csv.
+ecus/*/*/analysis/decompiles*/
+ecus/*/*/analysis/decompiles*.manifest.csv
+ecus/*/*/analysis/disasm_r/
+ecus/*/*/analysis/degraded_fns.txt
+ecus/*/*/analysis/recovered_returns.csv
+ecus/*/*/analysis/_logs/
+ecus/*/*/analysis/*.log
+ecus/*/*/analysis/function_entries_bare.txt
+ecus/*/*/ghidra_proj.bak/
+# Phase-2 RAM-data-image outputs for two-level packs: ram_bases.csv carries firmware-derived
+# pointer VALUES (regenerable via emu/capture_ram_bases.py), orphan_entries is a recovery seed list.
+ecus/*/*/analysis/ram_bases.csv
+ecus/*/*/analysis/orphan_entries.txt
+ecus/*/*/analysis/dispatch_resolved.csv
+ecus/*/*/analysis/indirect_branches.csv

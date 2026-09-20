@@ -253,3 +253,19 @@ Session-2 wake decode summary (all committed): operational gate = ComM/Nm (0x409
 {0x400,404,40c,418,440,478}; exact NM sub-PDU frame `07 00 06 00 NODE 00 CTRL 00` (sub-id 0x600,
 len 4); transport = TP2.0. Remaining: open a TP2.0 channel (or capture the real bus) — the CAN-id↔
 channel binding + channel connection state are the last runtime-only pieces.
+
+## CORRECTION: transport is a sub-id-multiplexed IPDU, NOT TP2.0
+The prior "TP2.0" note was wrong. `0xB8`/`0xBA` are read at `buffer+0x10a`, which is the **sub-id
+high byte** (sub-id = `buffer[0x10a]<<8 | buffer[0x10b]`) — so they are just other sub-id families
+(`0xB8xx`/`0xBAxx`), not TP2.0 channel opcodes. Confirmed: `DAT_0001c6cc = 0x4050e8` (the channel
+buffer). So there is no TP2.0 channel-setup avenue; the transport is an AUTOSAR-style multiplexed
+container IPDU that demuxes sub-PDUs (0x600 NM, 0xf1a3, 0xf1a4, 0xB8xx, 0xBAxx…) from a reassembly
+buffer. Sub-id 0x600 is a SINGLE frame (`frame[0]=7`, 4 data bytes), so the decoded
+`07 00 06 00 NODE 00 CTRL 00` frame stands — it just has to arrive on the CAN-id bound to channel
+`0x4050e8`, with the channel-status bits (`0x4079e4`) that the CanIf RX sets on delivery.
+
+Net accurate state: the NM CONTENT + exact single-frame layout are decoded and correct; the one
+remaining runtime-only unknown is the **CAN-id ↔ transport-channel (`0x4050e8`) binding** (the CanIf
+RX config, RAM-wired, flash literals point to code). Closing it needs the CanIf/COM config
+materialization (same boot-init blocker) or a real bus capture — against which the decoded frame +
+node-ids are the immediate decode/verify key.

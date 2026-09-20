@@ -56,3 +56,27 @@ the correct VARIABLE-LENGTH record sequence — the record iterator that calls `
 `0xa7e14` TLV with per-type lengths (RAM-wired, not yet replicated), and (b) not letting `0x406a04`
 latch to `0x1000000` (find/clear the writer, or run the missing phase that resets it to 0 so the tail
 alloc fires). This is the concrete remaining work; it is a multi-step effort, not a one-shot.
+
+## SESSION 2 cont. — dispatcher disassembled + walker/dispatcher command-space split
+Disassembled both engines directly (not decompile) — key structural facts:
+- **Dispatcher `FUN_0008df52` (Thumb)** switches on `*0x4069a8 - 0xd3` via a **0x2c-entry jump table**
+  at 0x8dfdc (commands 0xd3..0xfe). Gate (confirmed by disasm): `*0x4092e0==0 && *0x406aa0==0 &&
+  (*0x4069e4==1 || *0x4069e5==1) && *0x4069e7==0 && phase *0x406aa4==1 && *0x4069e4!=1` (e4==1 diverts
+  to phase-0 setup). A `*0x4069e1` **bit3** test can bypass the range pre-check. Command byte =
+  `staging[4]` at `0x4069a8`; staging is `0x4069a4`.
+- **Command source is NOT a flash record array.** Scans for stride-N records with byte4∈{0xd3..0xfe}
+  hit only ARM veneer code (e.g. 0xa2750 = `e59fc000/e12fff1c` ldr/bx thunks). The `0xa7e14` records
+  have byte4=0x00/0x09. So the `0xd3+` commands are **runtime-generated** by the walker, not stored.
+- **Walker emits STATE codes, not dispatcher commands.** The small values (2,8,9,6,4) it computes are
+  written to `*0x406a04` (walker next-state) at 0x4a3f4 — they are NOT the 0xd3+ dispatcher command.
+  Its queue at 0x408ba8 (tag/handle/0xfe) and counter 0x408ba1 are internal bookkeeping.
+- **Record-construction helpers** at 0x4a41c / 0x4a450 build records at `0x406990` (memset 0xc,
+  byteswap tag, byte4=0xff header / tag 1/2). `com_objtable_alloc 0x8e3d0` and the byteswap
+  `0x49e48/0x49e80` are the shared primitives.
+
+**The one unresolved link**: how the walker's parse of the high-level config becomes the `0xd3+`
+dispatcher command stream in `staging[4]`. The walker copies `record[0:0xc]->staging` (so
+`staging[4]==record[4]`), yet no located config has `record[4]∈{0xd3..0xfe}` — so a walker phase (or
+the RAM-wired iterator) must WRITE the 0xd3+ command into `0x4069a8` from the parsed config +
+allocation result. Finding that write is the next concrete step; it is the crux of materialization.
+This is a large multi-stage interpreter — closing it is a dedicated effort, not a one-shot.

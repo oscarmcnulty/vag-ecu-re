@@ -316,3 +316,20 @@ not cleanly recoverable statically.
 purely the exact container CAN-id + E2E params, which a **single bus capture** hands over directly —
 and then the fully-decoded content above (sub-id 0x600, node-ids, `07 00 06 00 NODE 00 CTRL 00`,
 CRC-8/J1850) constructs and verifies the wake frame.
+
+## CONTAINER CAN-ID FOUND IN THE BIN — receive-routing table 0xb3e38
+The CanIf receive-routing config IS a static flash table at `0xb3e38` (stride 8: `{channel_ptr(4),
+canid(u16), flags(u16)}`). It maps container CAN-ids to the NM transport channel `0x4079e8`
+(= the channel struct whose buffer is `0x4050e8`):
+- **channel 0x4079e8 ids:** 0x400,0x403,0x406,0x409,**0x40c**,0x425,0x42f,0x43a,0x44a,0x4ae,0x457,
+  0x45c,0x481,0x466,0x46c, 0x787,0x794,0x7a1,0x7b1,0x7be,0x7cb. The flags **high byte = container
+  byte-length** (0x400→1, **0x40c→0x17=23**, 0x425→8, 0x43a→0xe, 0x44a→0xb, …).
+- The container's sub-PDU list (`0xb5760`): `0x600`(len4)+`0xf1a3`(len3)+`0xf1a4`(len8). With 2-byte
+  sub-id headers + a 2-byte container header: 6+5+10+2 = **23 = 0x17** → matches **CAN-id 0x40c**.
+
+**=> The NM (sub-id 0x600) arrives on CAN-id `0x40c` as a 23-byte MULTI-FRAME container** (0x600 is
+the first sub-PDU). Single-frame injection on 0x40c fails because the message spans ~4 CAN frames and
+the channel-status "complete" bits only set after the full multi-frame reassembly. Config also links
+signal 0x046f→buffer 0x408f10 (NM word) and handler `0xbbe28` to this container. Next: reverse the
+multi-frame FF/CF byte layout (from TX segmenter FUN_00067b1c / the RX reassembler) to build the
+23-byte container on 0x40c with a valid 0x600 NM sub-PDU, and inject it (no flow-control needed).

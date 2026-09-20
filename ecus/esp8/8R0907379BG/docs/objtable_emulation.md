@@ -35,3 +35,24 @@ dispatcher's staging `0x4069a4`; (2) sequence the 2-phase-per-record + tail stat
 (currently ~1 record then stalls on consume/ack); (3) parse the `0xa7e14` TLV with per-type lengths +
 byte-swap. NB: materialization yields ROUTING (container id→signal 0x046f→0x408f10); the NM *content*
 to pass `FUN_00040950` node-id/mask validation is a separate need (real sensor-cluster payload/capture).
+
+## SESSION 2 cont. — walker per-record phase trace (single record)
+Traced one staged record through repeated walker calls (emu/objtable_corun.py trace):
+- **pass A** (`*0x4069e5==0`): copies `record[0:0xc]` -> dispatch staging `0x4069a4`, sets `*0x4069e5=1`.
+- **pass B** (`*0x4069e5==1`): calls `com_objtable_alloc 0x8e3d0` once, then emits a queue job at
+  `0x408ba8` = {`+0xc`: tag `0x0200` (byteswap of 2), `+0xe`: `record[2]` handle, `+0x10`: `0xfe`
+  marker, `+0x11`: `0x10`} and sets ready-flag `*0x408ba0=1`. Walker state `*0x406a04` becomes
+  `0x1000000`; internal counter `*0x408ba1` starts incrementing.
+- **passes C+**: `*0x408ba1` just increments (0x01,0x02,…0x0c…) and nothing else happens — the
+  build STALLS. The tail allocation (`com_objtable_alloc` when `*0x406a04==0 && *0x408ba1==0x14 &&
+  *0x4069e6==1`, config via `0xbd6c4`) never fires because `*0x406a04` is `0x1000000` (not 0) and
+  `*0x408ba1` never reaches `0x14`. The bump pointer `*0x4069b0` does NOT advance and 0x40a1a8 stays
+  empty — `com_objtable_alloc` returns without allocating (a precondition is unmet).
+
+Interpretation: the walker is a large multi-phase byte-swapped interpreter whose per-record work is
+gated by internal state (`0x406a04`, `0x408ba0/ba1`, `0x4069e4..e7`) that the FULL startup sequences
+across many records + a header (`type 0xff` -> `0x40699c`) record first. Driving it needs (a) feeding
+the correct VARIABLE-LENGTH record sequence — the record iterator that calls `FUN_0008e4f4` reads the
+`0xa7e14` TLV with per-type lengths (RAM-wired, not yet replicated), and (b) not letting `0x406a04`
+latch to `0x1000000` (find/clear the writer, or run the missing phase that resets it to 0 so the tail
+alloc fires). This is the concrete remaining work; it is a multi-step effort, not a one-shot.

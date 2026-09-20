@@ -157,3 +157,30 @@ Fallback if NM proves unreachable without a gateway: the enable is a single byte
 netmode `0x409230` — a live-RAM write (bench debug/`0x23`-style primitive, once found) to
 `0x40944c=1` + `0x409230=0x80` would force operational without NM, isolating whether anything
 downstream also checks NM state.
+
+## NM CONTENT recovered via emulation oracle (session 2 cont.) — node-ids
+
+Using the emulator as an oracle (`emu/nm_validate_oracle.py`): ran the NM processor
+`FUN_00040950` (Thumb) with event=1 over candidate 4-byte payloads and detected which reach the
+success path (writes 0x408f10 + sets network-active flags 0x408f20/0x408f21).
+
+- **Accepted SOURCE NODE-IDs (payload byte2, matched against node table 0xbd83c):
+  `0x4a, 0x5f, 0x98, 0x99, 0x9a, 0xd4`.** Control byte (byte0): `0x00, 0x02, 0x40, 0x42`.
+  Minimal passing NM word: `[00 00 <node> 00]`.
+- Container reassembly (`FUN_000689e4`): the NM word is a sub-PDU tagged **0x600**; the 4 NM bytes
+  are a scrambled map of the transport payload —
+  `NM = (buf[0x10e]<<24)|(buf[0x10d]<<16)|(buf[0x10c]<<8)|buf[0x10f]`, i.e. node = payload byte4,
+  ctrl = byte6, sub-id `06 00` at bytes[2:3]. Candidate single-frame: `[LL 00 06 00 NODE 00 CTRL 00]`.
+
+### Bench tests run (all NEGATIVE)
+- Saturating all-ids container blast; clean per-id single-frame sweep; per-id multi-framing sweep
+  (raw + ISO-TP-style), all with valid node-ids across the 225 accepted CAN-ids → **no reaction**
+  (heartbeat 0x060 unperturbed, no new tx id). Harness kept as `bench/nm_probe.py`.
+
+Interpretation: the NM CONTENT is now known and verified, but the **container CAN-id + exact
+transport framing are object-table-routed (RAM-wired)** and not reproducible by blind injection,
+and the NM→ComM-enable step (netmode `param` into `FUN_0008f5cc`) is also RAM-wired. So the two
+remaining unknowns are both runtime-dispatch. Closing either needs the object-table materialization
+(`emu/objtable_corun.py`) to yield the container id + sub-PDU layout, OR a real private chassis-CAN
+capture (running B8 Q5 / the G419 sensor cluster) to read the true frame — against which the
+node-ids above are the validation key.

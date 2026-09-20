@@ -269,3 +269,13 @@ remaining runtime-only unknown is the **CAN-id ↔ transport-channel (`0x4050e8`
 RX config, RAM-wired, flash literals point to code). Closing it needs the CanIf/COM config
 materialization (same boot-init blocker) or a real bus capture — against which the decoded frame +
 node-ids are the immediate decode/verify key.
+
+## FRAME FORMAT CONFIRMED end-to-end in emulation
+Set the transport channel-status reg `0x4079e4` bits **10+11** (the "message complete/valid" bits the
+CanIf sets on a validated RX) and fed the frame to `FUN_000689e4` (with the reconstructed sub-id
+table): it reaches `FUN_00040950(word,1)` and **writes `0x408f10 = 0x5f00`** (NM word, node 0x5f) and
+sets the network-active flags. The NM-path gates at `[0x4079e4]` are: **bit11 set**, plus (bit26 &
+`*0xbc590=='X'`) OR **bit10 set**. So the frame `07 00 06 00 <NODE> 00 <CTRL> 00` is DEFINITIVELY the
+correct NM sub-PDU — the only bench variable left is the CAN-id whose CanIf RX sets those status bits
+(and whether a single frame suffices vs. a multi-frame/FF reassembly). A full 11-bit CAN-id sweep of
+this exact frame is the decisive bench test.

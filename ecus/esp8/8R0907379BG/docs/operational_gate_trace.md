@@ -333,3 +333,21 @@ the channel-status "complete" bits only set after the full multi-frame reassembl
 signal 0x046f→buffer 0x408f10 (NM word) and handler `0xbbe28` to this container. Next: reverse the
 multi-frame FF/CF byte layout (from TX segmenter FUN_00067b1c / the RX reassembler) to build the
 23-byte container on 0x40c with a valid 0x600 NM sub-PDU, and inject it (no flow-control needed).
+
+## E2E PROTECTION found — why valid-content frames still fail
+Right before the NM sub-PDU config (buffer 0x408f10 @0xb3e14) sits the E2E/protection config:
+`03 7f ff 12` → **profile 0x03, data-ID 0x12** for the NM. It's part of a per-sub-PDU data-ID list
+(`0x91,0x33,0x31,0x80,0x35,0x12` at 0xb3dfc..0xb3e10) plus a value table `70 86 9c b2 c8 de fe`
+(likely per-counter CRCs). So the container/NM sub-PDU is **E2E-protected** (counter + CRC keyed by
+data-ID) — the CanIf validates E2E and only then sets the channel-status "valid" bits (0x4079e4
+bit10/11) that gate the NM path. That is why every content-correct injection (single- and multi-frame)
+on the right CAN-id (0x40c) was dropped: no valid E2E counter/CRC.
+
+### State of the wake (session 2 — the CAN-ids ARE in the bin)
+Confirmed the user's point: the CanIf receive-routing table `0xb3e38` gives the container CAN-ids
+statically (NM channel 0x4079e8 ⇐ 0x400/403/406/409/**0x40c**/425/.../46c, 0x787-7cb). The NM sub-PDU
+(0x600), the frame content, node-ids, and now the **E2E data-ID (0x12)** are all recovered from the
+bin. The ONLY remaining piece to build a bench-valid wake frame is the **exact E2E layout** (which
+bytes are the counter and CRC, and the CRC algorithm keyed by data-ID 0x12) — reverse the CanIf E2E
+validator that reads the `0x037fffXX` config and gates 0x4079e4 bit10/11. Then: valid E2E frame on
+0x40c with sub-id 0x600 + a valid node-id = operational.

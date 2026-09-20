@@ -231,3 +231,25 @@ Disassembled `FUN_000689e4` (Thumb) match/parse (0x689e4-0x68b04):
 This is the container/sub-PDU frame that drives NM. It matches the format already tried on 0x440
 (negative) — so the last missing piece is the **CAN-id that feeds transport channel `0x4050e8`**
 (the mailbox→channel binding), plus possibly the bit11/connection state needing sustained RX.
+
+## Transport is VAG TP2.0 (session 2 cont.) — new diagnostic wake avenue
+The transport handlers (`FUN_0001c3c8` etc., channel 0x4079a0 / buffer 0x4050e8) check received
+opcode bytes `0xB8`/`0xBA` at buffer+0x10a — **VAG TP2.0 channel-management opcodes**. So the
+"container" transport is TP2.0, and `0x600` is a TP2.0 logical address, not a plain multiplex tag.
+
+Implications for the bench wake:
+- The exact single-frame NM format decoded above (`07 00 06 00 NODE 00 CTRL 00`) is likely only
+  meaningful INSIDE an established TP2.0 channel — which is why raw injection on the CAN-ids does
+  nothing: no channel is open, so the channel-status bit11 gate never sets and FUN_000689e4's
+  per-message path isn't entered.
+- **New avenue:** a proper **TP2.0 channel-setup handshake** (broadcast setup request → ECU dynamic
+  channel response → KWP2000/Dcm) would make Dcm active-diagnostic a ComM user → ComM full
+  communication → operational — independent of the missing partner NM. The handoff's "TP2.0 setup
+  silent" needs revisiting with the transport-group CAN-ids now known (diag `0x6b4`, and the
+  `0xfff7ea00`-controller mailbox cluster incl. `0x440/0x188/...`), and the correct TP2.0 setup id.
+
+Session-2 wake decode summary (all committed): operational gate = ComM/Nm (0x40944c/0x409438);
+0x060 CRC = CRC-8/J1850; NM node-ids {0x4a,5f,98,99,9a,d4}; hidden HW NM CAN-ids
+{0x400,404,40c,418,440,478}; exact NM sub-PDU frame `07 00 06 00 NODE 00 CTRL 00` (sub-id 0x600,
+len 4); transport = TP2.0. Remaining: open a TP2.0 channel (or capture the real bus) — the CAN-id↔
+channel binding + channel connection state are the last runtime-only pieces.

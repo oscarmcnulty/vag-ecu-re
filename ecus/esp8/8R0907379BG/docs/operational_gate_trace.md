@@ -190,3 +190,27 @@ ISO-TP container payloads (sub-id 06 00 + each valid node-id, several layouts) s
 diag mailbox `0x6b4/0x6b8` → no response, no wake (still only 0x060). Consistent with the handoff's
 0x6b4 silence. The transport (`FUN_000689e4`) has FF/CF connection state, so event=1 (NM received)
 likely needs a full transport CONNECTION handshake first — not just a single injected frame.
+
+## HARDWARE MAILBOX CONFIG decoded (session 2 cont.) — hidden NM CAN-ids found in the bin
+Decoded the CAN-controller mailbox config table at **`0xaea38`** (24-byte records:
+`{mbox_reg(4), w1(4), ctrl_reg(4), w3(4), canid@+0x10 (u16), maskbit(4)}`). The `canid` field (w4hi)
+gives the **hardware-accepted CAN-ids**, several of which the software COM receive-filter (`0xafae0`)
+does NOT list — i.e. dedicated mailboxes the prior static inventory missed:
+
+- **Hidden hardware RX ids** (in a mailbox, absent from `0xafae0`):
+  `0x64, 0x188, 0x194, 0x198, 0x1c8, 0x208, 0x210, 0x228, 0x27c, 0x400, 0x404, 0x40c, 0x418, 0x440, 0x478`
+- The **NM-range cluster `0x400 / 0x404 / 0x40c / 0x418 / 0x440 / 0x478`** is the key find. `0x440`
+  is on its own mailbox `0xfff7e610` (w3=`0x01010202`, distinct from the COM-RX mailboxes' `0x08xx06xx`).
+  The handoff's "0x441 NM" guess was **off by one** and its replay used only `0xafae0` — so these NM
+  ids were **never tested with valid content**. This kills the "no 0x4xx" conclusion from the SW filter.
+
+### Bench tests on the hidden ids (session 2, all NEGATIVE so far)
+- Valid NM node-ids ({0x4a,0x5f,0x98,0x99,0x9a,0xd4}) in direct (node@byte0/1/2/3) and container
+  (sub-id 06 00, node@4) framings, per-id — no reaction.
+- **Sustained full-NM-cluster** (valid node on all six 0x4xx ids @50 ms for 8 s, counter+CRC,
+  node@byte2 and node@byte0) — no wake, 0x060 unperturbed.
+
+Interpretation: the CAN-ids are now known from the bin, but the exact **NM frame byte-layout / E2E**
+that mailbox `0xfff7e610`'s RX handler expects before it reaches `FUN_00040950` is still unresolved
+(the mailbox→handler byte mapping is the next trace). The node-ids remain the validated content key.
+Tools: bench/nm_probe.py (now covers hidden ids via edit), scratch nm_sustained.py.

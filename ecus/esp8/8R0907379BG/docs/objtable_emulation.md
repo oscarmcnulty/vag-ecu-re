@@ -80,3 +80,26 @@ dispatcher command stream in `staging[4]`. The walker copies `record[0:0xc]->sta
 the RAM-wired iterator) must WRITE the 0xd3+ command into `0x4069a8` from the parsed config +
 allocation result. Finding that write is the next concrete step; it is the crux of materialization.
 This is a large multi-stage interpreter — closing it is a dedicated effort, not a one-shot.
+
+## SESSION 2 cont. — DEFINITIVE blocker: config iterator is boot-installed RAM dispatch
+Ran option (1) — hunt the 0xd3+ command source — to ground. Findings:
+- The dispatcher command = `staging[4]` = `record[4]`; a record with `record[4]∈{0xd3..0xfe}` IS a
+  builder command (walker "else" path copies it to staging). Dynamic watch confirms NOTHING else
+  writes `0x4069a8` — not phase-0 setup (0x931e8), not the builders, not the dispatcher.
+- So the 0xd3+ command stream can only come from records the iterator feeds via `FUN_0008e4f4`.
+- The iterator is reached only through thunks (`FUN_000954ce -> FUN_000a1cbc -> FUN_0008e4dc`,
+  `FUN_000a1cac -> FUN_0008e4f4`) that have **no static caller** AND **no stored function pointer
+  anywhere in flash** (searched 0x954ce/a1cac/a1cbc/e4f4/e4dc as ARM+Thumb pointer values → zero
+  hits). They are invoked via RAM function pointers the boot code **computes PC-relative and stores
+  at init** — the project-wide object-table wiring, confirmed here from a new direction.
+- The config header (`type 0xff` record -> `0x40699c`) is internal walker bookkeeping, not a config
+  root pointer (only the walker references `0x40699c`).
+
+**Conclusion**: the object table cannot be materialized by driving isolated pieces — the record
+iterator only runs once the boot init has installed the RAM dispatch pointers. The single viable
+software route is therefore the **full boot init under a peripheral-model harness** (skip the absent
+SBOOT/crt0 context, call the init directly, and stub the CAN-controller status + OS-tick MMIO that
+`FUN_0009d2d6` and the startup wait on) so the real init installs the dispatch and the config
+processing runs to completion. That is a substantial emulation-engineering task (a bounded SoC
+peripheral model), not achievable by more static/isolated poking. Alternative: a bench RAM read of
+`0x40a1a8` after the ECU boots, or a real private-CAN capture (decoded with the recovered node-ids).

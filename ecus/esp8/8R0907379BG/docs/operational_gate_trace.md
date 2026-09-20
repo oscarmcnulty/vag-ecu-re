@@ -184,3 +184,9 @@ remaining unknowns are both runtime-dispatch. Closing either needs the object-ta
 (`emu/objtable_corun.py`) to yield the container id + sub-PDU layout, OR a real private chassis-CAN
 capture (running B8 Q5 / the G419 sensor cluster) to read the true frame — against which the
 node-ids above are the validation key.
+
+### Additional bench negative (session 2 cont.)
+ISO-TP container payloads (sub-id 06 00 + each valid node-id, several layouts) sent to the native
+diag mailbox `0x6b4/0x6b8` → no response, no wake (still only 0x060). Consistent with the handoff's
+0x6b4 silence. The transport (`FUN_000689e4`) has FF/CF connection state, so event=1 (NM received)
+likely needs a full transport CONNECTION handshake first — not just a single injected frame.

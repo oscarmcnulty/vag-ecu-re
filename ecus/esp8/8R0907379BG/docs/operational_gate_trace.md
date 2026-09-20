@@ -292,3 +292,27 @@ single 8-byte frame never completes it, so the "message complete" status bits ne
 => The wake requires the multi-frame reassembly sequence (FF/CF at `buffer+0xd`, 0x10/0x20), not a
 lone frame. Next: reverse the CanIf reassembly (writers of `0x4079e4`: FUN_0001c3c8/c6b0/d570/8b850)
 to construct the exact FF+CF sequence for sub-id 0x600 — or capture the real partner's frames.
+
+## ANSWER to "is blind injection possible without a partner?" — YES (no flow-control lock-out)
+Reversed the transport RX/TX to settle whether the ECU must send flow control (which it won't while
+degraded):
+- `FUN_00067b1c` is **proactive TX segmentation** (case 5 packs the ECU's own NM word 0x408f10 into a
+  sub-id-0x600 container to SEND); `FUN_0005c744` is a transport-op **queue submit** (mutex-guarded),
+  not a CRC and not a flow-control responder.
+- On NM RX, `FUN_000689e4` calls only `FUN_0008a786` (sets a flag bit) — it **transmits nothing**.
+=> The transport is a **broadcast segmented multiplex, NOT point-to-point ISO-TP**: there is no
+FC/handshake, so the ECU's silence does NOT prevent it from receiving a container. **Blind injection
+is architecturally possible** — the bench CAN wake it without a live partner.
+
+### Why the single-frame sweep still failed, and the true remaining barrier
+Sub-id 0x600 is a single 7-byte message (fits one CAN frame), and no FC is needed, yet the full
+11-bit sweep set no channel-status bits. So the CanIf RX marks the channel "message valid"
+(`0x4079e4` bit10/11) only after the frame passes its **acceptance + E2E/sequence check** — the exact
+container **CAN-id** and its **E2E parameters (counter position + CRC data-id)** are the last missing
+values, and both live in the RAM-relocated CanIf/COM config (flash literals point to code). They are
+not cleanly recoverable statically.
+
+**Net answer:** the bench can wake the unit without a partner (no protocol lock-out); the blocker is
+purely the exact container CAN-id + E2E params, which a **single bus capture** hands over directly —
+and then the fully-decoded content above (sub-id 0x600, node-ids, `07 00 06 00 NODE 00 CTRL 00`,
+CRC-8/J1850) constructs and verifies the wake frame.

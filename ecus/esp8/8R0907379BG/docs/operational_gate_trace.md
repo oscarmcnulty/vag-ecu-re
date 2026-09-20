@@ -279,3 +279,16 @@ sets the network-active flags. The NM-path gates at `[0x4079e4]` are: **bit11 se
 correct NM sub-PDU — the only bench variable left is the CAN-id whose CanIf RX sets those status bits
 (and whether a single frame suffices vs. a multi-frame/FF reassembly). A full 11-bit CAN-id sweep of
 this exact frame is the decisive bench test.
+
+## DECISIVE: full 11-bit sweep of the exact NM frame does NOT wake it
+Swept `07 00 06 00 5f 00 00 00` across ALL CAN-ids 0x000-0x7ff (~0.12s/id, 245s) → no new tx, only
+0x060. Since the frame CONTENT is emulation-proven correct, this proves **single-frame injection
+cannot deliver the sub-PDU on any CAN-id** — the missing piece is the transport DELIVERY (the CanIf
+reassembly that sets channel-status `0x4079e4` bits 10+11), not the content. Corroboration:
+`FUN_00067b1c` reads the length byte `buffer[0x108]` and, for an odd length like 7, computes
+`(len-1)/2` (=3) — a per-message FRAME COUNT, i.e. the container is a **multi-frame** protocol; a
+single 8-byte frame never completes it, so the "message complete" status bits never set.
+
+=> The wake requires the multi-frame reassembly sequence (FF/CF at `buffer+0xd`, 0x10/0x20), not a
+lone frame. Next: reverse the CanIf reassembly (writers of `0x4079e4`: FUN_0001c3c8/c6b0/d570/8b850)
+to construct the exact FF+CF sequence for sub-id 0x600 — or capture the real partner's frames.

@@ -214,3 +214,20 @@ Interpretation: the CAN-ids are now known from the bin, but the exact **NM frame
 that mailbox `0xfff7e610`'s RX handler expects before it reaches `FUN_00040950` is still unresolved
 (the mailbox→handler byte mapping is the next trace). The node-ids remain the validated content key.
 Tools: bench/nm_probe.py (now covers hidden ids via edit), scratch nm_sustained.py.
+
+## EXACT NM FRAME FORMAT decoded from the transport handler (session 2 cont.)
+Disassembled `FUN_000689e4` (Thumb) match/parse (0x689e4-0x68b04):
+- Channel buffer base `0x4050e8`; received frame at `+0x108`. `frame[0]` = length, must be `>=4`.
+- Received sub-id = `(frame[2]<<8) | frame[3]`; matched against the 3-entry sub-id table (hardcoded
+  compares to **0x600 / 0xf1a3 / 0xf1a4**; table also at `0xbd774`, RAM-relocated). Length gate:
+  `frame[0] == subid_len + 3` → for 0x600 (len 4) **frame[0] must = 7**.
+- On sub-id 0x600 → the 4 NM bytes are assembled from `frame[4..7]` (scrambled) into the word
+  `frame[6]<<24 | frame[5]<<16 | frame[4]<<8 | frame[7]`, then `FUN_00040950(word,1)`. Per the NM
+  validator: **node = frame[4]**, ctrl = frame[6]. So the NM CAN frame is:
+      `07 00 06 00 <NODE> 00 <CTRL> 00`   NODE∈{0x4a,5f,98,99,9a,d4}, CTRL∈{0,2,0x40,0x42}
+- **Gate:** channel status reg `[0x4079a0+0x44]` (=`0x4079e4`) **bit11** must be set (the CAN driver
+  sets it on a validated RX). A second table (`0xbd790`) validation also applies.
+
+This is the container/sub-PDU frame that drives NM. It matches the format already tried on 0x440
+(negative) — so the last missing piece is the **CAN-id that feeds transport channel `0x4050e8`**
+(the mailbox→channel binding), plus possibly the bit11/connection state needing sustained RX.

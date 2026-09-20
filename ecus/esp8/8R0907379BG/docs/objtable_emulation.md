@@ -103,3 +103,27 @@ SBOOT/crt0 context, call the init directly, and stub the CAN-controller status +
 processing runs to completion. That is a substantial emulation-engineering task (a bounded SoC
 peripheral model), not achievable by more static/isolated poking. Alternative: a bench RAM read of
 `0x40a1a8` after the ECU boots, or a real private-CAN capture (decoded with the recovered node-ids).
+
+## SESSION 2 — FINAL: option 1 (emulation) is architecturally blocked (SBOOT context absent)
+Pushed the emulation route to ground and independently confirmed the prior RE conclusion
+(`asw_start_sboot` @0x8f440, `com_obj_table_base_ptr` @0x4069b4):
+- The config-processing iterator is reached only via thunks (954ce/a1cbc/a1cac/e4dc/e4f4) with NO
+  static caller and NO stored function pointer in flash (searched all forms) — the dispatch pointers
+  are **computed and installed by SBOOT/crt0 at boot**, and that context is ABSENT from the ASW image
+  (0x0–0x134011). `_start` (0x8f440) uses SBOOT monitor SVCs (#0x13–0x16) that can't run bare.
+- Therefore full COM-init cannot be bootstrapped from this image by any isolated/partial drive.
+
+### The circular dependency (the real wall)
+operational  ← needs NM container msg  ← needs container CAN-id  ← needs object table 0x40a1a8
+object table  ← (a) emulate COM-init  = BLOCKED (SBOOT context absent)
+              ← (b) bench read via UDS 0x23 = BLOCKED (SecAccess + Dcm, needs operational)
+              ← (c) enter SBOOT to read     = BLOCKED (programming session via Dcm, needs operational)
+Every software/bench-injection path loops back through the operational wall.
+
+### What breaks the circle (only external inputs)
+1. **Real CAN capture** of a running B8 Q5 private chassis/sensor CAN (or power the G419 sensor
+   cluster on the bench) → the container frame + CAN-id directly. Decode with the recovered NM
+   node-ids {0x4a,0x5f,0x98,0x99,0x9a,0xd4} + the 0x060 CRC-8/J1850. FASTEST.
+2. **Hardware read** (JTAG/BDM/boot-pin into SBOOT, or die read) → dumps RAM 0x40a1a8 / flash
+   directly, bypassing all Dcm/ComM gates. Needs the debug port open or a boot-strap trigger.
+The pure-software / bench-injection approaches are exhausted; these external inputs are required.

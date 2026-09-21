@@ -678,3 +678,28 @@ header/node -> nothing. Root cause identified: transport_rx_process gates 0x600 
 emulation, manually setting status=0xc00 makes the SAME single frame process + accept -> so the sole
 remaining blocker is producing valid E2E so the CanIf sets the completion bits. E2E CRC algo next
 (tables CRC8-J1850 0xb408c / CRC8-H2F 0xb4800; the 0x060 TX uses J1850).
+
+## Delivery boundary: reassembler completion bits are boot-installed; ECU gives zero feedback
+Exhaustive bin + bench iteration this session established the wake condition and wire CONTENT fully
+(above). The remaining piece is DELIVERY, and it is a hard boundary:
+- transport_rx_process / FUN_0001d7a8 / FUN_0001c6b0 / FUN_0008b850 are ALL RAM-dispatched (no
+  static caller); they CONSUME the channel buffer. The per-frame CanIf RxIndication that copies the
+  raw 0x40c frame -> channel[0x34] PCI + reassembly buffer, runs the E2E (data-id 0x12), and sets the
+  channel-status completion bits 0x4079e4 **bit10/11** (which gate transport_rx_process) is the
+  boot-installed dispatch from the CAN ISR (0xb6a50 table) — not present in the flash image.
+- Bench: the ECU ACKs 0x40c (mailbox 0x1b) so frames ARE received, but it emits ONLY 0x060 whether
+  idle or under any injection (single-frame, FF+CF ISO-TP nibble PCI, custom PCI 0xb8/0xc1, all 3
+  sub-PDUs, bit21 set, sustained). No flow-control, no error frame, no state change => **zero feedback
+  gradient**, so the exact multi-frame PCI/E2E cannot be converged empirically, and it is not
+  statically recoverable (boot-installed).
+- Interpretation: Dcm is ComM-gated (down) by the SAME grant that gates ESP broadcast, so the ECU is
+  booted and waiting for the container-driven full-comm grant; but the reassembler that would accept
+  that container is the boot-installed piece. Both the trigger and the means to observe partial
+  progress are behind the operational gate.
+
+**Net for the wake goal:** solved = the enable chain, tx_gate2=bit21 of signal 0x046f, the 0x40c
+container id (HW-accepted) + sub-PDU 0x600 layout + that byte1 bit5 is the trigger, and the on-wire
+sub-PDU packing (from the TX segmenter). Unclosed = the exact CanIf multi-frame PCI + E2E (data-id
+0x12) that sets completion bits 0x4079e4 bit10/11 — boot-installed, no static image, no bench
+feedback. This is the true, minimal residual and it is not reachable from the bin + a feedback-silent
+bench alone.

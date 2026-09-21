@@ -597,3 +597,29 @@ frame is the 0x40c container whose 0x600 sub-PDU 4 bytes have byte1 bit5 set, wi
 (data-id 0x12). Next: disassemble the 0x600 handler 0xbbe28 to get the exact copy-to-0x408f10 and
 the E2E check (whether COM writes the raw 4 bytes with/without node validation), then the container
 byte layout + E2E, then bench-inject.
+
+## Gate logic fully cracked: wake = bit21 of the 0x600 sub-PDU value (COM signal 0x046f)
+Emulated the real Thumb receive path transport_rx_process (0x689e4) against a synthesized 0x40c
+container (seeding the boot-relocated sub-id list ptr 0xbd774 with the flash list from 0xb5760).
+Reassembled buffer (base 0x4050e8): buf[0x108]=seg len (=7 for 0x600), buf[0x10a:0x10c]=sub-id
+(06 00), buf[0x10c:0x110]=the 4 sub-PDU bytes [d0 d1 d2 d3]. NM word = [d2,d1,d0,d3]; node=d0.
+VERIFIED:
+- Valid container (node d0 in {0x4a,5f,98,99,9a,d4}) -> 0x408f10 set + net-active flag 0x408f20=1.
+- can_tx_scheduler (0x5bfc) transmit gate = comm_enable_flag(0x40944c)==1 AND tx_gate2(0x409438)!=0
+  (both pointers confirmed in its literal pool @0x5f64/@0x5f78). Gate closed -> idles the msg
+  objects; gate open -> composes/sends ESP_01/02/08.
+- comm_enable is trivial (set for any netmode!=0). tx_gate2 = bit21 of 0x408f10, and
+  **comm_netmode_write (0x8f5cc) is its SOLE writer** (nm_signal_unpack's base is 0x409431, it does
+  NOT touch 0x409438 - the decompile comment was wrong).
+- bit21 of 0x408f10 = byte1-bit5 of the 4-byte NM word = **d1 bit5** of the 0x600 sub-PDU value.
+
+The NM path forbids d1 bit5 (nm_msg_process accepts only d1 bits {0,3,6} per flash masks 0xbda3c/3e;
+d1=0x20 is REJECTED). BUT 0x408f10 == COM signal **0x046f** (E2E cfg @0xb3e10:
+`03 7f ff 12 | 00 40 8f 10 | 04 6f`), which the GENERIC COM Rx unpacks from the same 0x600 sub-PDU
+**without NM node validation**. So the COM write sets bit21 from the raw sub-PDU byte1 regardless of
+the NM validator. => **WAKE = receive 0x40c container whose 0x600 sub-PDU 4-byte value has byte1
+bit5 (0x20) set, with valid E2E (data-id 0x12).** New tool: emu/nm_container_oracle.py.
+
+Remaining: the exact multi-frame (FF/CF) wire->buf mapping + E2E (data-id 0x12) so the 23-byte 0x40c
+container can be built and injected. transport_rx_process ELSE branch (buf[0x22f]!=0) holds the
+FF/CF accumulation (PCI at buf[0xd] &0xf0: 0x10=FF,0x20=CF) -> decode next.

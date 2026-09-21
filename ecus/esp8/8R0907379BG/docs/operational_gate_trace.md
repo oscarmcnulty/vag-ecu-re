@@ -542,3 +542,34 @@ donor that already answers UDS).
 
 (Bench note: the SM2 Pro dropped to SMSTATUS_DEVICE_NOT_FOUND after a scan process was force-
 killed; it needs a USB replug before the next bench run.)
+
+## Live-bench inertness + bit-level gate map (this session, device powered)
+Device replugged, re-tested live:
+- **Full diagnostic scan 0x700-0x7ff = zero response.** Dcm is completely absent in degraded
+  mode (not just on 0x713/0x77D). UDS RAM read is therefore impossible in this state.
+- **0x060 characterized** (499 frames): payload `00 00 00 00 00 08` + byte6=4-bit rolling counter
+  + byte7=CRC-8/J1850 over bytes0..6. **byte5=0x08 is the only state field** (constant). It is NOT
+  in the tx-mailbox config 0xaea38 -> sent by a separate always-on keepalive path (ungated).
+- **ECU is inert to all CAN input.** Flooding all 225 hardware-accepted ids (0xafae0) with valid
+  J1850-CRC frames, and sweeping 0x400-0x470 with container frames, produced NO change in byte5
+  and NO new tx id. CAN reception alone does not move the ECU's state on the bench.
+
+Bit-level gate map (can_tx_scheduler 0x5bfc broadcasts ESP_01/02/08 only when BOTH hold):
+- **comm_enable_flag (0x40944c) == 1** — set by comm_nm_main (0x6a71c) ONLY when
+  `netmode(0x409230) & 0xf0 ∈ {0x30,0x40,0x80,0xa0}`. netmode is written by comm_netmode_write
+  (0x8f5cc) = comm_mode_map(ComM channel mode): mode 0->0x20(NoCom), 3->0x40, 4->0x30, else->0x80.
+  So it needs **ComM channel mode != 0**, i.e. a granted full-comm request.
+- **tx_gate2 (0x409438) != 0** — NM-control-bit derived, written by nm_signal_unpack (0x40794)
+  on a valid NM RX and by comm_netmode_write.
+- comm_nm_main reads the NM PDU **in place at 0x408f10** (DAT_0006aa3c=0x408f10); nm_msg_process
+  (0x40950) validates node-id (byte2 ∈ {0x4a,5f,98,99,9a,d4}) against flash masks 0xbda3c/3e and
+  stores the PDU there + sets net-active flags 0x408f20/21.
+
+**The transition is a multi-runnable state machine:** valid NM RX (via the boot-installed container
+reassembler) -> net-active flags -> Nm/ComM coordinator requests full-comm -> comm_netmode_write
+sets netmode=0x80 -> comm_nm_main sets comm_enable=1 -> tx scheduler broadcasts. Emulating it end-
+to-end requires running the ComM/Nm coordinator runnables with a materialized stack = the same
+boot/SBOOT barrier. On the bench the entry (container reassembly) is boot-installed and the ECU is
+inert to synthesizable CAN. Net: the wake still requires either a real 0x40c container capture from
+a live network, or a donor ECU whose Dcm answers (then read_ram.py pulls the live table to seed a
+full end-to-end emulation).

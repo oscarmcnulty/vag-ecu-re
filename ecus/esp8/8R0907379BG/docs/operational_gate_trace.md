@@ -637,3 +637,25 @@ channel+0x34 (0x4079d4); transport_rx_process's ELSE branch (buf[0x22f]!=0) IS t
 (PCI channel[0x34] & 0xf0: 0x10=First, 0x20=Consecutive), building the reassembly buffer 0x4050e8+
 0x108. So the multi-frame sequence can be emulated end-to-end by calling transport_rx_process per
 frame with channel[0x34]=PCI set -> next step to nail the exact FF/CF byte layout + E2E, then inject.
+
+## SESSION SUMMARY: wake condition fully solved; only the transport wire format remains
+**Solved and confirmed this session (all from the bin + live bench):**
+- can_tx_scheduler broadcasts ESP_01/02/08 iff comm_enable_flag(0x40944c)==1 [trivial: any
+  netmode!=0] AND tx_gate2(0x409438)!=0.
+- tx_gate2 = bit21 of COM signal 0x046f (0x408f10); sole writer comm_netmode_write(0x8f5cc).
+- bit21 = **byte1 bit5 (0x20) of the 4-byte sub-PDU 0x600** value, unpacked by generic COM Rx from
+  the 0x40c container (E2E cfg 0xb3e10 binds signal 0x046f -> 0x600, data-id 0x12).
+- Container id 0x40c is **hardware-accepted** (mailbox 0x1b, 2nd CAN controller) and 23 bytes
+  (routing 0xb3e38). Node byte in {0x4a,5f,98,99,9a,d4}. Emulator reproduces acceptance
+  (nm_container_oracle.py) and the tx_gate2 mechanism (comm_netmode_write).
+=> **WAKE FRAME = 0x40c container delivering sub-PDU 0x600 = [node, 0x20, 00, 00] with valid E2E.**
+
+**The one remaining unknown = the transport wire format**, which is the ONLY thing not in the ASW
+image: the CanIf multi-frame (FF/CF) byte layout for 0x40c AND the per-sub-PDU E2E (data-id 0x12)
+that together set the channel-completion bits 0x4079e4 bit10/11 (which gate transport_rx_process).
+This lives in the boot-installed CanIf/E2E (RAM dispatch from the CAN ISR, absent from flash). The
+live ECU gives no feedback on malformed frames (no flow-control, no 0x060 change, Dcm down), so there
+is no bench gradient to brute-force it. A single real 0x40c capture from a working network (or a
+donor whose Dcm answers, via read_ram.py) yields the wire format directly and, combined with the
+above, produces the wake frame immediately. Tools ready: bench/wake_container.py, emu/
+nm_container_oracle.py, bench/read_ram.py.

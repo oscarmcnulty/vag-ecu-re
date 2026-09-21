@@ -623,3 +623,17 @@ bit5 (0x20) set, with valid E2E (data-id 0x12).** New tool: emu/nm_container_ora
 Remaining: the exact multi-frame (FF/CF) wire->buf mapping + E2E (data-id 0x12) so the 23-byte 0x40c
 container can be built and injected. transport_rx_process ELSE branch (buf[0x22f]!=0) holds the
 FF/CF accumulation (PCI at buf[0xd] &0xf0: 0x10=FF,0x20=CF) -> decode next.
+
+## 0x40c IS hardware-accepted; multi-frame accumulation is in transport_rx_process (emulatable)
+CAN mailbox config 0xaea38 (stride 0x18) idx46: `fff7e7b0 0000ea9b fff7ea00 08 1b 0102 040c ...`
+= controller 0xfff7e7b0 (2nd/private CAN), DLC 8, HW mailbox 0x1b, **accepts CAN-id 0x40c**.
+Neighbours idx44/45/47/48 accept 0x478/0x404/0x418/0x400. So the module DOES receive 0x40c on the
+bench (mailbox 0x1b); the inertness to injected 0x40c is a wrong multi-frame/E2E format, NOT hardware
+filtering. Confirmed a targeted bench attempt (bench/wake_container.py: 0x600 sub-PDU byte1 bit5 set,
+4 layouts x {FF+CF, single}) does not wake it yet -> framing still off.
+
+Wire format handle: the CanIf copies each received 0x40c frame into the channel struct at PCI =
+channel+0x34 (0x4079d4); transport_rx_process's ELSE branch (buf[0x22f]!=0) IS the FF/CF accumulator
+(PCI channel[0x34] & 0xf0: 0x10=First, 0x20=Consecutive), building the reassembly buffer 0x4050e8+
+0x108. So the multi-frame sequence can be emulated end-to-end by calling transport_rx_process per
+frame with channel[0x34]=PCI set -> next step to nail the exact FF/CF byte layout + E2E, then inject.

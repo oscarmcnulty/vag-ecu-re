@@ -659,3 +659,22 @@ is no bench gradient to brute-force it. A single real 0x40c capture from a worki
 donor whose Dcm answers, via read_ram.py) yields the wire format directly and, combined with the
 above, produces the wake frame immediately. Tools ready: bench/wake_container.py, emu/
 nm_container_oracle.py, bench/read_ram.py.
+
+## Wire format recovered from the TX segmenter (transport_tx_segment 0x67b1c)
+Reversed the container TX (same protocol as RX) to get the on-wire layout:
+- Container packed at channel_buf+6; sub-PDU 0x600 (case 5) = **[06 00][sig2 sig1 sig0 sig3]** where
+  sig = COM signal 0x046f (0x408f10). So the 4 data bytes on the wire are the NM word bytes in order
+  [2,1,0,3]. => **bit21 (tx_gate2) = sig1 bit5 = wire data byte index 3 bit5 (0x20).**
+- Single vs multi: buf[0x108]=container length; <0x12 & (==1 or even) -> single frame; >=0x12 ->
+  multi-frame (count=(len-1)/2), PCI at channel_struct[0x34] &0xf0 (0x10=FF nibble, 0x20=CF nibble).
+- Container = concatenated sub-PDU segments [subid_hi][subid_lo][data]: 0x600(6B)+0xf1a3(5B)+
+  0xf1a4(10B)=21B + 2B header = 23B (matches routing len 0x17). E2E via FUN_0005c744(1=TX/0=RX).
+- RX demux (transport_rx_process, VERIFIED in emu): needs buf[0x108]=seg len (=7 for 0x600), sub-id
+  at buf[0x10a:0x10c], data at buf[0x10c:]; NM word = [buf[0x10e],buf[0x10d],buf[0x10c],buf[0x10f]].
+
+**Bench (still no wake):** derived single-frame `[07 hh 06 00 node 20 00 00]` on 0x40c swept over
+header/node -> nothing. Root cause identified: transport_rx_process gates 0x600 on channel-status
+0x4079e4 **bit11** (+bit10/bit26), which the CanIf sets only after **valid E2E** (data-id 0x12). In
+emulation, manually setting status=0xc00 makes the SAME single frame process + accept -> so the sole
+remaining blocker is producing valid E2E so the CanIf sets the completion bits. E2E CRC algo next
+(tables CRC8-J1850 0xb408c / CRC8-H2F 0xb4800; the 0x060 TX uses J1850).

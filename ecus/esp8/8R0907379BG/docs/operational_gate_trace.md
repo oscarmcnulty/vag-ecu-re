@@ -506,3 +506,39 @@ seg2 disassembly cannot reach the exact multi-frame reconstruction. The two rema
       but substantial; payoff uncertain.
   (B) **One real bus capture** of the partner/cluster frame on 0x40c (or the private CAN) — gives
       the exact wake bytes directly and validates against the recovered node-ids/CRC/enable chain.
+
+## Materialization path run to ground — both bin-only routes are closed (live-bench confirmed)
+Pursued the "emulate to materialize the RAM object table" path and closed it with direct evidence:
+
+1. **Cold emulation cannot build the table.** The walker (FUN_00049f38) only processes ONE
+   pre-staged 14-byte record from cursor 0x406980; it does not iterate the config graph. The
+   config-graph iterator that reads the graph (root 0xa7e14 -> child nodes 0xae938/0xae940 ...)
+   and feeds records via com_config_ingest (0x8e4f4) is fully RAM-dispatched, has **no static
+   caller**, and its config-source base pointer is **SBOOT-installed** (re-confirmed here; matches
+   the 3 prior whole-corpus sweeps noted in FUN_000a1cac). So the object table at 0x40a1a8 cannot
+   be materialized from the flash image alone.
+
+2. **Live UDS RAM read is unavailable in degraded mode.** Built bench/read_ram.py (UDS 0x23
+   ReadMemoryByAddress) to seed the emulator from the already-built live RAM. On the powered ECU:
+   - `can_raw sniff` -> ECU **alive**, broadcasting only 0x060 at ~100 Hz (payload
+     `00 00 00 00 00 08 <ctr> <crc8j1850>`), no other ids.
+   - `read_ram` / `confirm_comms` TesterPresent on 0x713/0x77D -> **no response** (timeout).
+   => The Dcm/diagnostic stack is NOT running in degraded mode (ComM-gated, the same gate we are
+   attacking). ReadMemoryByAddress therefore cannot pull the materialized table on the bench.
+
+**Key live observation:** the ECU transmits CanNm (0x060) at 100 Hz, so **CanNm is already in
+Network Mode** — the barrier is strictly downstream of CanNm network mode: the ComM full-
+communication grant that turns on application COM (0x100/0x101/0x11e) and Dcm. That grant needs the
+NM-user/full-comm request derived from the **0x40c container content** (signal 0x047b==1 + NM mode
+0x80 + NM-active flags), i.e. another node asking for full communication.
+
+**Conclusion:** every artifact that would reveal or materialize the operational-mode routing (the
+object table, the reassembler dispatch pointers, and UDS RAM read) is itself gated behind the
+operational mode — a genuine chicken-and-egg. The exact 0x40c wake-frame bytes are the one value
+not derivable from the ASW image; recovering them requires an external source: a real capture of
+the partner/cluster frame on 0x40c from a working vehicle or donor ECU network. bench/read_ram.py
+is kept as the ready tool to snapshot the live table the moment the ECU is operational (or on a
+donor that already answers UDS).
+
+(Bench note: the SM2 Pro dropped to SMSTATUS_DEVICE_NOT_FOUND after a scan process was force-
+killed; it needs a USB replug before the next bench run.)

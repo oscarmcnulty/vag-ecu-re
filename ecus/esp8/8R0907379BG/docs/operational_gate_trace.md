@@ -453,3 +453,12 @@ nm_signal_unpack, comm_netmode_write, comm_mode_map, transport_rx_process, trans
 cannm_state_machine, + labels comm_enable_flag/tx_gate2/comm_netmode/nm_channel_struct/
 transport_channel_buf/transport_channel_struct/canif_rx_routing/transport_subid_list/can_mailbox_config/
 com_sig_047b/nm_mode/nm_state_byte.
+
+### Dcm alternative — tested NEGATIVE (bench)
+Sustained diagnostic session on 0x6b4 (0x10 03/01/02 + 0x3E) got no response and did not enable comm.
+So Dcm active-diagnostic is NOT a usable enable lever here (Dcm/CanTp response is itself ComM-gated,
+or the diag rides the same container transport). => the Nm path (container on 0x40c + signal 0x047b)
+is the only enable, and its barrier is the multi-frame container segmentation. Enable CONDITIONS are
+fully enumerated (above); the remaining unknown is strictly the multi-frame byte-layout, which is
+produced by the boot-installed CanIf/seg2 runtime and is the one thing not present/runnable in the ASW
+image. This is the precise, narrow boundary after the full labeled re-analysis.

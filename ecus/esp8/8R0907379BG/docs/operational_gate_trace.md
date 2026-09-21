@@ -424,3 +424,32 @@ So the bench-injectable requirements are precisely: the NM container (0x40c, nod
 AND COM signal 0x047b==1 on CAN-id 0x47b. Both arrive via the (RAM-wired object-table) COM RX; the
 remaining barrier is unchanged (the container multi-frame delivery), but the enable CONDITIONS are now
 fully enumerated — including the previously-unknown signal-0x047b gate and the mode-0x80 requirement.
+
+## ENABLE CONDITIONS — fully enumerated (post-relabel pass, session 2 final)
+After adding 22 confirmed symbols and re-running reproduce.sh, the enable chain is complete and the
+conditions are exhaustively identified:
+
+```
+can_tx_scheduler(0x5bfc) broadcasts ESP_01/02/08  ⟺  comm_enable_flag(0x40944c)==1 && tx_gate2(0x409438)!=0
+  comm_enable_flag=1  ⟺  comm_nm_main(0x6a71c): netmode(0x409230) & 0xf0 ∈ {0x30,0x40,0x80,0xa0}
+  netmode            =  comm_netmode_write(0x8f5cc) = comm_mode_map(param):  param 0->0x20(NoCom); else enable
+  param (ComM chan mode) driven by a ComM USER requesting communication:
+     • Nm user  = cannm_state_machine(0x6eba8) reaching Network Mode (needs COM signal 0x047b(0x408f0c)==1,
+                  NM-active flags 0x408f20/21/22 from nm_msg_process on the 0x40c container RX, and
+                  NM mode 0x4090d8 & 0xf0 == 0x80). All inputs are received COM signals.
+     • Dcm user = active diagnostic session (ComM_DcmActiveDiagnostic) — alternative, non-NM enable.
+  tx_gate2 = bit21 of NM word 0x408f10 (set from the received NM PDU).
+```
+
+**Bench-injectable requirement (Nm path):** the multi-frame NM container on CAN-id 0x40c (sub-id 0x600,
+valid node-id, mode field=0x80) PLUS COM signal 0x047b==1 on CAN-id 0x47b. Combined single-frame
+injection tested NEGATIVE — consistent with the container being multi-frame (a single 0x600 frame never
+completes the 23-byte reassembly, so nm flags never set). **The enable CONDITIONS are now fully known;
+the sole remaining barrier is the multi-frame container byte-segmentation** (produced by seg2/RAM-wired
+CanIf code, absent-runnable from the ASW image) — OR the Dcm-active-diagnostic alternative.
+
+Symbols added to symbols_merged.csv: comm_nm_main, comm_disable, nm_msg_process, nm_node_lookup,
+nm_signal_unpack, comm_netmode_write, comm_mode_map, transport_rx_process, transport_tx_segment,
+cannm_state_machine, + labels comm_enable_flag/tx_gate2/comm_netmode/nm_channel_struct/
+transport_channel_buf/transport_channel_struct/canif_rx_routing/transport_subid_list/can_mailbox_config/
+com_sig_047b/nm_mode/nm_state_byte.

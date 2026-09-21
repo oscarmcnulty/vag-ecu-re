@@ -462,3 +462,21 @@ is the only enable, and its barrier is the multi-frame container segmentation. E
 fully enumerated (above); the remaining unknown is strictly the multi-frame byte-layout, which is
 produced by the boot-installed CanIf/seg2 runtime and is the one thing not present/runnable in the ASW
 image. This is the precise, narrow boundary after the full labeled re-analysis.
+
+## SEG2/reassembly grind — multi-frame format partially recovered
+Disassembled transport_rx_process (0x689e4) continuation/FF paths:
+- **Reassembly PCI is at channel[0x34]** (0x4079d4); `PCI & 0xf0`: **0x10=First Frame, 0x20=Consecutive
+  Frame, 0x00=Single Frame** (ISO-TP-like). channel status 0x4079e4 **bit8** = "reassembling".
+- The received frame maps: buffer[0x108]=length/PCI, sub-id at buffer[0x10a:0x10c], data at
+  buffer[0x10c:]. For sub-id 0x600 SF the frame is `07 00 06 00 <node> 00 00 00` (node = payload[3]).
+- The container on 0x40c is **~22-23 bytes (3 sub-PDUs: 0x600+0xf1a3+0xf1a4) → multi-frame**; a 7-byte
+  SF is rejected (length mismatch vs the 0x17 routing length), so the full container must be sent.
+- The **channel-completion bits (0x4079e4 bit10/11)** that gate the NM path are set by the CanIf
+  reassembly ENTRY (dispatched from the CAN ISR FUN_0008f708 via RAM-wired RxIndication pointers) —
+  still not statically located; it's the last unknown.
+
+### Bench (negative)
+- ISO-TP full container to 0x40c fails (ECU sends no flow-control → not standard FC ISO-TP).
+- Raw FF(`10 16 …`)+CF(`21/22/23`) multi-frame with all 3 sub-PDUs + valid node + signal 0x047b==1,
+  sustained → no wake. So the exact FF/CF byte-layout (or the mode-0x80 placement / a counter) is still
+  off, and the reassembly entry that sets the completion bits is the piece to find next.

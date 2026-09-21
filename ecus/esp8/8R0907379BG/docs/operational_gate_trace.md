@@ -703,3 +703,24 @@ sub-PDU packing (from the TX segmenter). Unclosed = the exact CanIf multi-frame 
 0x12) that sets completion bits 0x4079e4 bit10/11 — boot-installed, no static image, no bench
 feedback. This is the true, minimal residual and it is not reachable from the bin + a feedback-silent
 bench alone.
+
+## E2E CRC fully reverse-engineered (labels added)
+Two CRC-8 engines found and documented (both init 0xFF, xorout 0xFF, MSB-first table lookup
+crc=table[byte^crc]):
+- **crc8_j1850_e2e_engine (FUN_0003d780)** — plain CRC-8/SAE-J1850 (poly 0x1D), no data-id. Used by
+  the app-message composers/validators and the 0x060 heartbeat. acc=0x407064, table=relocated
+  0xbc0a0 (RAM copy of flash J1850 table 0xb408c). **Emulation-VERIFIED**: reproduces the live 0x060
+  byte7 exactly (ctr=6 -> 0x1e), both as a Python model and by running FUN_0003d780 with the J1850
+  table seeded at 0xbc0a0.
+- **e2e_crc8_dataid (FUN_0005f43a)** — AUTOSAR E2E-P01-style CRC-8 with **DATA-ID fold**: crc=0xFF;
+  for byte in buf[1..len-1]: crc=table[byte^crc]; return table[data_id^crc]^0xFF. Skips buf[0]=the
+  CRC slot, folds the 1-byte data_id at the end. Callers store the result at buf[0] (byte0=CRC),
+  used for 8-byte E2E frames with data-ids 0xd4/0xd2 (bytes1-7 = data incl a 4-bit counter). The
+  0x40c container sub-PDUs use THIS scheme with their per-sub-PDU data-ids (0x600 -> data-id 0x12,
+  from E2E cfg 0xb3e10). Table=relocated 0xbc914 (poly 0x1D or 0x2F - both computed).
+
+**KEY CONSEQUENCE:** every earlier bench frame lacked a valid E2E CRC in byte0, so the CanIf would
+reject them and never set the completion bits — explaining the total inertness. New tool
+bench/e2e_crc.py computes both crc8_j1850() and e2e_crc8_dataid(buf,data_id,poly) (J1850 and H2F),
+self-tested against the live 0x060. Next: build E2E-valid 0x40c container frames (byte0 = e2e_crc8_
+dataid over the frame, data-id 0x12) and inject; and emulate the reassembly+E2E path end-to-end.

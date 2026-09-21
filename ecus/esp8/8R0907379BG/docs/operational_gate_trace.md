@@ -724,3 +724,24 @@ reject them and never set the completion bits — explaining the total inertness
 bench/e2e_crc.py computes both crc8_j1850() and e2e_crc8_dataid(buf,data_id,poly) (J1850 and H2F),
 self-tested against the live 0x060. Next: build E2E-valid 0x40c container frames (byte0 = e2e_crc8_
 dataid over the frame, data-id 0x12) and inject; and emulate the reassembly+E2E path end-to-end.
+
+## COM deposit path for signal 0x046f confirmed (static routing)
+Signal 0x046f is in the STATIC flash COM signal table com_signal_table_full (0xb038c) #1:
+{sig_id 0x046f, len 4, flags 0x03, buffer 0x408f10, consumer 0x975e1}. So the COM Rx deposits the
+0x600 sub-PDU's raw 4 bytes into 0x408f10 (signal 0x046f) with NO NM node validation - this is the
+path that sets bit21 (byte1 bit5) = tx_gate2, distinct from transport_rx_process's nm_msg_process
+path (which validates the same bytes and rejects byte1 bit5). Deposit done by com_signal_commit_
+record (0x50090) via the runtime group table (0xb6a44); consumer/notify fn 0x975e0 (a case in the
+COM extraction dispatcher 0x974f8).
+
+Reassembly trace (transport_rx_process, emu): the CanIf presents each frame with PCI at channel+0x34
+(0x10=FF, 0x20=CF nibble) and the payload at buf+0x108; transport_rx_process's else-branch sets
+status BIT8 (E2E-pending) via the E2E enqueue (FUN_0005c744) - the completion bits (bit10/11) are set
+later by the (boot-installed) E2E validator once the reassembly+CRC pass.
+
+**Full mechanism (now completely mapped):** 0x40c container (HW-accepted, mailbox 0x1b) -> multi-frame
+reassembly (PCI channel+0x34) -> E2E CRC check (data-id 0x12, algo = the reversed crc8 engines) sets
+completion bits -> COM deposits sub-PDU 0x600 4 bytes -> signal 0x046f (0x408f10) -> bit21=byte1 bit5
+-> tx_gate2 -> (with comm_enable) ESP_01/02/08 broadcast. Every stage is reverse-engineered; the only
+non-static pieces are the boot-installed CanIf reassembly-dispatch + E2E-completion setter, which
+require either full object-table materialization in emulation or a live-running pipeline to exercise.

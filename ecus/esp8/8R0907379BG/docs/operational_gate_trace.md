@@ -745,3 +745,27 @@ completion bits -> COM deposits sub-PDU 0x600 4 bytes -> signal 0x046f (0x408f10
 -> tx_gate2 -> (with comm_enable) ESP_01/02/08 broadcast. Every stage is reverse-engineered; the only
 non-static pieces are the boot-installed CanIf reassembly-dispatch + E2E-completion setter, which
 require either full object-table materialization in emulation or a live-running pipeline to exercise.
+
+## Materialization attempt: signal 0x046f is static, but the reassembler is boot-coupled
+Per the materialization plan:
+- **Good news:** signal 0x046f is in the EXPLICIT static COM table (0xb038c), NOT the bump/object-
+  table bulk (per decode/pb_config_decode.py + config_graph_decode.py: the ~3000 bulk-RX signals are
+  runtime-allocated, but the app-consumed explicit subset incl 0x046f is static). So the 0x046f
+  deposit path does not need full object-table materialization.
+- **Blocker persists at the reassembler:** transport_rx_process's accumulation state machine writes
+  the reassembly at channel_buf+6 (channel_struct[0x40] target) and demuxes from buf+0x108, driven by
+  the channel state (buf[0x22f], channel[0x34] PCI, channel[0x40] write ptr). Emulating FF(0x10)+
+  CF(0x2N) by hand does not faithfully accumulate - the exact per-frame CanIf presentation (where each
+  received frame's bytes land, and the channel-struct init) is set up by the boot-installed CanIf
+  RxIndication, which is not in the static image. Status stays at bit8 (E2E-pending); the completion
+  bits (bit10/11) require the boot-installed E2E validator.
+- The config-source iterator that would build these dispatch tables is fully RAM-dispatched (0 static
+  callers of com_config_ingest/its thunk/the iterator, confirmed by a whole-corpus BL scan) with an
+  SBOOT-installed config-graph base pointer, so cold materialization stalls exactly as documented in
+  emu/objtable_corun.py.
+
+**Net:** the E2E CRC is fully reverse-engineered (crc8_j1850_e2e_engine + e2e_crc8_dataid, labeled +
+tool + emulation-verified). The entire wake chain is mapped and every purely-computational stage is
+reproduced. The single irreducible dependency is the boot-installed CanIf reassembly + E2E-completion
+dispatch (and its channel-struct setup), which needs the real boot ROM (SBOOT) to run - it is neither
+in the ASW image nor faithfully hand-emulatable, and the feedback-silent bench cannot exercise it blind.

@@ -405,3 +405,22 @@ exact multi-frame segmentation (frame boundaries, PCI/sequence bytes, and whethe
 config adds a container CRC) is produced by the seg2 pack handlers (0xbbe28/30/38) which don't run in
 isolation. That segmentation is the last unknown; everything else (CAN-id, sub-ids, node byte order,
 per-sub-PDU layout) is fully recovered from the bin.
+
+## COMPLETE ENABLE-CONDITION CHAIN (fresh labeled pass)
+Found the CanNm state machine `FUN_0006eba8` (cannm_state_machine) — the missing NM→ComM link. Full
+chain to operational, all conditions now identified:
+1. Receive the **NM container on CAN-id 0x40c** (sub-id 0x600, node-id in {0x4a,5f,98,99,9a,d4}) →
+   `nm_msg_process(0x40950)` sets NM-active flags 0x408f20/0x408f21/0x408f22.
+2. **COM signal 0x047b (0x408f0c) == 1** (CAN-id 0x47b, direct 4-byte signal) — GATE for
+   `cannm_state_machine(0x6eba8)`; it returns immediately if 0x408f0c != 1.
+3. **NM mode 0x4090d8 & 0xf0 == 0x80** (Network Mode / Normal Operation) — drives the CanNm state
+   machine (case 3/6/8) to Normal Operation instead of logging DTC 0x169.
+4. CanNm Normal Operation → ComM FullCom → `comm_netmode_write(0x8f5cc)` sets netmode 0x409230=0x80.
+5. `comm_nm_main(0x6a71c)` reads netmode, sets **comm_enable_flag 0x40944c = 1**.
+6. `tx_gate2 0x409438` = bit21 of NM word 0x408f10 (set via the NM PDU).
+7. `can_tx_scheduler(0x5bfc)` sees 0x40944c==1 && 0x409438!=0 → broadcasts ESP_01/02/08 = OPERATIONAL.
+
+So the bench-injectable requirements are precisely: the NM container (0x40c, node-id valid, mode 0x80)
+AND COM signal 0x047b==1 on CAN-id 0x47b. Both arrive via the (RAM-wired object-table) COM RX; the
+remaining barrier is unchanged (the container multi-frame delivery), but the enable CONDITIONS are now
+fully enumerated — including the previously-unknown signal-0x047b gate and the mode-0x80 requirement.

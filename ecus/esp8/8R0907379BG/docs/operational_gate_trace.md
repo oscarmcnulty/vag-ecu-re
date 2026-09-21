@@ -769,3 +769,26 @@ tool + emulation-verified). The entire wake chain is mapped and every purely-com
 reproduced. The single irreducible dependency is the boot-installed CanIf reassembly + E2E-completion
 dispatch (and its channel-struct setup), which needs the real boot ROM (SBOOT) to run - it is neither
 in the ASW image nor faithfully hand-emulatable, and the feedback-silent bench cannot exercise it blind.
+
+## A-finding: degraded mode = "waiting for vehicle network"; master gate is signal 0x047b
+Emulated cannm_state_machine (0x6eba8) with seeded inputs (VERIFIED):
+- **0x047b==0 (the bench state): CanNm returns immediately and does NOTHING** - it is DORMANT. The
+  first instruction is `if (*com_sig_047b_buf(0x408f0c) != 1) return;`. So the 100Hz 0x060 the ECU
+  emits is NOT CanNm - it is a separate ungated app heartbeat; CanNm never even starts on the bench.
+- **0x047b==1: CanNm starts** (cannm_state 0x4090e2 -> 9). With 0x047b==1 + nm_state(0x409478)==6 +
+  nm_mode(0x4090d8)&0xf0==0x80 it advances (-> state 4), i.e. the full network context drives it
+  toward Network Mode -> ComM full-comm -> comm_enable/tx_gate2 -> ESP broadcast.
+- Signal 0x047b (buffer 0x408f0c) has **no non-CAN writer** (only COM RX deposits it): confirmed by
+  literal-ref + decompile scan (all references READ it; the only writer is the COM Rx path). So there
+  is NO internal/hardware shortcut to start CanNm - it requires a received partner message.
+- Signal 0x047b source = the front-sensor group (ACC_01 0x109 / ACC_10 0x117 / HCA_01 0x126) per the
+  static COM table (0xb038c #0xb047c: sig 0x047b, 4 bytes, buf 0x408f0c, consumer 0x97617). CanNm
+  also consumes signal 0x04b6 (0x408f18) and the container-derived NM state/mode/flags.
+
+**Conclusion:** the module is a fully-booted app held in AUTOSAR "no communication until the network
+is present" - NOT a fault/limp/coding stall. To leave it, the ECU must RECEIVE its partner messages
+in sequence: (1) a front-sensor msg setting signal 0x047b==1 (starts CanNm), then (2) the NM container
+on 0x40c (NM state 6 / mode 0x80). All are E2E-protected and COM-RX-routed. Since COM TX works (0x060
+with valid E2E), the COM stack is initialized, so COM RX is very likely armed too - meaning correctly-
+formatted+E2E'd partner messages should be accepted. The remaining work is purely decoding the exact
+message->signal bit mappings (front-sensor 0x047b/0x04b6 + the container), all doable statically.

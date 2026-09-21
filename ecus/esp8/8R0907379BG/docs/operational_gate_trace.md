@@ -573,3 +573,27 @@ boot/SBOOT barrier. On the bench the entry (container reassembly) is boot-instal
 inert to synthesizable CAN. Net: the wake still requires either a real 0x40c container capture from
 a live network, or a donor ECU whose Dcm answers (then read_ram.py pulls the live table to seed a
 full end-to-end emulation).
+
+## BREAKTHROUGH: wake reduces to one bit; container fully pinned from flash config
+Emulating the REAL Thumb functions (comm_nm_main 0x6a71c is THUMB — earlier ARM decompile was
+mis-moded) settled the gate model:
+- **comm_enable_flag(0x40944c)=1 for ANY netmode != 0** (comm_mode_map never returns 0; even NoCom
+  0x20 sets enable). So comm_enable is trivially satisfied — NOT the blocker.
+- **tx_gate2(0x409438) = bit21 of 0x408f10**, set by comm_netmode_write(0x8f5cc). VERIFIED in emu:
+  0x408f10=0x00200000 -> tx_gate2=1; =0 -> 0. This is the real blocker.
+- => **WAKE ⟺ bit21 of 0x408f10 is set** (then can_tx_scheduler broadcasts ESP_01/02/08).
+
+Flash config resolves 0x408f10 completely (E2E cfg @0xb3e10):
+  `03 7f ff 12 | 00 40 8f 10 | 04 6f | 04 03 | ...`
+  = E2E(data-id 0x12) -> buffer 0x408f10 -> **COM signal 0x046f** (4 bytes).
+Sub-id list 0xb5760: `06 00 | 04 | 00 0b be 28` = sub-PDU **0x0600 is 4 bytes**, handler 0xbbe28.
+So signal 0x046f == the 4-byte sub-PDU 0x600 value == the word stored at 0x408f10.
+Routing table 0xb3e38 ({channel 0x4079e8, canid u16, len u16}):
+  0x400/403/406/409 (len 1), **0x40c (len 0x17=23)**, 0x425(8) 0x42f(6) 0x43a(0xe) ... all -> channel
+  0x4079e8. **Confirms 0x40c is the 23-byte container id from flash (not a guess).**
+
+Therefore: **bit21 of 0x408f10 = byte1-bit5 (0x20) of the 4-byte sub-PDU 0x600 value.** The wake
+frame is the 0x40c container whose 0x600 sub-PDU 4 bytes have byte1 bit5 set, with valid E2E
+(data-id 0x12). Next: disassemble the 0x600 handler 0xbbe28 to get the exact copy-to-0x408f10 and
+the E2E check (whether COM writes the raw 4 bytes with/without node validation), then the container
+byte layout + E2E, then bench-inject.

@@ -351,3 +351,26 @@ bin. The ONLY remaining piece to build a bench-valid wake frame is the **exact E
 bytes are the counter and CRC, and the CRC algorithm keyed by data-ID 0x12) — reverse the CanIf E2E
 validator that reads the `0x037fffXX` config and gates 0x4079e4 bit10/11. Then: valid E2E frame on
 0x40c with sub-id 0x600 + a valid node-id = operational.
+
+## E2E validator is boot-installed RAM dispatch (session 2 — final on this thread)
+Confirmed both CRC-8 tables are present in the bin: **J1850 @0xb408c** (`00 1d 3a 27…`, poly 0x1D)
+and **H2F @0xb4800** (`00 2f 5e 71…`, poly 0x2F). But they have **zero static references** (searched
+seg1, seg2 VMA+3, and −3), and the container config `0xb3df0-0xb3e14` (signal records 0x046f→0x408f10,
+0x0301→0x409431, 0x038f→0x40943d) also has no pointer to it. So the E2E/CRC validator — the code that
+reads the data-ID config, computes the CRC, and gates the channel-status bits — is reached only
+through boot-installed RAM function pointers (the same object-table dispatch wall).
+
+### Net state of the wake (what IS and ISN'T recoverable statically)
+RECOVERED FROM THE BIN (committed): operational gate (ComM/Nm); 0x060 CRC (J1850); NM node-ids
+{0x4a,5f,98,99,9a,d4}; the container CAN-id **0x40c** (routing table 0xb3e38 → NM channel 0x4079e8);
+sub-id 0x600 + exact NM byte layout (emulation-confirmed); the container's COM signals
+(0x046f=NM/0x408f10, 0x0301, 0x038f); the data-ID config `03 7f ff 12`; and both CRC tables.
+NOT statically recoverable: the exact **frame-processing** (single-vs-multi-frame reassembly + the
+E2E counter/CRC byte positions and data-ID mixing) — that code is RAM-wired, no static refs, so the
+precise wake-frame bytes can't be derived without running the boot-installed dispatch.
+
+Consequence: constructing the bench wake frame needs either (a) the full-boot peripheral-model
+emulation to run the CanIf/E2E with the installed pointers (the documented hard route), or (b) one
+capture of a real container frame on 0x40c (which then plugs straight into everything above).
+The bench-injection attempts (single-frame, multi-frame FF/CF, len-variant, all node-ids on 0x40c
+and the whole channel-0x4079e8 id set) are all recorded negative — consistent with a dropped E2E.

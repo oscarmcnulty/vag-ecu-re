@@ -480,3 +480,29 @@ Disassembled transport_rx_process (0x689e4) continuation/FF paths:
 - Raw FF(`10 16 …`)+CF(`21/22/23`) multi-frame with all 3 sub-PDUs + valid node + signal 0x047b==1,
   sustained → no wake. So the exact FF/CF byte-layout (or the mode-0x80 placement / a counter) is still
   off, and the reassembly entry that sets the completion bits is the piece to find next.
+
+## CAN ISR dispatch traced — reassembler is boot-installed (ISR-level confirmation)
+Disassembled the CAN receive ISR FUN_0008f708 (Thumb) fully:
+- Two CAN controllers: node registers 0xfff7e800 / 0xfff7ea00 (params 1/2). ISR reads pending
+  mailbox via FUN_000501d4 -> index `r7`, sets global CAN status 0x406dd0 (byte0|=4 on RX,
+  byte1|=0x80 on TX-complete), touches per-mailbox status descriptor at **0x406cd0 + idx*4**
+  (RAM, byte+2 flags), then dispatches the **RxIndication**:
+      handler = *(0x000b6a50 + idx*0x18);  if (handler) veneer_0xa2428(handler)   // bx handler
+  The interworking veneer 0xa2428 is `mov ip,r4; lsrs r4,#1; bx ip` — it branches straight to
+  the table word.
+- The dispatch table at 0x000b6a50 does NOT hold static code pointers: the stride-0x18 offset-0
+  words are mostly small ints (0x1/0x2) with a few RAM addresses (0x407ca8, 0x4086e8, 0x4090d0,
+  0x40918c) — i.e. it is a **RAM-relocated/boot-patched descriptor table**, populated by the
+  object-table installer (the walker+dispatcher, see emu/objtable_corun.py) at boot, absent from
+  the ASW image.
+
+**Conclusion (now confirmed at the hardware-ISR level, 6th independent direction):** the CanIf
+RxIndication / transport reassembler that sets the channel-completion bits (0x4079e4 bit10/11)
+runs from boot-installed RAM whose dispatch pointers the static image does not contain. Static
+seg2 disassembly cannot reach the exact multi-frame reconstruction. The two remaining unlocks are:
+  (A) **Materialize the RAM tables in emulation** — finish the walker+dispatcher co-run
+      (objtable_corun.py) so 0xb6a50 / the object table / 0x4079xx dispatch pointers populate,
+      then emulate the reassembler to read off the exact 0x40c multi-frame byte layout. Bounded
+      but substantial; payoff uncertain.
+  (B) **One real bus capture** of the partner/cluster frame on 0x40c (or the private CAN) — gives
+      the exact wake bytes directly and validates against the recovered node-ids/CRC/enable chain.

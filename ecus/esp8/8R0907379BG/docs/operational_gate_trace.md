@@ -390,3 +390,18 @@ Confirmed 4 independent ways that the exact wake-frame construction needs the SB
 TX seg2 handlers). All CONFIG DATA is in the bin (CAN-id 0x40c/0x406, sub-id 0x600, node-ids, data-id
 0x12, CRC tables, NM byte order [2][1][0][3], counter @ frame[1]); the CONSTRUCTION CODE that emits
 the counter+CRC is boot-installed dispatch not present/runnable in the ASW image alone.
+
+## CORRECTION + refinement: sub-PDU 0x600 content is CORRECT; barrier is container framing
+Re-checked the TX packer: `ea0[0x19]` is the sub-id LOW byte (0x00), not a counter. So sub-id 0x600
+packs as `[06 00][word2][word1][word0][word3]` and the RX reassembles it back to the exact NM word
+(verified: TX-pack of 0x408f10=0x5f11a2b3 → RX word 0x5f11a2b3). **The single-frame content I tested
+(`07 00 06 00 <node> 00 00 00`) is structurally correct** — there is NO per-sub-PDU counter/CRC.
+
+So the remaining barrier is purely the **container-level framing**: CAN-id 0x40c bundles all 3 sub-ids
+(0x600 len4 + 0xf1a3 len3 + 0xf1a4 len8 = 23 bytes, flags 0x17) into one multi-frame message, and the
+CanIf only marks the channel "valid" (0x4079e4 bit10/11) after the full multi-frame reassembly
+completes. A single 0x600 frame never completes the 23-byte container, so the gate never opens. The
+exact multi-frame segmentation (frame boundaries, PCI/sequence bytes, and whether the 03 7f ff 12
+config adds a container CRC) is produced by the seg2 pack handlers (0xbbe28/30/38) which don't run in
+isolation. That segmentation is the last unknown; everything else (CAN-id, sub-ids, node byte order,
+per-sub-PDU layout) is fully recovered from the bin.

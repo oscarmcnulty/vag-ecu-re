@@ -374,3 +374,19 @@ emulation to run the CanIf/E2E with the installed pointers (the documented hard 
 capture of a real container frame on 0x40c (which then plugs straight into everything above).
 The bench-injection attempts (single-frame, multi-frame FF/CF, len-variant, all node-ids on 0x40c
 and the whole channel-0x4079e8 id set) are all recorded negative — consistent with a dropped E2E.
+
+## TX-construction emulation (FUN_00067b1c) — partial frame structure recovered
+Emulated the ECU's own container TX segmenter to reconstruct the frame it sends (= what a partner
+sends). For sub-id 0x600 (case 5) it packs: `[0x06][counter=*0x4079b9][NM2][NM1][NM0][NM3]` — i.e. the
+NM word (0x408f10) bytes in order 2,1,0,3, with a **counter byte** right after the sub-id high byte.
+This is consistent with the RX decode (node = NM-word byte2 = frame[4]) and reveals there IS a counter
+in the frame (at the byte after 0x06). The remaining sub-PDUs are packed by seg2 handler functions
+(0xbbe28/30/38, Thumb) that need the boot-installed RAM context to run — in isolation the emulator
+copies their code bytes instead of executing the pack, so the full multi-sub-PDU frame + the E2E CRC
+byte are not cleanly reproduced without the dispatch.
+
+Confirmed 4 independent ways that the exact wake-frame construction needs the SBOOT-installed runtime
+(object-table iterator; E2E validator w/ no static CRC-table refs; full-boot harness null-ptr hang;
+TX seg2 handlers). All CONFIG DATA is in the bin (CAN-id 0x40c/0x406, sub-id 0x600, node-ids, data-id
+0x12, CRC tables, NM byte order [2][1][0][3], counter @ frame[1]); the CONSTRUCTION CODE that emits
+the counter+CRC is boot-installed dispatch not present/runnable in the ASW image alone.

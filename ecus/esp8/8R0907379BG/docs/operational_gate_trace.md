@@ -792,3 +792,19 @@ on 0x40c (NM state 6 / mode 0x80). All are E2E-protected and COM-RX-routed. Sinc
 with valid E2E), the COM stack is initialized, so COM RX is very likely armed too - meaning correctly-
 formatted+E2E'd partner messages should be accepted. The remaining work is purely decoding the exact
 message->signal bit mappings (front-sensor 0x047b/0x04b6 + the container), all doable statically.
+
+## A/C key result: COM RX is unconditional -> partner messages ARE processed in no-comm
+- com_rx_commit_all (0x76468) iterates 62 signal records and calls com_signal_commit_record (0x50090)
+  **every COM cycle, with NO ComM-mode/comm_enable gate** (verified: neither function references
+  comm_enable/netmode; the only per-record gate is the record type +0x16). So received COM signals
+  (incl 0x047b) are deposited regardless of ComM communication mode.
+- The COM object/group table (com_sig_group_table_ptr <- 0xb6a44) is boot-built, but COM TX demonstrably
+  works (0x060 with valid J1850 E2E), so the table IS populated at runtime. => COM RX is armed in the
+  degraded state.
+**Implication (positive):** the earlier bench inertness to injected frames was NOT a dead RX pipeline -
+it was wrong id/bit/E2E. A correctly-formatted+E2E'd partner message SHOULD be deposited. The gating is
+purely CONTENT: (1) a front-sensor msg (ACC_01 0x109 / ACC_10 0x117 / HCA_01 0x126) setting signal
+0x047b byte0==1 starts CanNm; (2) the NM container drives it to Network Mode. Starting CanNm (step 1
+alone) is expected to make the ECU begin NM transmission - a FEEDBACK signal we previously lacked, which
+would turn the bench search into a closed loop. Remaining static work: decode the exact front-sensor
+message->signal-0x047b bit (candidates 0x109/0x117/0x126) and its E2E data-id.

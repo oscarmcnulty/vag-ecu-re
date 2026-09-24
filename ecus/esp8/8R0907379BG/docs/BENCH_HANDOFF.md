@@ -20,10 +20,14 @@ test flashing, work toward SBOOT. Read this first, then the linked docs.
 - **Openport clone** works fully on Linux (VW_Flash, ISO-TP+UDS) as a Linux alternative.
 
 ## Firmware findings (from the ASW+CAL image; we do NOT have SBOOT/CBOOT)
-- **The ASW does NOT implement UDS 0x23 ReadMemoryByAddress.** Exposed services = 0x22 DID
-  (identity/coding only), 0x19 DTC, routine/checksum, response TX. No arbitrary memory read.
-  (`uds_read_primitive.md`, SESSION CONCLUSION.) Memory-read + programming security are
-  bootloader-resident, like the sibling AL551 TCU.
+- **The ASW service config DECLARES 0x23 ReadMemoryByAddress, 0x35 RequestUpload, 0x3D
+  WriteMemoryByAddress** (+ 0x34/0x36/0x37 flash) — byte-verified service tables at 0xb4be4/0xb4d80
+  (`uds_read_primitive.md`). But their executor is boot-installed / in the seg2 Dcm stack, not in
+  the image; every statically-reachable handler reads only fixed/indexed data. So runtime
+  answerability (does 0x23/0x35 respond, in which session, and does its bounds check reach the boot
+  region) is empirically open — probe on the bench: session + SecurityAccess, then 0x23 at a
+  known-good address, then walk toward the boot region. 0x23/0x3D are security-masked (0xa0); the
+  app-level 0x27 key is not in the image (prog SA2 is bootloader-side).
 - **ASW + CAL are each RSA-1024 signed** (`signature_analysis.md`). Cannot re-sign. A patched flash
   needs a CBOOT/SBOOT bypass, not a re-sign.
 - **SBOOT is not in the image** and can't be read via ASW UDS. The unit is a bare-die chip-on-board

@@ -50,6 +50,36 @@ which is why the bench spare matters:
 3. **SBOOT exploit** (cf. the Simos SBOOT OBD path) to write flash bypassing enforcement.
 4. **Voltage-glitch** the verify branch at flash time (bench only).
 
+## Checksum layer: investigated and ruled out (RSA-only)
+
+Route 1 above hinged on "the runtime jump checks only a CRC" — i.e. a separate, recomputable
+checksum layer a flasher corrects. **There is none in the ASW/CAL image.** Proven by
+`decode/flash_checksum_probe.py` (CSV: `esp8_sig1_descriptor_asw` 0xb7f1c, `esp8_sig2_descriptor_cal`
+0x133be5):
+
+- **No CRC16/CRC32 lookup table** of any polynomial or endianness. The detector is
+  poly-agnostic — CRC byte-tables are GF(2)-linear (`T[i] == XOR of T[1<<b]` over set bits),
+  so a non-standard poly can't hide. Only the two known CAN **E2E CRC8** tables (0xb408c J1850,
+  0xb4800 H2F) exist; those are runtime message CRCs, not flash validation.
+- **No stored sum/CRC** over the signed regions, code, CAL, or the 4 cal datasets — additive
+  (sum8/16/32 BE+LE), xor32, complement, bit-serial CRC16 (CCITT/ARC/XMODEM), zlib CRC32, and
+  the **Simos CRC32 (poly 0x04C11DB7, init 0, xorout 0, non-reflected)** — appears anywhere in
+  the image or the `.sgo`. Compare Continental Simos, which *does* embed this CRC32 with an
+  `{init,crc,area_count,[start,end]...}` descriptor plus an ECM3 runtime monitor
+  (VW_Flash `lib/checksum.py`); the ESP8 has neither the table nor the descriptor.
+- **Container has no block checksum.** `.sgo` = 2 **plain** XOR-0xFF blocks (block0 flash
+  0x8000 len 0xb8000 = ASW; block1 0x804000 len 0x7c000 = CAL), parsed by simos-suite
+  `sgo_unpack`. The per-block header is `addr/crypt/declen/erase/prog/blob_len` — no CRC field.
+  Only BCB-compressed (crypt=0x10) blocks carry a 24-bit end-token sum; ESP8 doesn't use BCB.
+- **Toolchain has no ABS checksum step:** VW_Flash's checksum/ECM3 logic is Simos-only;
+  `op_abs_dump.py`/`op_abs_probe.py` are read-only.
+
+**Verdict:** flash integrity over the flashed ASW+CAL is **RSA-1024 only**. Checksum-correction
+alone is insufficient — routes 2–4 (defeat the CBOOT RSA verify) are the only paths. Route 1 as
+stated is dead *unless* CBOOT itself computes a boot-time CRC that lives in CBOOT (not this
+image); the bench dump below still settles whether such a gate exists and whether RSA gates the
+runtime jump or only the download.
+
 ## Next task
 
 Bench-dump SBOOT/CBOOT (hardware read of the opened unit) and reverse the signature-verify

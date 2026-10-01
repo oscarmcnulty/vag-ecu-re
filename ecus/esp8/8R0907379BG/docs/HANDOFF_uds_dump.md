@@ -149,6 +149,16 @@ ASW image we hold.
   `27` (RE'd key) → `35` RequestUpload + loop `36` → `37`; concatenate blocks to `firmware/`
   (gitignored). Fall back to `23` ReadMemoryByAddress sweeping the flash if upload is gated.
 
+## Scripted bench power / term-15 control (Scanmatik 2 Pro, verified 2026-10-01)
+- The switchable +12V is driven by the standard J2534 call `PassThruSetProgrammingVoltage(dev, pin,
+  mV)` (FEPS generator, 5000-24000 mV; `0xFFFFFFFF`=VOLTAGE_OFF, `0xFFFFFFFE`=SHORT_TO_GROUND). Battery
+  (term30) is hardwired always-on; this controls the switchable lead for power-cycling / term-15.
+- Accepted pins on this device: **6, 8, 9, 11, 12, 13, 14** (pin 25/AUX = ERR_PIN_INVALID). **OBD pin
+  6 = CAN-H, 14 = CAN-L — NEVER energize them.** Use a spare FEPS pin {8,9,11,12,13} wired to the
+  target lead; identify which pigtail lead it is with `bench/power.py probe --pin N` + a DMM.
+- Helper: `bench/power.py {on|off|cycle|probe} --pin N [--mv 12000]` (refuses 6/14). Importable as
+  `from power import Power` for scripted power-cycling inside a test (e.g. power-cycle then wake+probe).
+
 ## Conventions
 - The module is the user's own spare — legitimate recovery/RE.
 - Firmware images/decompiles stay gitignored; commit only metadata. Document findings as CSV labels.

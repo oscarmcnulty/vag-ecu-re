@@ -10,6 +10,14 @@ Recover the **KWP2000 SecurityAccess (`27 01` seed → `27 02` key) algorithm** 
 can unlock the gated diagnostic services and dump flash. This is a **firmware reverse-engineering**
 task on the (now un-degraded) seg2 code. The transport/protocol is already fully cracked and working.
 
+## HARD CONSTRAINT — bench + RE ONLY
+Crack the key **purely from firmware RE** (reading/emulating the ECU's own code) verified against the
+**existing bench setup** (Scanmatik 2 Pro + `bench/tp20_kwp.py`). **Do NOT suggest, propose, or use
+ODIS / ODIS-E, VCDS, dealer/OEM tools, or capturing a real `(seed,key)` unlock from any other tool or
+log.** That approach is explicitly out of scope — do not raise it even as an "alternative/faster"
+option. The only acceptable inputs are the firmware image, the Ghidra analysis, the emulator, and
+`27 01` seed reads from our own bench client.
+
 ## What is already DONE (do NOT redo — see docs/HANDOFF_uds_dump.md for full detail)
 - **Diagnostics are VAG TP2.0 + KWP2000, NOT UDS.** Working, reproducible from the bench:
   - Channel setup `03 C0 00 10 00 03 01` → `0x200`; ECU replies `0x203: 00 d0 00 03 a3 04 01`.
@@ -61,10 +69,6 @@ Goal: TP2.0 reassembly → KWP SID dispatch → the `0x27` case → the seed-gen
   CRC table *might* be reused by the key — worth a look).
 - Candidate data tables worth parsing: a per-SID/subfunction flag table at **`0xae95c`** (just before
   the rx-filter table `0xaea38`); the DID tables at `0xb44e4`/`0xb4598`.
-
-## Alternative (faster if available): capture a real (seed,key) pair
-If an ODIS/dealer tool can unlock this ABS, log one `27 01`/`27 02` exchange. One valid pair strongly
-constrains/confirms the algorithm and sidesteps the firmware trace.
 
 ## Environment
 - 32-bit Python embed (for `smj2534.dll`): `…/claude/C--Users-om-vag-ecu-re/35dcc8f2-…/scratchpad/

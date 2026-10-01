@@ -47,12 +47,13 @@ Goal: recover the KWP `27 01` seed -> `27 02` key algorithm (4-byte random seed;
   readers (no key math) - SecurityAccess is NOT among them.
 - Service-table candidates to chase: a structured sub-id/flag table @0xae95c (just before the rx-filter
   table 0xaea38), and KWP handler code in seg2 @0xc854c / 0xd71c4 (contain 00 27 01 / d0 / 35 02 consts).
-- **Recommended next approach (pick one):** (a) FIRMWARE: extend the reproduce pipeline to disassemble
-  the 0xa2000-0xbb045 DATA gap + fix the island, then trace TP2.0->KWP dispatch->0x27 handler->key; or
-  (b) EMULATION: once the 0x27 handler addr is known, emulate it (feed stored seed + candidate key,
-  read the compare) to extract the transform; or (c) DYNAMIC: capture one legit (seed,key) pair from a
-  working ODIS/dealer unlock to constrain/confirm the algorithm (KWP locks out after ~3 bad keys - do
-  NOT brute force). The working bench stack (bench/tp20_kwp.py) can drive `27 02 <key>` once we have it.
+- **Recommended next approach (bench + RE ONLY):** (a) FIRMWARE: extend the reproduce pipeline to
+  disassemble the 0xa2000-0xbb045 DATA gap + fix the island, then trace TP2.0->KWP dispatch->0x27
+  handler->key; then (b) EMULATION: once the 0x27 handler addr is known, emulate it (feed stored seed +
+  candidate key, read the compare) to extract the transform. Verify with bench/tp20_kwp.py (`27 02
+  <key>`); KWP locks out after ~3 bad keys so do NOT brute force. **OUT OF SCOPE / DO NOT SUGGEST:**
+  ODIS/ODIS-E, VCDS, dealer/OEM tools, or capturing a real (seed,key) unlock from any other tool. We
+  crack this purely from firmware RE + our own bench. See docs/HANDOFF_seedkey_trace.md.
 
 ## KWP2000 service map (2026-10-01, bench, ignition ON, session 0x85)
 Full service scan over the working TP2.0 channel (bench/tp20_kwp.py, now with channel-test keepalive +

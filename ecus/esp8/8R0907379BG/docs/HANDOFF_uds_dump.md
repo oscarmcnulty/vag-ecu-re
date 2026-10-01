@@ -100,6 +100,15 @@ ASW image we hold.
   / terminal-15(KL15)-over-CAN / routing-active indication that a standalone module+adapter never
   supplies. Next: inject candidate enable/status frames (KL15/gateway-status) then re-probe, or put a
   gateway in the loop.
+- **Vehicle-context feed does NOT open the Dcm (bench/vehicle_context.py, 2026-10-01):** continuously
+  transmitting the full module-B expected RX set (22 partner ids: 0x019/062/085/086/08b/09f/102/104/
+  105/110/114/117/11d/203/394/4a3/641/6c0/6c7/6d0/6ff/7e0) with counter+CRC, plus NM wake, then
+  probing UDS -> still silent, no new broadcasts. NOTE: frames carried ZERO data (counter/CRC only), so
+  a specific ENABLE-BIT value in a partner frame would not have been set (needs the platform DBC to
+  target). Remaining suspects: (1) hardware TERM-15 (KL15/ignition) input — BENCH_HANDOFF wires term15
+  on pins 35/32 and says 'tool drives VCC (term15) to wake'; confirm it is actually energized in the
+  current module-B setup (ESP app runs on term30, Dcm may need term15); (2) the real gateway's
+  diagnostics-enable/routing-active frame; (3) a specific partner-frame signal value.
 - **WAKE PROCEDURE (works, 2026-10-01):** the module boots DORMANT (silent). Driving the 0x40c wake
   container (0x600 sub-PDU byte1 bit5, node-ids 0x4a/5f/98/99/9a/d4) + direct NM frames at ~50Hz brings
   it operational within ~1-2s (bench/nm_uds_probe.py, and uds_discover.py --wake). Must be fed

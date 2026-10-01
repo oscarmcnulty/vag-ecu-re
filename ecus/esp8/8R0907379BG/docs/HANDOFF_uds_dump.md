@@ -3,6 +3,22 @@
 **All module knowledge lives in `analysis/symbols_merged.csv` (function/variable labels) — the source
 of truth. Document new findings as CSV labels, not markdown (this prompt excepted).**
 
+## *** BREAKTHROUGH 2026-10-01: diagnostics are TP2.0 + KWP2000, NOT UDS ***
+The reason every UDS/ISO-TP probe (0x6b4/0x713/…) was silent: **this B8 ABS does diagnostics over VAG
+TP2.0 + KWP2000**, not UDS. Working, reproducible session entry (`bench/tp20_kwp.py`, ignition ON):
+- Channel setup: send `03 C0 00 10 00 03 01` to **0x200** → ECU replies on **0x203**: `00 d0 00 03 a3 04 01`.
+- **Channel direction (important):** we **TX→0x4a3**, we **RX←0x300**. (The module *receives* on 0x4a3 —
+  it's in the firmware RX filter, handler 0xa43f5 — and *transmits* the channel on 0x300. This is the
+  reverse of the generic jazdw labeling, so parse: we_RX = resp bytes2-3 = 0x300, we_TX = bytes4-5 = 0x4a3.)
+- Params: send `A0 0F 8A FF 32 FF` the INSTANT the first 0xD0 arrives (channel drops in ~1s otherwise;
+  resend A0 on each 0xD0 retransmit) → ECU `A1 0f 8a ff 4a ff`.
+- KWP data PDU `[op<<4|seq, len_hi, len_lo, kwp…]`; op 0x1=last+ACK, 0xB=ACK, 0xA3=channel-test keepalive.
+- **`10 89` (StartDiagnosticSession) → `50 89` POSITIVE — diagnostic session ENTERED.** Two-way KWP
+  confirmed (1A/18 services return 7F, i.e. processed but unsupported-subfn).
+- NEXT (flash dump, now the KWP2000 way): find the right session for programming, KWP SecurityAccess
+  (0x27) seed/key, then ReadMemoryByAddress (0x23) / upload. The 0x6b4/0x6b8 "UDS diag server" labels
+  were the wrong protocol; the real diag path is TP2.0 on 0x200/0x203 ↔ 0x4a3/0x300.
+
 ## Status / established facts
 - **The module is OPERATIONAL.** On **FlexCAN module B** (`0xfff7ea00`) = the Antriebs/ESP-CAN,
   physical **SM2-Pro / T38a pins 26 = CAN-H, 14 = CAN-L, 500 kbps**, it broadcasts **ESP_01 0x100 /

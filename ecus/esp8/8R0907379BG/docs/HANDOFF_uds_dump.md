@@ -19,6 +19,20 @@ TP2.0 + KWP2000**, not UDS. Working, reproducible session entry (`bench/tp20_kwp
   (0x27) seed/key, then ReadMemoryByAddress (0x23) / upload. The 0x6b4/0x6b8 "UDS diag server" labels
   were the wrong protocol; the real diag path is TP2.0 on 0x200/0x203 ↔ 0x4a3/0x300.
 
+## KWP2000 service map (2026-10-01, bench, ignition ON, session 0x85)
+Full service scan over the working TP2.0 channel (bench/tp20_kwp.py, now with channel-test keepalive +
+multi-frame reassembly incl. TP2.0 data opcodes 0x2/0x3). In StartDiagnosticSession 0x85 (`10 85`->`50 85 00`):
+- **SecurityAccess is the gate:** almost every service returns NRC **0x90** (VAG "security/session required"),
+  NOT 0x11 (serviceNotSupported) - so the services exist but need security. Services seen 0x90-gated:
+  1A,21,23,17,18,11,14,20,28,29,2C,2E,2F,30,32,35,3B,3D,3E,85,86.
+- **SecurityAccess (0x27):** level **01** only (`27 01` -> `67 01 <seed>`; `27 03/05/09` -> `7F 27 12`
+  subFnNotSupported). **Seed is random, 4 bytes** (e.g. fe ba 40 73 / ff 00 54 c5 / fd e8 bd c9). Need the
+  seed->key algorithm for `27 02 <key>`. -> NEXT RE TARGET.
+- Other: 22 -> 7F 31 (requestOutOfRange, needs valid DID); 31/33/34 -> 7F 12 (need valid sub/routine);
+  36 -> 7F 33 (securityAccessDenied); 37 -> 7F 22. `10 85` + `10 89` are valid sessions (`10 81` -> 7F 22).
+- **Flash-dump path (KWP2000):** `10 85`/programming session -> `27 01`+key -> then RequestUpload (0x35)/
+  TransferData (0x36)/ReadMemoryByAddress (0x23), all currently security-gated. Crack the key first.
+
 ## Status / established facts
 - **The module is OPERATIONAL.** On **FlexCAN module B** (`0xfff7ea00`) = the Antriebs/ESP-CAN,
   physical **SM2-Pro / T38a pins 26 = CAN-H, 14 = CAN-L, 500 kbps**, it broadcasts **ESP_01 0x100 /

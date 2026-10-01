@@ -83,11 +83,33 @@ class TP20KWP:
                 return False
         return False
 
+    A1 = bytes([0xA1, 0x0F, 0x8A, 0xFF, 0x32, 0xFF])
+
+    def _handle_ctrl(self, pl):
+        """Answer the ECU's channel-test (0xA3 -> reply 0xA1). Returns True if frame was control."""
+        if not pl:
+            return False
+        if pl[0] == 0xA3:                 # ECU channel test -> must reply 0xA1 or it drops us
+            self.c.write(self.tx, self.A1)
+            return True
+        if pl[0] in (0xA1,):              # reply to our own test
+            return True
+        return False
+
     def keepalive(self, force=False):
         now = time.time()
         if force or now - self._last_ka > 0.4:
             self._last_ka = now
             self.c.write(self.tx, bytes([0xA3]))
+
+    def maintain(self, secs):
+        """Idle between requests: keep the channel alive (send our 0xA3, answer the ECU's)."""
+        t = time.time()
+        while time.time() - t < secs:
+            self.keepalive()
+            r = self.c.read(10)
+            if r and r[0] == self.rx:
+                self._handle_ctrl(r[1])
 
     def request(self, kwp: bytes, timeout=2.0):
         n = len(kwp)
@@ -107,18 +129,23 @@ class TP20KWP:
             op = pl[0] >> 4
             if op == 0xB:            # ACK of our packet
                 continue
-            if op in (0x0, 0x1):     # data
+            if op in (0x0, 0x1, 0x2, 0x3):   # data: 0/2=more, 1/3=last; 0/1=ACK-expected
                 rseq = pl[0] & 0xF
                 payload = pl[1:]
                 if total is None:
-                    total = (payload[0] << 8) | payload[1]
-                    data += payload[2:]
+                    if len(payload) >= 2:
+                        total = (payload[0] << 8) | payload[1]
+                        data += payload[2:]
+                    else:
+                        data += payload       # malformed/short first frame; keep what we got
                 else:
                     data += payload
-                self.c.write(self.tx, bytes([0xB0 | ((rseq + 1) & 0xF)]))   # ACK
-                if op == 0x1:
+                if op in (0x0, 0x1):          # sender is waiting for an ACK
+                    self.c.write(self.tx, bytes([0xB0 | ((rseq + 1) & 0xF)]))
+                if op in (0x1, 0x3):          # last packet
                     break
             else:
+                self._handle_ctrl(pl)      # answer ECU channel-test etc.
                 self.keepalive()
         return bytes(data[:total]) if total else (bytes(data) or None)
 

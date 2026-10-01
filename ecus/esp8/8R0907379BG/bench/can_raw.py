@@ -141,6 +141,20 @@ class RawCAN:
             self.d.PassThruClose(self.dev)
 
 
+def module_alive(can, secs=1.5):
+    """Passively sniff for the module's own broadcasts. Returns the set of RX ids seen
+    (excluding the 0x060 heartbeat). Empty set => module asleep/powered down -> any UDS
+    'silent' result is MEANINGLESS. Use as a liveness guard before/after a probe."""
+    import time as _t
+    seen = set()
+    t0 = _t.time()
+    while _t.time() - t0 < secs:
+        r = can.read(20)
+        if r and r[0] != HEARTBEAT_ID:
+            seen.add(r[0])
+    return seen
+
+
 def sniff(secs):
     c = RawCAN()
     seen = collections.Counter()

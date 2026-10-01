@@ -82,6 +82,20 @@ ASW image we hold.
   the Dcm is gated BEFORE addressing. Don't re-chase ids/pairs. The open question is the precondition
   STIMULUS (network-management / full-comm state, or an ignition/enable frame) the module needs before
   it services diagnostics — test by establishing that state, THEN probing on the same awake channel.
+- **SLEEP BEHAVIOR (critical, 2026-10-01):** the module sleeps within a few SECONDS of bus inactivity
+  — when asleep it stops broadcasting AND stops ACKing, so every TX times out (50ms/write) and RX is
+  empty. Crucially, replaying CAN traffic (incl. 20Hz frames + NM stimulus) did NOT re-wake it once
+  asleep → a **power cycle** is likely required to bring it back, after which the bus must be kept
+  >5Hz CONTINUOUSLY with no gaps. The uds_discover / nm_uds_probe tools now have a LIVENESS GUARD
+  (via can_raw.module_alive): they abort/flag if the module is not broadcasting, so a "silent" result
+  can never be a sleep artifact. The UDS-silent result above WAS captured with the module awake (a
+  passive sniff immediately after showed healthy broadcasts), but re-confirm it in one clean
+  liveness-guarded run after a power cycle.
+- **NM stimulus does NOT open the Dcm (bench/nm_uds_probe.py, 2026-10-01):** driving the 0x40c wake
+  container + direct NM frames (node-ids 0x4a/5f/98/99/9a/d4) at 50Hz while probing UDS produced no
+  reply and no new broadcasts — network-management state is NOT the gate (consistent with the module
+  already being operational). Next levers: a different physical diag bus (module A pins 37/24), 29-bit
+  ISO-TP addressing, or confirming TX reaches the module while it is provably awake.
 - **START HERE: `bench/uds_discover.py`** (added 2026-10-01) — raw-CAN, single never-closed channel,
   continuous keep-awake, sweeps addressing modes (physical 0x6b4/0x6b8 AND 0x713/0x77D, functional
   0x7DF, extended/mixed, and a full 0x600–0x7ff req sweep watching ALL rx). A single 7E/7F reply

@@ -32,7 +32,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from can_raw import RawCAN  # noqa: E402  (reuse the proven raw-CAN J2534 binding)
+from can_raw import RawCAN, module_alive  # noqa: E402  (reuse the proven raw-CAN J2534 binding)
 
 # UDS probes to send, in order. Short requests whose responses fit a single frame (except F187).
 PROBES = {
@@ -154,6 +154,8 @@ def main():
                     help="extra CAN id(s) to blast as 8x00 keep-awake (repeatable)")
     ap.add_argument("--sweep-lo", type=lambda s: int(s, 0), default=0x600)
     ap.add_argument("--sweep-hi", type=lambda s: int(s, 0), default=0x7ff)
+    ap.add_argument("--force", action="store_true",
+                    help="probe even if the module is not broadcasting (asleep) at start")
     a = ap.parse_args()
 
     wake_ids = [int(x, 0) for x in a.wake_id]
@@ -170,7 +172,23 @@ def main():
         pairs = [(int(rq, 0), int(rx, 0))]
 
     p = Probe(a.dll, a.baud, a.keepalive_ms, wake_ids)
+
+    # LIVENESS GUARD: a UDS 'silent' result only means something if the module is awake. If it is
+    # not broadcasting, bus traffic alone may not wake it (it can need a power cycle) -> abort.
+    alive = module_alive(p.can, 1.5)
+    if alive:
+        print(f"[*] module ALIVE — broadcasting {sorted(hex(x) for x in alive)}")
+    else:
+        print("[!] module is SILENT (not broadcasting) — asleep or powered down.")
+        if not a.force:
+            print("[!] ABORTING: probing a sleeping module yields a meaningless 'silent' result.")
+            print("    Power-cycle the module (and keep the bus >5Hz), then re-run. Use --force to override.")
+            p.can.close()
+            return
+        print("[!] --force set; probing anyway (results may be meaningless).")
+
     found = []
+    still_alive = alive
     t_end = time.time() + a.secs
     print(f"[*] raw-CAN {a.baud}bps  keepalive every {a.keepalive_ms}ms  "
           f"listen {a.listen_ms}ms/req  budget {a.secs:.0f}s")
@@ -217,8 +235,13 @@ def main():
             for rid, uds in reps:
                 print(f"[HIT-SWEEP] req0x{rq:03x} ->rx0x{rid:03x}: {fmt(uds)}")
                 found.append((rq, rid, "3E00", uds))
+        still_alive = module_alive(p.can, 1.0)
     finally:
         p.can.close()
+
+    if alive and not still_alive and not found:
+        print("[!] WARNING: module STOPPED broadcasting during the run — it slept mid-sweep.")
+        print("    The 'silent' result below may be a sleep artifact; re-run keeping it awake.")
 
     print("\n=== SUMMARY ===")
     if found:

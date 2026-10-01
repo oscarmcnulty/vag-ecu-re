@@ -21,6 +21,31 @@ of truth. Document new findings as CSV labels, not markdown (this prompt excepte
 - **Bus sleeps when idle** — hold it awake with ≥5 Hz traffic (periodic frame) or the module stops
   transmitting.
 
+## Update 2026-10-01 — RX dispatch mapped; static + cold-emu both walled (why)
+- **Two separate RX dispatch paths, confirmed from code:** (1) the **COM path** `can_rx_isr`
+  (0x8f708) -> `rx_mailbox_resolver`(0x501d4) -> `*(0xb6a50 + idx*0x18)`; (2) the **diag path**
+  = the rx-filter table `0xaea38` handler `0x127ed`. The COM ISR **drops** any mailbox that is not
+  a COM signal-group (resolver returns 0xff -> `can_rx_isr` early-returns). The diag mailbox
+  `0xfff7e600` (0x6b4/0x6b8) is not a COM group, so **the COM ISR is NOT the UDS path** — diag goes
+  only through `0x127ed`.
+- **`0x127ed` is a register-indexed jump table** (head at 0x127ec: repeating `ldr r2,[sp]; movs rX,r0;
+  b <case>` stubs). It has no prologue; back-scan lands on neighbor 0x12590. Its branch target is
+  selected from the live ISR index, so it is **not statically decompilable in isolation** and not
+  callable in emulation without the exact ISR context.
+- **Root wall (same one, now proven RX-side):** the dispatch tables are **boot-materialized**. The
+  flash `com_sig_group_table` template @0xb6a44 has **0/62** records with a FlexCAN-mailbox pointer at
+  +8; the live table is expanded into RAM **0x40a1a8** at boot (SBOOT-installed config source, see
+  `com_config_source_thunk`). Cold emulation therefore resolves **nothing** — `emu/exp_diag_rx.py`
+  shows known COM mailboxes (0x117/0x104/0x100) all return idx=0xff cold. So the Dcm precondition
+  **cannot be reached from the cold ASW image** by static RE or cold emulation alone.
+- **CSV corrected:** the old "Dcm is not comm-gated / a request gets a response" note was overstated
+  (it only covered the seg2 response-builders) — softened on `diag_resp_buf` / `diag_rxindication`.
+- **=> The unlock is the bench (or a fuller dump).** Two concrete next moves: (a) **bench-read the live
+  RAM dispatch state** — the materialized object table at `0x40a1a8` and the live diag RxIndication
+  pointer — to see the real diag handler + its precondition checks; (b) the corrected single-channel
+  keep-awake UDS probe below. A full flash dump incl SBOOT would also recover the boot init that builds
+  these tables.
+
 ## Goal
 Find and satisfy the Dcm precondition so the UDS server answers; then enter a programming/extended
 session and **dump the complete flash** via RequestUpload (0x35)/TransferData (0x36)/TransferExit
@@ -50,11 +75,24 @@ ASW image we hold.
    identity DIDs), `did_0601_handler` (0xbc574), `diag_resp_buf` (0x401854).
 
 ### Bench (SM2 Pro, module B = pins 26 H / 14 L, 500k, KEEP BUS AWAKE)
-- Tools: `core/uds/j2534_transport.py` (ISO-TP), `core/uds/uds_client.py`, `bench/confirm_comms.py`
-  (`--tx 0x6b4 --rx 0x6b8`), `bench/read_ram.py`. 32-bit Python embed needed for smj2534.dll
-  (re-download python.org `python-3.11.9-embed-win32.zip` if the scratchpad was cleaned). Do the
-  whole UDS exchange on ONE channel with continuous wake frames — closing/reopening lets the bus sleep
-  (that silenced the first attempt).
+- **START HERE: `bench/uds_discover.py`** (added 2026-10-01) — raw-CAN, single never-closed channel,
+  continuous keep-awake, sweeps addressing modes (physical 0x6b4/0x6b8 AND 0x713/0x77D, functional
+  0x7DF, extended/mixed, and a full 0x600–0x7ff req sweep watching ALL rx). A single 7E/7F reply
+  gives the live pair + whether the service is precondition-gated vs. absent. `--secs 20` for a full
+  sweep; `--pair 0x6b4:0x6b8 --probe 1003` to focus.
+  - **NB addressing discrepancy:** firmware RX filter = **0x6b4/0x6b8** (decode/rx_filter_map.txt),
+    but `confirm_comms.py` + the old `read_ram.py` defaulted to **0x713/0x77D** (never confirmed for
+    this module). The earlier "silent" result may partly be wrong-pair; uds_discover settles it.
+- Then **`bench/read_ram.py`** (now defaults 0x6b4/0x6b8; pass the pair uds_discover confirmed) to
+  dump the boot-materialized live RAM the cold image lacks: objtable 0x40a1a8, the RX-dispatch state
+  (0x406cd0 mailbox→group map, CAN status 0x406dc8/dd0), transport struct 0x407990, and the NM/comm
+  precondition regions → `emu/ramdump_*.bin` to seed `harness.py`. Needs UDS answering first (0x23 is
+  often gated → a clean NRC is still the answer).
+- Other tools: `core/uds/j2534_transport.py` (ISO-TP), `core/uds/uds_client.py`, `bench/confirm_comms.py`,
+  `bench/can_raw.py` (sniff/wake). 32-bit Python embed needed for smj2534.dll (re-download python.org
+  `python-3.11.9-embed-win32.zip` if the scratchpad was cleaned). Do the whole UDS exchange on ONE
+  channel with continuous wake frames — closing/reopening lets the bus sleep (that silenced the first
+  attempt).
 - Once static line 1/2 gives the precondition or correct N_PDU: TesterPresent → `10 03` → `10 02` →
   `27` (RE'd key) → `35` RequestUpload + loop `36` → `37`; concatenate blocks to `firmware/`
   (gitignored). Fall back to `23` ReadMemoryByAddress sweeping the flash if upload is gated.

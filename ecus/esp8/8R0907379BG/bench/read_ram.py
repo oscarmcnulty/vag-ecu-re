@@ -38,16 +38,26 @@ from uds_client import UDS, NegativeResponse     # noqa: E402
 DEFAULT_DLL = r"C:\Program Files (x86)\Scanmatik\smj2534.dll"
 OUT = os.path.join(os.path.dirname(__file__), "..", "emu")
 
-# RAM regions to capture (name, addr, length) — the materialized COM/transport state.
+# RAM regions to capture (name, addr, length) — the materialized COM/transport + RX-dispatch state.
+# These are the live tables that are boot-materialized and ABSENT from the cold ASW image, so a
+# bench read is the only way to recover them (see can_rx_isr / rx_mailbox_resolver / objtable notes
+# in analysis/symbols_merged.csv). Seed emu/harness.py from the dump to run the dispatch cold.
 REGIONS = [
-    ("objtable",   0x0040a1a8, 0x4000),   # COM runtime object table (handle->descriptors->bufs)
+    ("objtable",   0x0040a1a8, 0x4000),   # COM runtime object table (handle->descriptors->bufs); the
+                                          #   materialized form of flash com_sig_group_table 0xb6a44
     ("transport",  0x00407990, 0x0080),   # transport channel struct (PCI@+0x34=0x4079d4, status@+0x44)
+    # --- RX dispatch state read/written by can_rx_isr(0x8f708) + rx_mailbox_resolver(0x501d4) ---
+    ("mb_desc",    0x00406cc0, 0x0120),   # per-mailbox status desc 0x406cd0 (stride4, idx..0x3e ->
+                                          #   0x406dc8) i.e. live map of which mailbox->which group
+    ("can_status", 0x00406dc0, 0x0040),   # CAN controller status 0x406dc8/0x406dd0 (PTR_DAT_0008f854/8)
+    ("isr_misc",   0x00409040, 0x0040),   # 0x409054 (PTR_DAT_0008f868) touched by the RX ISR path
+    ("isr_misc2",  0x00409340, 0x0020),   # 0x409348 (PTR_DAT_0008f870) touched by the RX ISR path
+    # --- network / comm state (precondition candidates) ---
     ("nm_state",   0x00408f00, 0x0040),   # NM status word 0x408f10 + net-active flags 0x408f20/21
     ("enable",     0x00409220, 0x0040),   # comm_netmode 0x409230
-    ("enflag",     0x00409430, 0x0060),   # comm_enable_flag 0x40944c, tx_gate2 0x409438, nm_mode 0x4090d8-ish
+    ("enflag",     0x00409430, 0x0060),   # comm_enable_flag 0x40944c, tx_gate2 0x409438
     ("nm_mode",    0x004090c0, 0x0040),   # nm_mode 0x4090d8, 0x4090d0 struct
     ("sig047b",    0x00408f00, 0x0020),   # com_sig_047b 0x408f0c (overlaps nm_state; fine)
-    ("mbstatus",   0x00406cc0, 0x0060),   # per-mailbox status desc 0x406cd0 + CAN status 0x406dd0/406dc8
     ("cfg_cursor", 0x00406960, 0x0080),   # config walker cursor/flags 0x406980, 0x4069xx
 ]
 
@@ -90,8 +100,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dll", default=DEFAULT_DLL)
-    ap.add_argument("--tx", type=lambda s: int(s, 0), default=0x713)
-    ap.add_argument("--rx", type=lambda s: int(s, 0), default=0x77D)
+    # Firmware-confirmed diag pair is 0x6b4(req)/0x6b8(resp) (decode/rx_filter_map.txt). The old
+    # 0x713/0x77D default was never confirmed for this module. Run bench/uds_discover.py FIRST to
+    # learn the pair the ECU actually answers on, then pass it here with --tx/--rx.
+    ap.add_argument("--tx", type=lambda s: int(s, 0), default=0x6B4)
+    ap.add_argument("--rx", type=lambda s: int(s, 0), default=0x6B8)
     ap.add_argument("--baud", type=int, default=500000)
     ap.add_argument("--timeout", type=int, default=1000)
     ap.add_argument("--chunk", type=lambda s: int(s, 0), default=0x40)

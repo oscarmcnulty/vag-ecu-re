@@ -75,6 +75,13 @@ ASW image we hold.
    identity DIDs), `did_0601_handler` (0xbc574), `diag_resp_buf` (0x401854).
 
 ### Bench (SM2 Pro, module B = pins 26 H / 14 L, 500k, KEEP BUS AWAKE)
+- **LIVE RESULT 2026-10-01 (uds_discover.py, module confirmed operational):** with the bus held awake
+  and the module broadcasting (sniff: 0x100/101/103/106/11e + 0x08a/308/392/632/64a/6c3, valid E2E),
+  UDS is **silent on EVERY mode** — physical 0x6b4/0x6b8 AND 0x713/0x77D, functional 0x7DF, extended
+  addressing, and the full 0x600–0x7ff req sweep. => the addressing-discrepancy theory is DISPROVEN;
+  the Dcm is gated BEFORE addressing. Don't re-chase ids/pairs. The open question is the precondition
+  STIMULUS (network-management / full-comm state, or an ignition/enable frame) the module needs before
+  it services diagnostics — test by establishing that state, THEN probing on the same awake channel.
 - **START HERE: `bench/uds_discover.py`** (added 2026-10-01) — raw-CAN, single never-closed channel,
   continuous keep-awake, sweeps addressing modes (physical 0x6b4/0x6b8 AND 0x713/0x77D, functional
   0x7DF, extended/mixed, and a full 0x600–0x7ff req sweep watching ALL rx). A single 7E/7F reply

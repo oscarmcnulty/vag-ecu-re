@@ -19,6 +19,26 @@ TP2.0 + KWP2000**, not UDS. Working, reproducible session entry (`bench/tp20_kwp
   (0x27) seed/key, then ReadMemoryByAddress (0x23) / upload. The 0x6b4/0x6b8 "UDS diag server" labels
   were the wrong protocol; the real diag path is TP2.0 on 0x200/0x203 ↔ 0x4a3/0x300.
 
+## SecurityAccess key RE — status (2026-10-01)
+Goal: recover the KWP `27 01` seed -> `27 02` key algorithm (4-byte random seed; level 01 only).
+- **NOT SA2.** No SA2 bytecode in the firmware (scanned for the 0x68…0x4C opcode grammar used by
+  simos85/al551/dynsteer `sa2.py`). So the key is a DIRECT algorithm in code, not a bytecode VM.
+- **Handler not yet located.** The KWP stack (TP2.0 reassembly -> KWP SID dispatch -> 0x27 handler ->
+  key transform) lives in firmware regions the current analysis can't cleanly read: the mixed-ISA
+  jump-table island (0x12xxx), the UN-DISASSEMBLED DATA gap 0xa2000-0xbb045 (reproduce marks it DATA),
+  and degraded seg2. The rx-filter "handler 0xa43f5" for 0x203/0x4a3 is a RED HERRING - 0xa43f4 is a
+  control-data pointer table (targets: mul_div_scale, ESC valve math), not the TP2.0 handler.
+- The 8 known seg2 diag funcs (0xc71ac/d2090/d5ab8/dcd3c/dcdb4/dd004/dd378/ddf5c) are small DID
+  readers (no key math) - SecurityAccess is NOT among them.
+- Service-table candidates to chase: a structured sub-id/flag table @0xae95c (just before the rx-filter
+  table 0xaea38), and KWP handler code in seg2 @0xc854c / 0xd71c4 (contain 00 27 01 / d0 / 35 02 consts).
+- **Recommended next approach (pick one):** (a) FIRMWARE: extend the reproduce pipeline to disassemble
+  the 0xa2000-0xbb045 DATA gap + fix the island, then trace TP2.0->KWP dispatch->0x27 handler->key; or
+  (b) EMULATION: once the 0x27 handler addr is known, emulate it (feed stored seed + candidate key,
+  read the compare) to extract the transform; or (c) DYNAMIC: capture one legit (seed,key) pair from a
+  working ODIS/dealer unlock to constrain/confirm the algorithm (KWP locks out after ~3 bad keys - do
+  NOT brute force). The working bench stack (bench/tp20_kwp.py) can drive `27 02 <key>` once we have it.
+
 ## KWP2000 service map (2026-10-01, bench, ignition ON, session 0x85)
 Full service scan over the working TP2.0 channel (bench/tp20_kwp.py, now with channel-test keepalive +
 multi-frame reassembly incl. TP2.0 data opcodes 0x2/0x3). In StartDiagnosticSession 0x85 (`10 85`->`50 85 00`):

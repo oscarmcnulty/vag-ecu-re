@@ -90,6 +90,16 @@ ASW image we hold.
   emits NO response: the gate is in the CanTp/Dcm SOFTWARE layer (consistent with the static finding
   that the diag dispatch 0x127ed is boot-materialized / register-indexed). Not wiring, addressing,
   sleep, or NM state.
+- **VW_Flash-style session entry tried, still silent (2026-10-01, bench/uds_session.py):** replicated
+  the Simos18 flasher sequence (3E00 -> 10 03 -> 3E -> 31 01 0203 -> 10 02 -> 27 11) over a PROPER
+  ISO-TP client (SF/FF/FC/CF, responsePending-aware) with the NM wake held throughout, on both
+  0x6b4/0x6b8 and 0x713/0x77D. Module awake+operational the whole time; EVERY step silent (not even
+  10 03 answers). So the gate is not ISO-TP mechanics or the session sequence. Working hypothesis
+  (matches the user's note that module B is the gateway-connected diag bus): the ABS only activates
+  its UDS server with the GATEWAY/vehicle context present — e.g. a gateway-provided diagnostics-enable
+  / terminal-15(KL15)-over-CAN / routing-active indication that a standalone module+adapter never
+  supplies. Next: inject candidate enable/status frames (KL15/gateway-status) then re-probe, or put a
+  gateway in the loop.
 - **WAKE PROCEDURE (works, 2026-10-01):** the module boots DORMANT (silent). Driving the 0x40c wake
   container (0x600 sub-PDU byte1 bit5, node-ids 0x4a/5f/98/99/9a/d4) + direct NM frames at ~50Hz brings
   it operational within ~1-2s (bench/nm_uds_probe.py, and uds_discover.py --wake). Must be fed

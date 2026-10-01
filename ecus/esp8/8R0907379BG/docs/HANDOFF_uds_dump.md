@@ -19,6 +19,21 @@ TP2.0 + KWP2000**, not UDS. Working, reproducible session entry (`bench/tp20_kwp
   (0x27) seed/key, then ReadMemoryByAddress (0x23) / upload. The 0x6b4/0x6b8 "UDS diag server" labels
   were the wrong protocol; the real diag path is TP2.0 on 0x200/0x203 ↔ 0x4a3/0x300.
 
+## Path 2 progress (firmware trace, 2026-10-01) — BLOCKED on analysis quality
+Worked the firmware hunt for the 0x27 key handler. Ruled out, so next session doesn't repeat:
+- SID-density / opcode-constant grep is UNUSABLE here: byte values 0x10-0x3e collide massively with
+  struct offsets & bit masks. Top "hits" (0xc6bfc, 0xe6068, 0xbc700) are data-marshalling / control math.
+- Crypto-signature search (compact seg2 fn with xor+shift+loop) found exactly ONE: **FUN_000d82d4** =
+  a table-driven **CRC-8 validator** (crc=table[data^crc], 7 bytes, init 0xff, xorout 0xff, table near
+  DAT_000d83c0), comparing a stored checksum at msg+0x12. Real artifact (msg/E2E CRC) but NOT the key.
+- ROOT BLOCKER: the diag/security code is in **degraded seg2** (VMA=file+3 shift corrupts decompiles &
+  literal pools - confirmed: can't even resolve the CRC table pointer cleanly) and the **undisassembled
+  DATA gap 0xa2000-0xbb045**. Until those are fixed, the 0x27 handler can't be reliably located/read.
+- => Path 2 REALLY needs the pipeline fix FIRST: (1) re-disassemble seg2 at the correct VMA (de-shift,
+  so decompiles/literals are valid), (2) disassemble the DATA gap. THEN trace TP2.0->KWP dispatch->0x27.
+  This is a Ghidra-pipeline sub-project (edit EspSeg2.java / add a DATA-gap pass + re-run). Only after
+  that are the heuristic/callgraph searches meaningful.
+
 ## SecurityAccess key RE — status (2026-10-01)
 Goal: recover the KWP `27 01` seed -> `27 02` key algorithm (4-byte random seed; level 01 only).
 - **NOT SA2.** No SA2 bytecode in the firmware (scanned for the 0x68…0x4C opcode grammar used by

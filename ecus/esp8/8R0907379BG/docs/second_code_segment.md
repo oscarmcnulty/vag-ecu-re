@@ -24,6 +24,11 @@ Runs after `04_fix` (which clears code units in `0xa2000-0x110000`, so it must c
 1. Split the DATA block at `SEG2_START=0xbb045`.
 2. `moveBlock(+3)` so the region loads at VMA `0xbb048…` and ARM decodes 4-aligned.
 3. Create a function at every ARM prologue (500, 0 failed).
+3b. **(2026-10-01) Also create a function at every Thumb prologue** (`B5xx` = `push {..,lr}`) in the
+   unclaimed bytes, disassembled as Thumb. This recovers the "Thumb islands" the ARM-only pass left as
+   degraded/garbage decompiles — **+103 Thumb functions** in seg2 (581 prologues scanned). These hold
+   the KWP2000 diagnostic handlers (incl. the TP2.0/KWP dispatch + SecurityAccess path) that were
+   previously invisible. `EspSeg2.java` is now ARM+Thumb and idempotent (re-run skips the block move).
 4. `04c` re-analyzes so references from seg2 resolve — the CAN trace becomes a normal xref walk.
 The two-block layout (seg1/config at delta 0, seg2 at delta +3) makes every cross-reference
 resolve: seg1↔seg2 calls (PC-relative) and absolute RAM refs both come out correct.

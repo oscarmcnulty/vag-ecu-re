@@ -33,6 +33,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from can_raw import RawCAN, module_alive  # noqa: E402  (reuse the proven raw-CAN J2534 binding)
+# wake stimulus (the module boots DORMANT and must be woken + held operational, 2026-10-01)
+from nm_uds_probe import (container_frames, send_container, send_nm_direct,  # noqa: E402
+                          NM_NODES, NM_CTRLS)
 
 # UDS probes to send, in order. Short requests whose responses fit a single frame (except F187).
 PROBES = {
@@ -91,14 +94,31 @@ def decode_reply(payload, ext=None):
 
 
 class Probe:
-    def __init__(self, dll, baud, keepalive_ms, wake_ids):
+    def __init__(self, dll, baud, keepalive_ms, wake_ids, wake=False):
         self.can = RawCAN(dll=dll, baud=baud) if dll else RawCAN(baud=baud)
         self.keepalive_ms = keepalive_ms
         self.wake_ids = wake_ids
+        self.wake = wake
         self._last_ka = 0.0
+        self._last_wake = 0.0
+        self._wni = 0
+
+    def drive_wake(self):
+        """Feed the NM wake stimulus (0x40c container + direct NM) at ~50Hz to wake/hold the module."""
+        now = time.time()
+        if (now - self._last_wake) * 1000.0 < 20:
+            return
+        self._last_wake = now
+        node = NM_NODES[self._wni % len(NM_NODES)]
+        ctrl = NM_CTRLS[(self._wni // len(NM_NODES)) % len(NM_CTRLS)]
+        send_container(self.can, container_frames(node))
+        send_nm_direct(self.can, node, ctrl)
+        self._wni += 1
 
     def keepalive(self, req_id):
-        """Hold the bus awake: periodic TesterPresent on req_id + optional wake ids."""
+        """Hold the bus/module awake: NM stimulus (if --wake) + periodic TesterPresent + wake ids."""
+        if self.wake:
+            self.drive_wake()
         now = time.time()
         if (now - self._last_ka) * 1000.0 < self.keepalive_ms:
             return
@@ -156,6 +176,9 @@ def main():
     ap.add_argument("--sweep-hi", type=lambda s: int(s, 0), default=0x7ff)
     ap.add_argument("--force", action="store_true",
                     help="probe even if the module is not broadcasting (asleep) at start")
+    ap.add_argument("--wake", action="store_true",
+                    help="feed NM wake stimulus (0x40c container + NM) to wake/hold the module "
+                         "throughout (the module boots dormant)")
     a = ap.parse_args()
 
     wake_ids = [int(x, 0) for x in a.wake_id]
@@ -171,18 +194,27 @@ def main():
         rq, rx = a.pair.split(":")
         pairs = [(int(rq, 0), int(rx, 0))]
 
-    p = Probe(a.dll, a.baud, a.keepalive_ms, wake_ids)
+    p = Probe(a.dll, a.baud, a.keepalive_ms, wake_ids, wake=a.wake)
 
-    # LIVENESS GUARD: a UDS 'silent' result only means something if the module is awake. If it is
-    # not broadcasting, bus traffic alone may not wake it (it can need a power cycle) -> abort.
+    # LIVENESS GUARD: a UDS 'silent' result only means something if the module is awake.
     alive = module_alive(p.can, 1.5)
+    if (not alive) and a.wake:
+        print("[*] module silent — driving NM wake stimulus to bring it operational...")
+        tw = time.time()
+        while time.time() - tw < 10 and not alive:
+            for _ in range(10):
+                p.drive_wake()
+                time.sleep(0.002)
+            alive = module_alive(p.can, 0.6)
+        if alive:
+            print(f"[*] WOKE at t={time.time()-tw:.1f}s")
     if alive:
         print(f"[*] module ALIVE — broadcasting {sorted(hex(x) for x in alive)}")
     else:
         print("[!] module is SILENT (not broadcasting) — asleep or powered down.")
         if not a.force:
             print("[!] ABORTING: probing a sleeping module yields a meaningless 'silent' result.")
-            print("    Power-cycle the module (and keep the bus >5Hz), then re-run. Use --force to override.")
+            print("    Power-cycle, then re-run with --wake (module boots dormant). Use --force to override.")
             p.can.close()
             return
         print("[!] --force set; probing anyway (results may be meaningless).")

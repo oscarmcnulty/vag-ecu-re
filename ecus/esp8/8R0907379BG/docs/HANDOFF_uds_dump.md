@@ -82,6 +82,18 @@ ASW image we hold.
   the Dcm is gated BEFORE addressing. Don't re-chase ids/pairs. The open question is the precondition
   STIMULUS (network-management / full-comm state, or an ignition/enable frame) the module needs before
   it services diagnostics — test by establishing that state, THEN probing on the same awake channel.
+- **DEFINITIVE (2026-10-01, module provably awake + TX confirmed received):** after a power cycle the
+  module was woken via NM stimulus (broadcasting all ESP ids, liveness-guard confirmed) and held awake,
+  and TX was proven to REACH it — writes to 0x6b4 complete in ~1ms (the module ACKs them; 50ms = no
+  ACK). With all that true, UDS is STILL silent on 0x6b4/0x6b8, 0x713/0x77D, functional 0x7DF,
+  extended addressing, and the full 0x600–0x7ff sweep. => the module RECEIVES the diag request and
+  emits NO response: the gate is in the CanTp/Dcm SOFTWARE layer (consistent with the static finding
+  that the diag dispatch 0x127ed is boot-materialized / register-indexed). Not wiring, addressing,
+  sleep, or NM state.
+- **WAKE PROCEDURE (works, 2026-10-01):** the module boots DORMANT (silent). Driving the 0x40c wake
+  container (0x600 sub-PDU byte1 bit5, node-ids 0x4a/5f/98/99/9a/d4) + direct NM frames at ~50Hz brings
+  it operational within ~1-2s (bench/nm_uds_probe.py, and uds_discover.py --wake). Must be fed
+  CONTINUOUSLY; it re-sleeps within seconds of the stimulus stopping.
 - **SLEEP BEHAVIOR (critical, 2026-10-01):** the module sleeps within a few SECONDS of bus inactivity
   — when asleep it stops broadcasting AND stops ACKing, so every TX times out (50ms/write) and RX is
   empty. Crucially, replaying CAN traffic (incl. 20Hz frames + NM stimulus) did NOT re-wake it once

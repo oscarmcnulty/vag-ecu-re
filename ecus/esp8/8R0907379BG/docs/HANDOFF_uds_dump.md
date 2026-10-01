@@ -109,6 +109,19 @@ ASW image we hold.
   on pins 35/32 and says 'tool drives VCC (term15) to wake'; confirm it is actually energized in the
   current module-B setup (ESP app runs on term30, Dcm may need term15); (2) the real gateway's
   diagnostics-enable/routing-active frame; (3) a specific partner-frame signal value.
+- **IGNITION / term-15 found (2026-10-01):** the Scanmatik bench pigtail has a 3-pos "ignition" switch
+  (on/off/auto) driving the +12V/VCC+ = module term-15. Switch ON = solid term-15 -> the module runs
+  AUTONOMOUSLY (broadcasts ~50Hz, ACKs at 1ms, does NOT sleep, no NM wake needed). So term-15 controls
+  the run/sleep state. HOWEVER, with ignition solidly ON and the module fully operational, UDS is STILL
+  silent on the full 0x600-0x7ff sweep + functional + extended -> ignition is NOT the Dcm gate either.
+  (AUTO position = device-controlled term-15; the FEPS pins {8,9,11,12,13} are NOT it — pin 12 = BOOT
+  lead; +12V is not on any safely-drivable FEPS pin, likely the L-line/auto logic. For now use ON.)
+  !! Recovery note: do NOT SetProgrammingVoltage(VOLTAGE_OFF) blindly — if the pigtail is in AUTO it can
+  drop term-15 and kill the module; set the switch to ON for stable bench work.
+- **TP2.0 LEAD (2026-10-01):** module B RX filter includes **0x203 = 0x200 + 0x03** (0x03 = VAG ABS
+  logical address), handler 0xa43f5 — the hallmark of **VAG TP2.0 + KWP2000** diagnostics, not UDS.
+  This would explain the total UDS silence (wrong protocol). NEXT: attempt a TP2.0 channel-setup on
+  0x203 (opcode 0xC0) and speak KWP2000 over the negotiated channel. (8R0 B8 is TP2.0-era.)
 - **WAKE PROCEDURE (works, 2026-10-01):** the module boots DORMANT (silent). Driving the 0x40c wake
   container (0x600 sub-PDU byte1 bit5, node-ids 0x4a/5f/98/99/9a/d4) + direct NM frames at ~50Hz brings
   it operational within ~1-2s (bench/nm_uds_probe.py, and uds_discover.py --wake). Must be fed

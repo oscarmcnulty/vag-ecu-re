@@ -111,14 +111,43 @@ class TP20KWP:
             if r and r[0] == self.rx:
                 self._handle_ctrl(r[1])
 
-    def request(self, kwp: bytes, timeout=2.0):
+    def _send_frames(self, kwp):
+        """TP2.0 data TX, multi-frame safe. First frame carries the 2-byte length + up to 5 KWP
+        bytes; subsequent frames carry up to 7 each. Non-last frames use op0 (more, ACK-expected)
+        and we wait for the ECU's 0xB ACK before the next; last frame uses op1 (last, ACK)."""
         n = len(kwp)
-        self.c.write(self.tx, bytes([0x10 | (self.seq & 0xF), (n >> 8) & 0xFF, n & 0xFF]) + kwp)
-        self.seq = (self.seq + 1) & 0xF
+        chunks = [kwp[:5]]
+        rest = kwp[5:]
+        while rest:
+            chunks.append(rest[:7]); rest = rest[7:]
+        for idx, ch in enumerate(chunks):
+            last = idx == len(chunks) - 1
+            op = 1 if last else 0
+            if idx == 0:
+                frame = bytes([(op << 4) | (self.seq & 0xF), (n >> 8) & 0xFF, n & 0xFF]) + ch
+            else:
+                frame = bytes([(op << 4) | (self.seq & 0xF)]) + ch
+            self.c.write(self.tx, frame)
+            self.seq = (self.seq + 1) & 0xF
+            if not last:                      # wait for the ECU's TP ACK before next frame
+                t = time.time()
+                while time.time() - t < 0.5:
+                    rr = self._rd(40)
+                    if not rr:
+                        continue
+                    rid, pl = rr
+                    if rid == self.rx and pl and (pl[0] >> 4) == 0xB:
+                        break
+                    if rid == self.rx:
+                        self._handle_ctrl(pl)
+
+    def request(self, kwp: bytes, timeout=2.0, pending_max=8.0):
+        self._send_frames(kwp)
         data = bytearray()
         total = None
         t = time.time()
-        while time.time() - t < timeout:
+        hard = time.time() + pending_max   # overall cap across responsePending (0x78) repeats
+        while time.time() - t < timeout and time.time() < hard:
             r = self._rd(40)
             if not r:
                 self.keepalive()
@@ -142,7 +171,14 @@ class TP20KWP:
                     data += payload
                 if op in (0x0, 0x1):          # sender is waiting for an ACK
                     self.c.write(self.tx, bytes([0xB0 | ((rseq + 1) & 0xF)]))
-                if op in (0x1, 0x3):          # last packet
+                if op in (0x1, 0x3):          # last packet of a response
+                    resp = bytes(data[:total]) if total else bytes(data)
+                    if len(resp) >= 3 and resp[0] == 0x7F and resp[2] == 0x78:
+                        # responsePending: ECU is busy (e.g. descending to boot loader) -> keep
+                        # waiting for the real response (reset assembly, extend the per-response window)
+                        data = bytearray(); total = None; t = time.time()
+                        self.keepalive()
+                        continue
                     break
             else:
                 self._handle_ctrl(pl)      # answer ECU channel-test etc.

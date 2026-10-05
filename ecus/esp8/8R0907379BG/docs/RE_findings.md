@@ -46,20 +46,17 @@ Goal (openpilot): read/flash path; CAN TX/RX for functional msgs incl **ESP_05**
   / DAT_0000b9b4), (2) that struct+0x25 → ESP_05 byte4 bit1.** Do NOT state 15 km/h until both
   are proven from the image.
 
-## Read / flash path (goal a)  (PARTIAL)
-- ESP supports full UDS incl **0x22/0x23 read**, **0x2E/0x3D write**, **0x34/0x36/0x37 flash**,
-  **0x27 security** (SA2 key already extracted — see memory abs-sa2-key). On-car the ABS did NOT
-  answer at 0x713 over OBD (see abs-sa2-key); RE is on the ASW image only.
-- The real UDS dispatcher FUNCTION is not yet pinned: SID-CMP searches hit data-region false
-  positives; 0xb1e14 "service table" was a 0x00..0x54 ramp (red herring). NEXT: find the
-  code-region function that reads the ISO-TP RX buffer SID and does the service table lookup;
-  trace 0x27 (SA2 seed/key gate), then 0x23/0x2E/0x34 handlers.
+## Read / flash path (goal a)
+**Superseded — see `SECURITY_ACCESS.md`.** This module is TP2.0+KWP2000, not UDS (the "0x27
+security / SA2 key already extracted" note below was wrong — it was chasing UDS and a since-rejected
+SA2 key). The current, bench-confirmed status of the diagnostic read/flash/SecurityAccess path lives
+in `SECURITY_ACCESS.md`.
 
 ## Open items / next steps
 1. Split Ghidra memory (exec ≤0xa2000) so re-analysis stops fabricating data-region functions.
 2. Prove/disprove the ECD 15 km/h floor: unit of struct[0x3b]/DAT_0000b9b4; trace struct+0x25 →
    the ESP_05 (0x106) packer bit33. Find the 0x106 packer (via its descriptor / RAM buffer).
-3. Pin the UDS dispatcher + 0x23/0x2E/0x34 handlers for concrete read/flash evidence.
+3. Read/flash path: see `SECURITY_ACCESS.md`.
 
 ---
 # UPDATE 2 — deeper CAN-TX + ECD trace

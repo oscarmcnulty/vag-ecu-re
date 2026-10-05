@@ -55,4 +55,5 @@ which is why the bench spare matters:
 Bench-dump SBOOT/CBOOT (hardware read of the opened unit) and reverse the signature-verify
 routine: locate the RSA public modulus + exponent, find the verify call site, and determine
 whether it gates the runtime jump or only the download. That decides which of routes 1-4 is
-viable. Ties: [[esp8-bench-pinout]] (bench harness), [[abs-sa2-key]] (UDS unlock).
+viable. See `SECURITY_ACCESS.md` for current diagnostics/SecurityAccess/bench-tool status and the
+open paths toward an SBOOT dump.

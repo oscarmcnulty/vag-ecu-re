@@ -56,6 +56,14 @@ say 05_createfns '^EspCreateFns'
 run 05b_orphan   "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$CORE" \
                  -postScript ClaimOrphanCode.java 0x0 "${CODE_HI:-0xa2000}" "$HERE/analysis/orphan_entries.txt"
 say 05b_orphan '^ClaimOrphanCode'
+# 05b2: recover KWP diagnostic service handlers reachable ONLY through the data-driven dispatch
+# tables (12-byte records in 0xa2000-0xbb045). Auto-analysis never saw a code ref to them, so they
+# were left UNDEFINED (data) or mis-decoded as ARM. EspServiceTables finds the tables and creates a
+# function (ISA from the ptr bit0) at each handler entry, clearing conflicts. These are RDBI $22,
+# RMBA $23, RoutineControl $31, the $27 SecurityAccess precondition gate, download/transfer $34-$37.
+run 05b2_svctbl  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
+                 -postScript EspServiceTables.java
+say 05b2_svctbl '^EspServiceTables'
 # re-export the manifest so the recovered fns persist + get decompiled + recreated next run
 run 05c_reexport "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
                  -postScript EspExportFns.java "$ENTRIES"

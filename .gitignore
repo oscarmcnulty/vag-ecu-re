@@ -153,3 +153,6 @@ ecus/*/*/analysis/ram_bases.csv
 ecus/*/*/analysis/orphan_entries.txt
 ecus/*/*/analysis/dispatch_resolved.csv
 ecus/*/*/analysis/indirect_branches.csv
+
+# local 32-bit python for bench (Scanmatik 32-bit DLL) - do not commit
+/tools/

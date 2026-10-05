@@ -294,11 +294,13 @@ closed — see below for what's still open — but every pure-software/bench-dia
    403'd via WebFetch, same as nefmoto; the snippet we did get described a CAN-reflash bootloader
    loaded to RAM at `0x207800`, 2KB, and community dump tools "JCommander"/"savebin" over JTAG).
 
-8. **RaceABS tool software-RE — DONE 2026-10-04, clean negative + architecture recovered.** Chased
-   the nefmoto "Bosch ABS Boot Mode" lead: Bosch's own RaceABS Motorsport tool implements this
-   ECU's KWP2000 SecurityAccess, historically delegating the seed→key crypto to an external
-   `SecAcc.dll` (community confirmed `SecAcc.dll` never shipped). Full procedure + provenance below;
-   all RE artifacts kept in scratch, **not** committed (same rule as firmware).
+8. **RaceABS tool software-RE — DONE 2026-10-04/05.** New build = architecture only; **OLD build
+   dynamic-unpacked → the actual motorsport seed→key algorithm recovered** (but it is 16-bit and
+   does **NOT** match our 32-bit production SA — see "OLD build" subsection at the end). Chased the
+   nefmoto "Bosch ABS Boot Mode" lead: Bosch's own RaceABS Motorsport tool implements this ECU's
+   KWP2000 SecurityAccess, historically delegating the seed→key crypto to an external `SecAcc.dll`
+   (community confirmed `SecAcc.dll` never shipped). Full procedure + provenance below; all RE
+   artifacts kept in scratch, **not** committed (same rule as firmware).
    - **Source (better than the dead forum links):** both forum URLs are dead (the `.jp` 404s, the
      `.de` one redirects to a `bosch-motorsport.com` 404; Internet Archive has no capture of
      either). Bosch's **current** site still ships it: `RaceABS` product page →
@@ -333,13 +335,42 @@ closed — see below for what's still open — but every pure-software/bench-dia
      work with the current one"). The LoadLibrary DLL-name argument is an encrypted literal.
    - **Note on jglim/SecurityAccessQuery:** moot — its `GenerateKeyEx` convention differs from this
      tool's `(int algoNumber, byte[] buffer, int size)`, and there's no DLL to feed it anyway.
-   - **Residual sub-avenue (bigger effort, not done):** dynamic unpack — run RaceABS under a JIT/IL
-     dumper (MegaDumper/ExtremeDumper/managed unpacker) to recover the decrypted `SecurityEcuAccess`
-     body and the crypto-DLL name; still blocked afterward unless that DLL is independently sourced.
-     Also uncertain whether the **Motorsport** tool's seed&key (for "seed-and-key enabled" race ABS)
-     even matches our **production** ESP8 flash-SA — may be a different per-variant `algoNumber`.
-     Net: this specific RaceABS→SecAcc.dll avenue is **exhausted for static RE**; don't revisit without
-     either the external crypto DLL or a dynamic-unpack pass.
+   - **OLD build (v1.4.0.9 / "1409", 2016) dynamic-unpacked — algorithm RECOVERED, but it's the
+     motorsport SA, not ours (2026-10-05).** The old build *does* embed the crypto, so it was worth
+     chasing. Source: the new/current Bosch URLs only serve v3.5.5.3; the 1409 build came from the
+     one community re-upload (anonymous, so treated as untrusted — see method). It's an NSIS installer
+     whose app `RaceABS.exe` is **ConfuserEx v0.5.0** (the forum's target), class
+     `RaceABS.LayerDevice.DeviceKwpAbs` with `SecurityEcuAccess` / `GetKeyABS`. The seed→key crypto is
+     a tiny **native `KH.dll`** (7680 B, exports `Get_SeedRequest_Message` / `Get_KeyRequest_Message`)
+     embedded as a resource inside a sibling assembly `RaceABS.Lib`; both are ConfuserEx
+     anti-tamper + resource-encrypted, so static de4dot-cex could **not** decrypt them (bodies came
+     out corrupted). Recovered by running the untrusted binary **only inside a disposable,
+     network-disabled Windows Sandbox** (`.wsb`): ConfuserEx *Dynamic* Unpacker → `RaceABS.exeCleaned.exe`
+     (real bodies), and ExtremeDumper dumped the in-memory `RaceABS.Lib` → extracted `KH.dll`.
+     The native algo (disassembled with capstone, cross-checked against the deobfuscated managed
+     `GetKeyABS`) — `Get_KeyRequest_Message(algoNumber, buf, size)`, managed side hard-codes
+     **algoNumber=1** (modes 2/3 are empty stubs):
+     ```
+     s0,s1 = seed[0],seed[1]          # first 2 bytes of the 27 01 seed response; 16-bit only
+     seed16 = (s0<<8)|s1
+     amt    = bit5(s0) | bit4(s1)<<1 | bit1(s1)<<2 | bit2(s1)<<3        # rotate amount 0..15
+     rot    = ROL16(seed16,amt) if bit2(s0) else ROR16(seed16,amt)
+     op     = bit3(s0) | bit4(s1)<<1                                    # 0..3
+     key16  = {0:rot|seed16, 1:rot&seed16, 2:rot^seed16, 3:rot}[op]
+     reply  = 27 02 (key16>>8) (key16&0xFF)
+     ```
+     Full flow: `SecurityAccess(…,1,…)`→seed → `GetKeyABS` (loads `KH.dll`) → `SecurityAccess(…,2,key,…)`.
+     **Verdict for us: does NOT unlock `8R0907379BG`.** This is a **16-bit** scheme for the *motorsport*
+     ABS (M4/M5 "RACEAb8II/9II" race kits). Our **production** unit uses **32-bit** seeds on both SA
+     systems (coding SA proven `key=seed32+0x2909`; flash SA 32-bit, SBOOT-side) — incompatible seed
+     width, and a different per-variant algorithm this 2016 `KH.dll` doesn't implement. No bench
+     attempt is warranted (not applicable, not merely untested). Still useful: first complete Bosch ABS
+     seed→key recovered, confirms the lightweight motorsport SA + the per-`algoNumber` design; the
+     download→sandbox-unpack→native-RE pipeline is proven and reusable if a production-ABS tool or a
+     newer `KH.dll` (with algo 2/3) ever surfaces.
+   - **Net:** the RaceABS→`SecAcc.dll`/`KH.dll` avenue is **exhausted for our module** — the one
+     algorithm it yields is the wrong (motorsport, 16-bit) one. Don't revisit without a *production*
+     ABS tool or an independently-sourced production crypto DLL.
 
 ## Bench tools (current, in `bench/`)
 

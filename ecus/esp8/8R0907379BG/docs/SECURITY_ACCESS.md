@@ -198,10 +198,12 @@ closed — see below for what's still open — but every pure-software/bench-dia
    That paper also notes some VAG units reset their SA lockout timer on `ECUReset`/session-toggle —
    NOT used here by deliberate choice (see repo history around 2026-10-04 for why).
 3. **Hardware SBOOT dump via JTAG — MCU identified (2026-10-05, web research).** The MCU is almost
-   certainly a **TI TMS470R1x** (big-endian ARM7TDMI+Thumb core, ARMv5T in Ghidra's classification):
+   certainly a **TI TMS470R1x** (big-endian **ARM7TDMI = ARMv4T**+Thumb core; Ghidra language refined
+   `v5t`→`v4t` 2026-10-05 to match — see `RE_findings.md` "MCU / hardware platform"):
    our own independently-discovered CAN controller addresses `0xfff7e800`/`0xfff7ea00`
-   (`flexcan_module_a`/`b`) are an **exact match** to TI's documented HECC1/HECC2 base addresses for
-   this family. `TMS470R1B1M` (1MB flash, dual HECC 32-mailbox, 144-pin LQFP, ARM7TDMI, 1.8V) is the
+   (now relabeled `hecc_module_a`/`b` — the cell is **TI HECC**, not FlexCAN, confirmed by TI SPNU197e)
+   are an **exact match** to TI's documented HECC1/HECC2 control-frame base addresses (with mailbox RAM
+   at `0xfff7e400`/`e600`). `TMS470R1B1M` (1MB flash, dual HECC 32-mailbox, 144-pin LQFP, ARM7TDMI, 1.8V) is the
    closest part-number match found so far. Explains the "unmarked bare die" in the teardown photos —
    TMS470 is supplied to Tier-1s as bare wafer die for chip-on-board hybrid assembly; it was never
    packaged, so there were never markings to lose. Commercial tools exist for exactly this chip

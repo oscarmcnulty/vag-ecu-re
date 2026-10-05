@@ -13,7 +13,40 @@ Goal (openpilot): read/flash path; CAN TX/RX for functional msgs incl **ESP_05**
     data region as bogus Thumb → false "functions" (e.g. FUN_000abb9e, FUN_000aad34) whose
     "UDS SID" / dispatcher signatures are coincidental data bytes. Ignore anything ≥0xa2000.
 
-## Ghidra project state  (ecus/esp8/ghidra_proj, ARM:BE:32:v5t)
+## MCU / hardware platform  (identified 2026-10-05 — firmware fingerprint + TI public docs)
+Die is bare/decapped/**UNMARKED**, so this is inference (HIGH confidence): **TI TMS470-family
+ARM7TDMI** core (ARMv4T, big-endian 32), a Bosch-custom ESC derivative. Corroborated two independent
+ways — firmware fingerprint and TI datasheet/reference-guide cross-check.
+- **Core = ARM7TDMI / ARMv4T** (NOT ARM9/v5TE): pervasive BX interwork veneers (`arm_thumb_call_veneer`
+  @0xa2428 — an ARM7 lacking BLX), zero CP15/cache/MMU code. → **Ghidra language refined to
+  `ARM:BE:32:v4t`** (was `v5t`); v4t removes false v5-only BLX/CLZ decodes. Re-import to realize it
+  (existing committed decompiles were generated under v5t and are largely valid; code-region ARM/Thumb
+  decode is unaffected except the spurious BLX/CLZ).
+- **RTOS/build string** @file 0xa4d5b: `"ERCOSEK V4.1.17k TMS_470 (c)ETAS Jul 12 2006"` (ETAS OSEK, TI
+  TMS470 target port) — the decisive platform fingerprint.
+- **Reset vector @0x0 = self-loop** (`B 0x0`): the ASW is entered *by SBOOT*, not via the reset
+  vector. SBOOT is reached from ASW via monitor SVCs (`SVC #0x13–0x16/#0xFF10`, `asw_start_sboot`
+  0x8f440).
+- **Peripheral map = TI TMS470 "peripheral frames" @0xFFF7xxxx** (confirmed assignments; TI
+  TMS470R1B1M datasheet memory map + SPNU197e):
+  | base | module | our label |
+  |---|---|---|
+  | 0xFFF7E800 | **HECC1 control regs** (CANME@0x00/CANMD@0x04/CANTRS@0x08/CANTA@0x10/CANRMP@0x18/CANRML@0x1C) | `hecc_module_a` (was mislabeled `flexcan_module_a`) |
+  | 0xFFF7E400 | **HECC1 mailbox RAM** (32×16-byte mailboxes) | ctrl-sel 1 in `rx_mailbox_resolver` |
+  | 0xFFF7EA00 | **HECC2 control regs** | `hecc_module_b` (was `flexcan_module_b`) — the vehicle/diag bus |
+  | 0xFFF7E600 | **HECC2 mailbox RAM** | ctrl-sel 2; diag mailbox lives here |
+  | 0xFFF7D400/D500/D600 | ESC valve-bank drivers | `esc_valve_mmio` |
+  | 0xFFF7F0A0 | ESC pump/motor driver | — |
+  | 0xFFF7EC00 / 0xFFF7F400 | ESC valve config regs | — |
+  The CAN cell is **TI HECC** (the old `flexcan_*` symbol names were wrong — HECC uses memory-mapped
+  16-byte mailboxes + the CANTA/CANRMP/CANRML control regs our ISR polls; it is NOT Freescale FlexCAN
+  and NOT D_CAN). Clock: external **15.000 MHz crystal** (Kinseki, on teardown photo) → internal PLL.
+- **For fault injection:** no cache/MMU/branch-prediction (ARM7TDMI 3-stage pipeline) ⇒ deterministic
+  timing, glitch-friendly. Flash is TI **F035** with the TI **MSM** (Memory Security Module) readout
+  protection — the SBOOT-side gate to target. See `docs/SECURITY_ACCESS.md` avenues 3 & 5.
+- Citations: TI SPNU197e (TMS470R1x CAN/HECC Reference Guide), TMS470R1B1M datasheet (ti.com).
+
+## Ghidra project state  (ecus/esp8/ghidra_proj, ARM:BE:32:v4t — refined from v5t 2026-10-05)
 - Cleanup done via `ghidra_scripts/`: EspFix (RAM block @0x400000 + cleared data-region junk,
   removed 992 bogus fns), EspSweep (+165 ARM fns from STMFD prologues), EspThumbSweep
   (+447 Thumb fns from B5xx PUSH prologues). **~3396 functions**, clean decompiles in code region.

@@ -121,8 +121,13 @@ working — these are genuinely wrong keys, not a harness bug):
 `shift5`/single-XOR login variants, `ecu_azx`'s `seed+0x11170`. **CAUTION: the flash-SA lockout
 (`7F 27 36 exceedNumberOfAttempts`) is NVM-PERSISTENT, not volatile like the coding one** — it
 tripped after ~2 wrong keys and did not clear on power-cycle (clears on a time delay instead, which
-appeared to lengthen with repeated attempts). Test candidates sparingly, one at a time, with waits
-between — do not loop automated retries against it. Tool: `bench/fbl_sa2.py` (single back-to-back
+appeared to lengthen with repeated attempts). **STATUS (2026-10-05): a further candidate sweep
+tripped it again, and this time a power-cycle did not restore access to the FBL context at all
+(3 reconnect attempts failed outright) — the lockout may now be escalated/longer-duration than
+before. Before testing any further candidate, confirm with `bench/fbl_check.py` (seed-request
+only, never burns an attempt) that the lockout has actually cleared.** Test candidates sparingly,
+one at a time, with waits between — do not loop automated retries against it. Tool: `bench/fbl_sa2.py`
+(single back-to-back
 attempt), `bench/fbl_keytest.py` (candidate list, one per invocation via `--start`/`--n 1`),
 `bench/fbl_check.py` (lockout-state probe — seed-only, never burns an attempt).
 

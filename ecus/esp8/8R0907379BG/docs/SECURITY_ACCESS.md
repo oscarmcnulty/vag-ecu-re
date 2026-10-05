@@ -125,7 +125,14 @@ appeared to lengthen with repeated attempts). **STATUS (2026-10-05): a further c
 tripped it again, and this time a power-cycle did not restore access to the FBL context at all
 (3 reconnect attempts failed outright) — the lockout may now be escalated/longer-duration than
 before. Before testing any further candidate, confirm with `bench/fbl_check.py` (seed-request
-only, never burns an attempt) that the lockout has actually cleared.** Test candidates sparingly,
+only, never burns an attempt) that the lockout has actually cleared.**
+**(2026-10-05 follow-up, `fbl_check.py`, minimal 1-msg stimulus):** `10 89`→`50 89` but `10 85`→
+`7F 10 22 conditionsNotCorrect` — the module now refuses the ProgrammingSession *descent itself*, so
+`27 01` never reaches the FBL context (`7F 27 12 subFnNotSupported`, i.e. still in the app session).
+The escalated flash-SA lockout appears to also block the `10 85` handoff to SBOOT, not just the key
+compare. Net: FBL is unreachable right now; leave the module powered down for an extended cool-off
+(hours) and re-probe with `fbl_check.py` before any further flash-SA work.
+Test candidates sparingly,
 one at a time, with waits between — do not loop automated retries against it. Tool: `bench/fbl_sa2.py`
 (single back-to-back
 attempt), `bench/fbl_keytest.py` (candidate list, one per invocation via `--start`/`--n 1`),
@@ -186,15 +193,59 @@ closed — see below for what's still open — but every pure-software/bench-dia
    data landing at `+0x10b`) for a length/bounds bug that could give code-exec with **no SA at all**.
    That paper also notes some VAG units reset their SA lockout timer on `ECUReset`/session-toggle —
    NOT used here by deliberate choice (see repo history around 2026-10-04 for why).
-3. **Hardware SBOOT dump** — BDM/JTAG/boot-mode off the physical module. The bench cable's
-   `CNF1`/`BOOT1`/`BOOT2` leads are exactly what commercial boot-mode tools (bFlash, Autotuner, SM2
-   Pro's own TriCore boot support) use. Blocked so far only by not having identified the die/MCU
-   (bare-die hybrid, decapped, unmarked — see `docs/` images from 2026-10-04) and not having
-   established which pins are CNF1/BOOT1/BOOT2 on *this* harness.
+3. **Hardware SBOOT dump via JTAG — MCU identified (2026-10-05, web research).** The MCU is almost
+   certainly a **TI TMS470R1x** (big-endian ARM7TDMI+Thumb core, ARMv5T in Ghidra's classification):
+   our own independently-discovered CAN controller addresses `0xfff7e800`/`0xfff7ea00`
+   (`flexcan_module_a`/`b`) are an **exact match** to TI's documented HECC1/HECC2 base addresses for
+   this family. `TMS470R1B1M` (1MB flash, dual HECC 32-mailbox, 144-pin LQFP, ARM7TDMI, 1.8V) is the
+   closest part-number match found so far. Explains the "unmarked bare die" in the teardown photos —
+   TMS470 is supplied to Tier-1s as bare wafer die for chip-on-board hybrid assembly; it was never
+   packaged, so there were never markings to lose. Commercial tools exist for exactly this chip
+   family (CarProTool's "TMS470 Programmer", JTAG via test points on the PCB, supports several
+   TMS470R1Vxxx/R1Axxx part numbers) — confirming this is a known, reachable target in the field,
+   not a dead end.
+
+   **Security mechanism (TI "Memory Security Module" / MSM, reference guide SPNU243):**
+   - A 128-bit password per protected zone (up to 2 zones), stored in flash/ROM at a part-specific
+     fixed address (in the device-specific datasheet, not yet pinned to our exact part). Unlock
+     ("password match flow", PMF) = read the 4 password words, write them back to the `MSMKEY0-3`
+     registers.
+   - **If the password is all-1s (erased-flash default), the device auto-unsecures** — simply reading
+     it brings the device out of secure mode, no actual secret needed.
+   - Even while secured, **JTAG can still halt the CPU, and load+run code in any *unprotected* RAM
+     or flash bank** — the MSM only blocks direct JTAG *reads* of the protected zone's content, not
+     CPU execution generally. Per TI's own security-scenario table: code *executing from inside* the
+     secured region (which is exactly what SBOOT does on every normal boot) has full read access to
+     its own secured memory — only a *direct JTAG peek* of that memory is blocked. So even a
+     correctly-secured chip is plausibly still crackable by loading a small RAM stub via JTAG that
+     redirects execution into the secured region (or hooks it) and exfiltrates bytes via a
+     JTAG-visible RAM buffer or CAN — the same idea as the diagnostic code-exec technique below, just
+     entered through JTAG/CPU-halt instead of a diagnostic-protocol bug. **Security Mode 2** (a
+     *separate*, harsher setting — a 64-bit "JSM" key that permanently disables JTAG access to the
+     CPU entirely, no RAM-stub workaround possible) is the one real dead end; whether Bosch enabled
+     Mode 1 only (likely, for factory test/rework) or Mode 2 is unknown until a probe is attempted.
+   - **HAZARD, read before any JTAG attempt or any flash write near the password's bank:** per TI,
+     if the 128-bit password reads as **all-0s**, the device becomes **permanently and irrecoverably
+     locked** on the next reset (TI's own words: "the device will be permanently locked and can no
+     longer be debugged or reprogrammed"). This is in fact TI's *documented, intentional* method for
+     an OEM to permanently seal a production part before shipping — so there is a real chance Bosch
+     did exactly this, in which case JTAG recovery of the secured zone is not possible via password
+     and the RAM-stub/code-redirect approach above would be the only remaining avenue. This also
+     means: **never write to the flash bank containing the MSM password with anything other than all-1s
+     or a deliberate legitimate password** — doing so and then letting the device reset could brick it.
+   - Next concrete step: identify the exact TMS470R1x part number (package pin count / flash size vs.
+     our ~1.26 MB ASW+CAL image should narrow it) to get its datasheet's MSM password address and
+     memory-bank-to-MSM-zone assignment, and locate JTAG (TCK/TMS/TDI/TDO/`nTRST`/`nRESET`, standard
+     ARM 20-pin or 10-pin layout) bond-pads/test-points on the bare die/substrate — CarProTool's
+     published per-part pinout PDFs (e.g. `tms470r1vf689.pdf`) are a reference starting point even
+     though they're for packaged parts, not this bare-die assembly.
 4. Un-mined idea sources: other fully-reversed VAG modules (UnlockECU project — our `VolkswagenSA2`
    implementation matches it exactly, confirming correctness, not the fix), VAG KWP2000 forum
-   threads (nefmoto "Bosch ABS Boot Mode" — not yet successfully fetched, worth another attempt via
-   browser rather than WebFetch, which 403s on that forum).
+   threads (nefmoto "Bosch ABS Boot Mode" — still not successfully fetched, 403s via WebFetch on
+   that forum; worth a browser-based attempt), TI TMS470 community/forum threads on CAN-reflash
+   secondary-bootloader technique (`e2e.ti.com` thread "tms470mf06607-tms470-bootloader" — also
+   403'd via WebFetch, same as nefmoto; the snippet we did get described a CAN-reflash bootloader
+   loaded to RAM at `0x207800`, 2KB, and community dump tools "JCommander"/"savebin" over JTAG).
 
 ## Bench tools (current, in `bench/`)
 

@@ -88,9 +88,13 @@ different constant), each setting a different bit of `sec_access_state` (`0x4079
 | `+0xefc2` | `0x00000400` | |
 | `+0xfe10` | `0x04000000` | |
 
-Wrong key → `7F 27 35 invalidKey`, resets state, decrements `sa_lockout_counter` (`0x405e12`,
-3-try, **volatile — resets on power-cycle**). Confirmed live: `27 03`→seed, `27 04 <seed+0x2909>`→
-`67 04` **UNLOCKED**. This opens session `10 86` (confirmed `50 86`) and `21 ReadDataByLocalId`
+Wrong key → `7F 27 35 invalidKey`; the level-3 handler (`FUN_00084cd4`) resets `sa_level3_state`
+(`0x408f26`) to 0. (RE correction 2026-10-05: the handler does NOT itself touch `sa_lockout_counter`
+`0x405e12` — that volatile 3-try counter is decrement-only, written only by `kwp_security_access_sm`
+`0x8b850` on the programming/`0x85` path and counted back up over time by the delay timer
+`FUN_0009a900` `0x9a900`; it still **resets on power-cycle** via .data/.bss init. Earlier text here
+conflated the level-3 state reset with the `0x405e12` countdown.) Confirmed live: `27 03`→seed,
+`27 04 <seed+0x2909>`→ `67 04` **UNLOCKED**. This opens session `10 86` (confirmed `50 86`) and `21 ReadDataByLocalId`
 measurement blocks (ids `01,02,03,0f,10`) — but **not** `23`/`35`/`2C` (tested; see below).
 
 Tool: `bench/esp_unlock.py`.
@@ -239,7 +243,47 @@ closed — see below for what's still open — but every pure-software/bench-dia
      ARM 20-pin or 10-pin layout) bond-pads/test-points on the bare die/substrate — CarProTool's
      published per-part pinout PDFs (e.g. `tms470r1vf689.pdf`) are a reference starting point even
      though they're for packaged parts, not this bare-die assembly.
-4. Un-mined idea sources: other fully-reversed VAG modules (UnlockECU project — our `VolkswagenSA2`
+   **Firmware-fingerprint corroboration (2026-10-05, independent of the web research above):** a
+   full-corpus decompile pass confirms the TI TMS470 ARM7TDMI identification from the binary itself —
+   (a) build string `"ERCOSEK V4.1.17k TMS_470 (c)ETAS Jul 12 2006"` @file 0xa4d5b (ETAS OSEK, TI
+   TMS470 port); (b) CAN register semantics are TI **HECC** (16-byte mailboxes, `CANTA@+0x10 /
+   CANRMP@+0x18 / CANRML@+0x1C` bit-per-object) at `0xFFF7E400/E600`, NOT FlexCAN (the old
+   `flexcan_*` symbol names are mislabeled) and NOT D_CAN; (c) core is **ARM7TDMI/ARMv4T** — pervasive
+   BX interwork veneers (no BLX) and zero CP15/cache/MMU code (an ARM9 would show CP15). The reset
+   vector @0x0 is a self-loop, so the ASW is entered *by* SBOOT. See `variant.conf` for the full
+   evidence list. The no-cache/no-MMU/3-stage-pipeline ARM7TDMI is the key fact for avenue 5 below.
+
+5. **Fault injection (voltage/clock glitching) — primary hardware avenue if JTAG pads are
+   potting-blocked (2026-10-05).** Because chip-off and likely JTAG-pad access are blocked by the
+   potted bare-die hybrid, glitching is the live FI path. The ARM7TDMI core is unusually favorable:
+   **no cache, no MMU, no branch prediction, 3-stage pipeline → deterministic instruction timing and
+   repeatable fault windows**, far easier than a Cortex-R/TriCore. Targets, in SBOOT (reached via
+   monitor `SVC #0x13–0x16/#0xFF10`, `asw_start_sboot` 0x8f440): (a) the flash readout-protection /
+   TI-MSM check at boot — glitch it to drop to an unsecured state and dump flash (incl. SBOOT + the
+   flash-SA key algo + the RSA/validation logic); (b) the SBOOT `27 02` key-compare branch — glitch
+   the compare to force a valid-key verdict without the secret. Prereqs/unknowns to work out:
+   where the glitch is injected (core Vdd vs. flash-pump rail; clock is internal-PLL on TMS470, so
+   voltage glitching is likelier than clock), a reset+trigger harness (the `10 85` descent or power-on
+   is the trigger), and whether the persistent flash-SA lockout also throttles glitch attempts. This
+   is well-trodden ground for ARM7/TMS470-class parts. NOTE: fault injection has NOT been attempted
+   yet — it's a planned avenue, pending a glitch rig and board-level access to the core/flash rails.
+
+6. **Lockout-reset levers in the ASW — investigated, NONE exist (2026-10-05, RE-proven).** Checked
+   whether a session-toggle or ECUReset (the Garcia et al. trick) or any diagnostic routine can reset
+   the flash-SA lockout. Result: **no.** (i) There is **no SID 0x11 (ECUReset)** in either KWP service
+   table — the ASW implements no reset service. (ii) The SID 0x10 (StartDiagnosticSession) handler
+   (`FUN_00093858`) clears ~20 session cells but touches **none** of the security cells (`0x405e12`,
+   `0x4079e4`, `0x408843`, `0x408500`, `0x40bffc`) — a session change does not reset lockout state.
+   (iii) `kwp_security_access_sm` (`0x8b850`) only *decrements* `0x405e12` (never writes it up) and
+   *clears* grant bits on session `0x86`. (iv) There is **no NvM/EEPROM manager and no RoutineControl
+   (`0x31`) / WriteData (`0x3b`/`0x2e`) path that writes any security counter** — app-session `0x31`
+   is a 2-byte no-op stub, prog-session `0x31` (`FUN_00098f84`) is a volatile actuator test. So the
+   persistent flash-SA counter is entirely **SBOOT/NVM-side and unreachable from this image**; the
+   only non-hardware lever is to wait out its time-delay (confirm with `fbl_check.py`). Residual
+   caveat: a few table-A handlers live in the `>0xa2000` seg2 that doesn't disassemble cleanly, but no
+   NVM/SPI driver exists anywhere in the image for such a handler to call.
+
+7. Un-mined idea sources: other fully-reversed VAG modules (UnlockECU project — our `VolkswagenSA2`
    implementation matches it exactly, confirming correctness, not the fix), VAG KWP2000 forum
    threads (nefmoto "Bosch ABS Boot Mode" — still not successfully fetched, 403s via WebFetch on
    that forum; worth a browser-based attempt), TI TMS470 community/forum threads on CAN-reflash

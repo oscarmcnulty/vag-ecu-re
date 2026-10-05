@@ -285,11 +285,59 @@ closed — see below for what's still open — but every pure-software/bench-dia
 
 7. Un-mined idea sources: other fully-reversed VAG modules (UnlockECU project — our `VolkswagenSA2`
    implementation matches it exactly, confirming correctness, not the fix), VAG KWP2000 forum
-   threads (nefmoto "Bosch ABS Boot Mode" — still not successfully fetched, 403s via WebFetch on
-   that forum; worth a browser-based attempt), TI TMS470 community/forum threads on CAN-reflash
+   threads (nefmoto "Bosch ABS Boot Mode" — **now fetched via browser 2026-10-04, see avenue 8
+   below**; it ends inconclusively, the RaceABS→SecAcc.dll lead chased in avenue 8), TI TMS470
+   community/forum threads on CAN-reflash
    secondary-bootloader technique (`e2e.ti.com` thread "tms470mf06607-tms470-bootloader" — also
    403'd via WebFetch, same as nefmoto; the snippet we did get described a CAN-reflash bootloader
    loaded to RAM at `0x207800`, 2KB, and community dump tools "JCommander"/"savebin" over JTAG).
+
+8. **RaceABS tool software-RE — DONE 2026-10-04, clean negative + architecture recovered.** Chased
+   the nefmoto "Bosch ABS Boot Mode" lead: Bosch's own RaceABS Motorsport tool implements this
+   ECU's KWP2000 SecurityAccess, historically delegating the seed→key crypto to an external
+   `SecAcc.dll` (community confirmed `SecAcc.dll` never shipped). Full procedure + provenance below;
+   all RE artifacts kept in scratch, **not** committed (same rule as firmware).
+   - **Source (better than the dead forum links):** both forum URLs are dead (the `.jp` 404s, the
+     `.de` one redirects to a `bosch-motorsport.com` 404; Internet Archive has no capture of
+     either). Bosch's **current** site still ships it: `RaceABS` product page →
+     `bosch-motorsport.com/.../raceabs-software-tool/` → `raceabs_software_tool_3-5-5-3_70613771.zip`
+     (**v3.5.5.3**, 32.5 MB, first-party; sha256 `86b7c4f5…64d4e97`). Outer zip = one `RaceAbs.exe`
+     Inno-Setup-6.4.3 installer; enumerated with `innounp-2` v2.67.11 (needed — `innoextract` 1.9/1.10-dev
+     can't parse Inno 6.4).
+   - **`SecAcc.dll` is NOT bundled** (confirmed by full manifest; extends the 2023 community finding
+     to the newest build). No file named `*SecAcc*` anywhere in the installer.
+   - **Architecture recovered (this is the new detail):** the seed→key crypto is a **runtime-bound
+     native delegate**, not a shipped algorithm. In `RaceAbsLogic.dll` (managed .NET):
+     `RaceAbsLogic.Kwp.KwpFacade` (KWP2000 path, the relevant one for this ESP8-class/"RACEAb8II"
+     module; a parallel `RaceAbsLogic.Uds.UdsFacade` serves the newer M5/"RACEAb9II" UDS units)
+     holds a field `UnmanagedLibrary` + a delegate `dllFunc` with signature
+     **`int Invoke(int algoNumber, byte[] dataBuffer, int dataBufferSize)`** (seed in / key out,
+     in-place). It is bound at runtime via `LoadLibrary`+`GetProcAddress`+`GetDelegateForFunctionPointer`.
+     The `algoNumber` selector **confirms the algorithm is chosen per variant/device** (Changelog
+     `BMISW-12462 "Seed & Key implementation"` + "switching between non-seed-and-key and
+     seed-and-key enabled devices" — i.e. only some ABS variants use SA at all).
+   - **Why the algorithm still isn't obtainable from this download:** (a) the DLL that exports that
+     `(int,byte[],int)` function is **not in the installer** — none of the bundled native DLLs
+     provides it: `CPAL.dll` = Vector-style protocol transport only (exports `_Kwp2kApi_SecurityAccess@24`
+     + CHAL/CCP, plus the `invalidKey`/`securityAccessDenied` strings — it *sends* 27, doesn't compute
+     the key); `BoschACXHelper.dll`/`PTwinSimWrapper.dll` = Bosch **license** checks + encrypted-file
+     helpers (`CheckBoschLicense*`, `GetIntermediateKey`); `PCANBasic.dll` = Peak CAN driver;
+     managed `Crypt.dll` = the tool's own file/parameter encryption (RSA/MD5/`EncryptFile`), not ECU
+     SA. (b) The managed glue that would reveal the DLL name/`algoNumber`/marshaling is **protected
+     by a method-body-encryption obfuscator** — `KwpFacade::SecurityEcuAccess` / `DoSecurityEcuAccessTask`
+     etc. are genuine IL stubs (`nop;nop;…;ret`, verified via dnlib), real bodies restored only at JIT;
+     strings and namespaces are encrypted. It is **not** ConfuserEx (no ConfuserEx attribute), so the
+     forum's 2022 "ConfuserEx-Unpacker" recipe no longer applies (matches the 2024 poster's "doesn't
+     work with the current one"). The LoadLibrary DLL-name argument is an encrypted literal.
+   - **Note on jglim/SecurityAccessQuery:** moot — its `GenerateKeyEx` convention differs from this
+     tool's `(int algoNumber, byte[] buffer, int size)`, and there's no DLL to feed it anyway.
+   - **Residual sub-avenue (bigger effort, not done):** dynamic unpack — run RaceABS under a JIT/IL
+     dumper (MegaDumper/ExtremeDumper/managed unpacker) to recover the decrypted `SecurityEcuAccess`
+     body and the crypto-DLL name; still blocked afterward unless that DLL is independently sourced.
+     Also uncertain whether the **Motorsport** tool's seed&key (for "seed-and-key enabled" race ABS)
+     even matches our **production** ESP8 flash-SA — may be a different per-variant `algoNumber`.
+     Net: this specific RaceABS→SecAcc.dll avenue is **exhausted for static RE**; don't revisit without
+     either the external crypto DLL or a dynamic-unpack pass.
 
 ## Bench tools (current, in `bench/`)
 

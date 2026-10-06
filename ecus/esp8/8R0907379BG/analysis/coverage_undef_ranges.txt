@@ -1,0 +1,31 @@
+CODE region 0x0-0xa2800 = 665600 bytes
+  instructions: 573714 bytes (86.2%), 209516 insns
+  defined data: 48185 bytes (7.2%), 12155 items
+  UNDEFINED:    43701 bytes (6.6%)  <- potential missed code/data
+  functions: 3311, function-body bytes: 573683 (86.2%)
+  0x00093c +0x20    PTRTAB (arm%=0 ram%=37)
+  0x00609c +0x54    CODE? (arm%=38 ram%=0)
+  0x01a3c4 +0x53e   CODE? (arm%=89 ram%=0)
+  0x02404c +0x14a   CODE? (arm%=73 ram%=0)
+  0x024354 +0xd8    CODE? (arm%=74 ram%=0)
+  0x03f364 +0x60    CODE? (arm%=100 ram%=0)
+  0x066c28 +0x3b8   CODE? (arm%=79 ram%=0)
+  0x069c20 +0x3a0   CODE? (arm%=96 ram%=0)
+  0x074b08 +0x478   CODE? (arm%=58 ram%=0)
+  0x0850c0 +0x1ec   CODE? (arm%=77 ram%=0)
+  0x086978 +0x13e   CODE? (arm%=27 ram%=0)
+  0x08e00c +0x66    CODE? (arm%=32 ram%=0)
+  0x08e568 +0x168   CODE? (arm%=65 ram%=2)
+  0x08f464 +0x58    CODE? (arm%=95 ram%=0)
+  0x092328 +0x28    CODE? (arm%=90 ram%=10)
+  0x093bdc +0x2c    CODE? (arm%=81 ram%=0)
+  0x094ce0 +0x24    CODE? (arm%=100 ram%=0)
+  0x09532c +0x54    CODE? (arm%=85 ram%=0)
+  0x09539c +0xa0    CODE? (arm%=70 ram%=0)
+  0x099060 +0xdc    CODE? (arm%=92 ram%=0)
+  0x099b3c +0xa0    CODE? (arm%=35 ram%=0)
+  0x09b23c +0x70    CODE? (arm%=89 ram%=0)
+  0x0a13c8 +0x20    PTRTAB (arm%=0 ram%=37)
+  0x0a26a0 +0x20    CODE? (arm%=37 ram%=12)
+  0x0a27a0 +0x28    CODE? (arm%=60 ram%=0)
+undef ranges>=8B: 474; code-like ~7818 bytes, data-like ~33207 bytes

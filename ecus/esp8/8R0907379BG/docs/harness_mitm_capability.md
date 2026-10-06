@@ -53,3 +53,39 @@ option.)
 
 Refs: commaai/panda `board/can.h`, `board/drivers/harness.h`, `board/boards/cuatro.h`;
 commaai/opendbc `opendbc/car/volkswagen/values.py` (CanBus), `mlbcan.py`.
+
+## Addendum — exact citations + second-panda integration (verified)
+
+### Exact source for "1 relay + 3 transceivers" (commaai/panda)
+- Bus count: `board/can.h:3` → `#define PANDA_CAN_CNT 3U` (buses 0/1/2).
+- Transceiver enables: `board/boards/cuatro.h:9` `cuatro_enable_can_transceiver()` has cases 1U-4U;
+  the 4th is the CAN2↔OBD mux (`tres_set_can_mode`, `CAN_MODE_OBD_CAN2`), not a 4th simultaneous bus.
+- One relay: `board/drivers/drivers.h:122` `struct harness_t { … bool relay_driven; … }` (single flag);
+  `board/drivers/harness.h:8` `set_intercept_relay()` drives one SBU relay; `board/boards/cuatro.h:106-107`
+  has exactly one `pin_relay_SBU1/SBU2` pair (same shape in `red.h`, `tres.h`).
+
+### Stock openpilot drives exactly ONE panda, over SPI (commaai/openpilot)
+- `selfdrive/pandad/panda.cc:16` → `handle = std::make_unique<PandaSpiHandle>(serial)` (SPI only; no USB
+  handle in the runtime path). `Panda::list()` = `PandaSpiHandle::list()` (panda.cc:35-37).
+- `selfdrive/pandad/pandad.py:94-97` → `panda_serials = Panda.list(); assert len(panda_serials) == 1`.
+- ⇒ The C3X's integrated panda is on SPI; a second (USB) panda is NOT enumerated or driven by stock
+  openpilot. Using one requires either patching pandad/boardd (re-add a USB handle + multi-panda), or
+  running the second panda INDEPENDENTLY of openpilot.
+
+### Recommended second-panda architecture for the EPB rewrite
+Use the spare panda as a **standalone in-line CAN bridge/firewall on the powertrain CAN**, not as a
+second openpilot panda:
+- Splice the powertrain CAN in series: EPB-ECU-side → bridge CAN-A, ESP-side → bridge CAN-B. Custom
+  firmware forwards every frame A↔B and rewrites EPB_01 toward the ESP (fix CHK seed 0x05, keep BZ).
+- The panda's one SBU relay is actually useful here as a **fail-safe**: wire the two bus halves through
+  it so that if the bridge loses power/crashes, the relay de-energizes and reconnects the bus → stock
+  EPB behavior restored. (This is the same fail-safe comma uses on the camera bus.)
+- Command path (what decel to request): cleanest is openpilot transmitting a custom frame on a CAN bus
+  the bridge also listens to — avoids any USB link to the C3X. (A USB link would need the C3X to expose
+  a spare host port AND custom host software; the CAN command path sidesteps both.)
+- SAFETY: an in-line node on the ABS/ESP/airbag powertrain CAN is high-stakes — added latency or a
+  dropped frame affects safety-critical traffic. The relay covers total failure, not partial
+  misbehavior. Bench-validate extensively before any on-car use.
+
+Refs: commaai/panda `board/can.h`, `board/drivers/harness.h`, `board/drivers/drivers.h`,
+`board/boards/cuatro.h`; commaai/openpilot `selfdrive/pandad/panda.cc`, `selfdrive/pandad/pandad.py`.

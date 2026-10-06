@@ -35,13 +35,17 @@ run 03_analyze   "$PROJ" "$NAME" -process "$PROG"
 run 04_fix       "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" -postScript EspFix.java
 say 04_fix 'removed'
 # 04b: bring the SECOND code region (above CODE_HI) into the project. This region
-# (~file 0xbb045-0x106000, mixed ARM+Thumb, interleaved with the COM config tables) was excluded
+# (~file 0xbb045-0x10a000, mixed ARM+Thumb, interleaved with the COM config tables) was excluded
 # as DATA; its ARM sub-blocks load at VMA = file_offset + 3 (proven by seg1/config->seg2 refs, e.g.
 # 0x67ed0->0xbc5f8, 0xa7b24->0x10002c). EspSeg2 splits the DATA block at SEG2_START, moves the upper
-# part +3 so ARM decodes 4-aligned, and creates a function at every ARM prologue. It must run AFTER
-# 04_fix (which clears code units in 0xa2000-0x110000). See docs/second_code_segment.md.
+# part +3 so ARM decodes 4-aligned, and creates functions at ARM prologues, Thumb prologues, and
+# ARM/Thumb interwork veneers. If SEG2_CODE_END is set, the region above that file offset becomes
+# non-executable SEG2_DATA (config tables with zero code prologues — prevents phantom functions).
+# Must run AFTER 04_fix (which clears code units in 0xa2000-0x110000). See docs/second_code_segment.md.
+SEG2_ARGS="${SEG2_START:-0xbb045}"
+[ -n "${SEG2_CODE_END:-}" ] && SEG2_ARGS="$SEG2_ARGS $SEG2_CODE_END"
 run 04b_seg2     "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
-                 -postScript EspSeg2.java "${SEG2_START:-0xbb045}"
+                 -postScript EspSeg2.java $SEG2_ARGS
 say 04b_seg2 '^EspSeg2'
 # 04c: re-analyze so references from the newly-disassembled seg2 code resolve (xrefs to the COM
 # signal buffers -> the CAN-frame trace becomes a normal static xref walk).

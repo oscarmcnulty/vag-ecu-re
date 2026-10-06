@@ -24,6 +24,12 @@ import java.util.*;
 
 public class EspServiceTables extends GhidraScript {
     long IMG_HI = 0x134010L, DESC_LO = 0xb0000L, DESC_HI = 0xbf000L;
+    // CODE_HI: the main code region ends here; the 0xa2000..0xbb045 band is calibration/DATA. A
+    // record's handlerPtr that lands >= CODE_HI is NOT a code entry but a pointer to the service's
+    // cal descriptor (the service is dispatched by the generic data-driven engine via descriptorPtr).
+    // Creating a function there mis-decodes calibration bytes into garbage (see docs/KWP_SERVICES.md
+    // "handlerPtr is dual-natured"). Only carve functions for NATIVE handlers (handlerPtr < CODE_HI).
+    long CODE_HI = 0xa2000L;
     Memory mem; AddressSpace sp; Listing lst; Register tmode;
 
     boolean isCodePtr(long v){ long b=v&~1L; return b>=0x1000L && b<IMG_HI; }
@@ -87,24 +93,34 @@ public class EspServiceTables extends GhidraScript {
         println("EspServiceTables: found "+tables.size()+" dispatch table(s) in ["
                 +Long.toHexString(scanLo)+","+Long.toHexString(scanHi)+")");
 
-        // --- collect distinct handler pointers ---
+        // --- collect distinct handler pointers AND descriptor pointers ---
         LinkedHashMap<Long,Integer> handlers=new LinkedHashMap<>();   // ptr(with bit0) -> SID
+        LinkedHashMap<Long,Integer> descriptors=new LinkedHashMap<>(); // descriptorPtr -> SID
         for (long[] t: tables){
             long base=t[0]; int cnt=(int)t[1];
             StringBuilder sb=new StringBuilder();
             for (int k=0;k<cnt;k++){
-                long o=base+12L*k; int sid=u8(o); long pa=u32(o+4);
+                long o=base+12L*k; int sid=u8(o); long pa=u32(o+4); long dp=u32(o+8);
                 if (!handlers.containsKey(pa)) handlers.put(pa,sid);
+                if (!descriptors.containsKey(dp)) descriptors.put(dp,sid);
                 sb.append(String.format("%02x ",sid));
             }
             println(String.format("  table @0x%06x  %d recs  SIDs: %s", base, cnt, sb.toString().trim()));
         }
 
         // --- create a function at each handler entry (correct ISA, conflicts cleared) ---
-        int madeNew=0, haveEntry=0, skipContained=0, refixed=0, failed=0;
+        int madeNew=0, haveEntry=0, skipContained=0, refixed=0, failed=0, dataSkipped=0;
         for (Map.Entry<Long,Integer> e: handlers.entrySet()){
             long pa=e.getKey(); int sid=e.getValue();
             boolean thumb=(pa&1)!=0;
+            // DATA/cal handlerPtr (>= CODE_HI): not a function. Label it and move on so we never
+            // mis-decode calibration bytes into a phantom Thumb handler.
+            if ((pa&~1L) >= CODE_HI){
+                try { createLabel(sp.getAddress(pa&~1L),
+                        "kwp_sid"+Integer.toHexString(sid)+"_cal_"+Long.toHexString(pa&~1L),
+                        true, SourceType.ANALYSIS); } catch(Exception ex){}
+                dataSkipped++; continue;
+            }
             Address t=sp.getAddress(prologueStart(pa, thumb));
             if (getFunctionAt(t)!=null){ haveEntry++; continue; }
             Function cont=getFunctionContaining(t);
@@ -128,6 +144,32 @@ public class EspServiceTables extends GhidraScript {
             } else failed++;
         }
         println("EspServiceTables: handlers="+handlers.size()+" created="+madeNew+" already_entry="+haveEntry
-                +" alt_entry_skipped="+skipContained+" wrongISA_refixed="+refixed+" failed="+failed);
+                +" alt_entry_skipped="+skipContained+" wrongISA_refixed="+refixed+" failed="+failed
+                +" data_cal_skipped="+dataSkipped);
+
+        // --- create functions at descriptorPtr entries (SEG2 per-service validation stubs) ---
+        int descNew=0, descExist=0, descContained=0, descFailed=0;
+        for (Map.Entry<Long,Integer> e: descriptors.entrySet()){
+            long dp=e.getKey(); int sid=e.getValue();
+            boolean thumb=(dp&1)!=0;
+            long site=dp&~1L;
+            if (site<DESC_LO || site>=DESC_HI) continue;
+            Address t=sp.getAddress(site);
+            if (getFunctionAt(t)!=null){ descExist++; continue; }
+            Function cont=getFunctionContaining(t);
+            if (cont!=null){ descContained++; continue; }
+            CodeUnit cu=lst.getCodeUnitContaining(t);
+            if (cu!=null) clearListing(cu.getMinAddress(), cu.getMaxAddress());
+            setTMode(t, thumb);
+            new ArmDisassembleCommand(t, null, thumb).applyTo(currentProgram, monitor);
+            boolean ok=(getFunctionAt(t)!=null) || new CreateFunctionCmd(t).applyTo(currentProgram, monitor);
+            if (ok && getFunctionAt(t)!=null){
+                descNew++;
+                try { getFunctionAt(t).setComment("KWP service descriptor stub (SID 0x"+Integer.toHexString(sid)
+                        +"); recovered from dispatch table descriptorPtr by EspServiceTables"); } catch(Exception ex){}
+            } else descFailed++;
+        }
+        println("EspServiceTables: descriptors="+descriptors.size()+" desc_created="+descNew
+                +" desc_exist="+descExist+" desc_contained="+descContained+" desc_failed="+descFailed);
     }
 }

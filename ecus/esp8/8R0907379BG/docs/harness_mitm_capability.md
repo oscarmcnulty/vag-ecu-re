@@ -89,3 +89,28 @@ second openpilot panda:
 
 Refs: commaai/panda `board/can.h`, `board/drivers/harness.h`, `board/drivers/drivers.h`,
 `board/boards/cuatro.h`; commaai/openpilot `selfdrive/pandad/panda.cc`, `selfdrive/pandad/pandad.py`.
+
+## CONFIRMED by comma's own harness docs (commaai/hardware) — 1 relay, 1 intercept bus
+Checked against the VW J533 harness schematic + build guide (resolves "is two-bus MITM possible?"):
+- `harness/README.md`: "An integrated relay ensures that you can remove the c3x... Internally, the
+  camera's can bus is separated from the rest of the car." → ONE relay, and it separates exactly the
+  camera/ADAS bus.
+- `harness/BUILD_HARNESS.md`: "CAN2 and CAN0 are physically connected when the relay in the harness
+  box is closed. [When] the relay [opens], control messages from the camera on CAN2 are blocked and
+  messages from openpilot are sent on CAN0." → the single relay splits ONE bus: **CAN2 = camera side,
+  CAN0 = car/gateway side**. That is the only interceptable (MITM) bus.
+- `harness/BUILD_HARNESS.md`: "an additional CAN bus... called CAN1... **We cannot intercept this CAN
+  bus**, but we can read and write messages... Typically connected to the radar. The harness box has
+  two connections for CAN1, the wires are passed through." → **CAN1 is tap-only** (passive
+  pass-through, no relay), confirming it cannot be MITM'd.
+- The relay lives in the **harness box** (the adapter between car-harness and the C3X), driven by the
+  panda's single SBU control; the panda provides the 3 transceivers (CAN0/1/2, `PANDA_CAN_CNT=3`).
+
+So the J533 harness does physically connect to TWO gateway buses (the camera bus + CAN1/radar), which
+can look like "two-bus MITM" on the wiring diagram — but only the camera bus (CAN0/CAN2) is
+relay-split/interceptable; CAN1 is read/write tap-only. Net count: **3 CAN transceivers (panda) + 1
+relay (harness box) = exactly one MITM-capable bus.** The EPB/powertrain bus is neither the camera bus
+nor interceptable via CAN1, so an EPB_01 rewrite still needs a separate in-line interposer (second
+relay + its own two transceiver halves) as described above.
+
+Refs: commaai/hardware `harness/README.md`, `harness/BUILD_HARNESS.md`, `harness/v3/VW_J533_Harness.pdf`.

@@ -1,5 +1,12 @@
 # EPS HCA "not available" fault/init state machine (8R0909144F) — from firmware
 
+> **Superseded in part (2026-10-07) — see `analysis/symbols_merged.csv`, which is now authoritative.**
+> The `hca_*` supervision names used below were wrong: bit 0x100 / tests 0x46,0x53 are **ESP_01** (XOR seed 0xAB),
+> the HCA_01 fault is bit **0x8000** (tests 0x20 crc/counter, 0x49 timeout -> DTC 0x303140); `hca_rx_superv_struct`
+> is the generic comm-DTC enable-condition manager (`dtc_enable_cond_mgr`); `boot_tick_counter` is a supply-sense
+> level (`supply_sense_value`), not a timer, so the "boot-clock race" reading below is wrong. HCA_01 recovery is gated
+> by `hca01_timeout_debounce`: 500 ms of uninterrupted on-time frames, restarted by any gap > ~25 ms.
+
 Problem: car has no stock lane-assist, so HCA_01 isn't sent until openpilot starts. On HCA start the
 EPS reports "not available" and refuses to steer; after seconds-to-minutes it clears. Below: why, and
 how to force a few-second clear. State object: `eps_assist_status` @0xfffed784.

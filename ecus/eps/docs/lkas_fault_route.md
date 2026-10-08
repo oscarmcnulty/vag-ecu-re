@@ -1,5 +1,12 @@
 # LKAS "Restart the car" fault — route 35258b7bb90057ff/00000005--af6565b8cb
 
+> **Superseded in part (2026-10-07) — see `analysis/symbols_merged.csv`, which is now authoritative.**
+> The `hca_*` supervision names used below were wrong: bit 0x100 / tests 0x46,0x53 are **ESP_01** (XOR seed 0xAB),
+> the HCA_01 fault is bit **0x8000** (tests 0x20 crc/counter, 0x49 timeout -> DTC 0x303140); `hca_rx_superv_struct`
+> is the generic comm-DTC enable-condition manager (`dtc_enable_cond_mgr`); `boot_tick_counter` is a supply-sense
+> level (`supply_sense_value`), not a timer, so the "boot-clock race" reading below is wrong. HCA_01 recovery is gated
+> by `hca01_timeout_debounce`: 500 ms of uninterrupted on-time frames, restarted by any gap > ~25 ms.
+
 ## What happened (from the rlogs)
 - t=0.0s: EPS reports `EPS_HCA_Status = READY (3)`.
 - t=1.0s: EPS -> `FAULT (2)` **on its own**, BEFORE openpilot sends any HCA (first HCA_01 tx @8.95s).

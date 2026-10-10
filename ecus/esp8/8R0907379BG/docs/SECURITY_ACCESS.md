@@ -112,130 +112,90 @@ measurement blocks (ids `01,02,03,0f,10`) — but **not** `23`/`35`/`2C` (tested
 
 Tool: `bench/esp_unlock.py`.
 
-### 2. Flash/FBL SA — level 1 — **SBOOT-side, open problem**
+### 2. Flash SA — level 1 — **SOLVED: it is the SGO SA2** (ground-truth from an ODIS flash, 2026-10-10)
 
-Reached only post-`10 85` descent + TP2.0 reconnect (the channel drops when the module hands off
-toward the boot loader). In that context `27 01` gives a real changing seed (high byte always
-`0xFD/FE/FF` — a timer-idiom seed-gen signature). `27 02` is **state-gated**: sent with any
-intervening frame it's `subFnNotSupported`; sent **immediately** after `27 01` with no frame in
-between, it does a real compare (`invalidKey` on wrong keys — proven, see below).
+The flash-level SecurityAccess is the **SA2 bytecode shipped in the SGO**, big-endian seed →
+big-endian key. Proven by decoding a real ODIS flash session of *this* module
+(`captures/20a2-0001-20261010-153902.pcap`, usbmon → TP2.0/KWP2000; decode pipeline in the
+`esp8-odis-flash-capture` memory note):
 
-**Proven NOT in the ASW image** (RE, cross-checked two ways): the post-descent context answers a
-*different* `27` subfunction-support set than either KWP table (table A has no `0x27` entry beyond
-the precondition stub at level distinct from this; table B has no `0x27` at all) — a single image
-can't present an inverted support set for the same transport buffer, so a **separate dispatcher**
-(SBOOT) is answering. Confirmed independently: `asw_start_sboot` (`0x8f440`) shows the ASW is
-launched *by* SBOOT via monitor SVCs (`#0x13-0x16`, `#0xff10`), and SBOOT is architecturally
-resident/separate (standard for this MCU family).
+```
+10 85                     -> 50 85 14           StartDiagnosticSession (ProgrammingSession)
+[TP2.0 channel reconnect to logical addr 0x03, same IDs TX 0x4a3 / RX 0x300]
+27 01                     -> 67 01 fe a6 d6 ca  seed
+27 02 bd ad 65 f2         -> 67 02 34           ACCEPTED
+34 00 80 00 00 0b 80 00   -> 74 cd              RequestDownload addr 0x008000 len 0x0B8000
+... full flash follows (see "Flash sequence" below)
+```
 
-**Candidates tested and REJECTED** (clean `invalidKey`, so the compare mechanism is real and
-working — these are genuinely wrong keys, not a harness bug):
-- SGO SA2 (see below), all 4 seed/key byte-order combinations (BE/BE, BE/LE, LE/BE, LE/LE)
-- `rot5` login family (`key = 5×{MSB-rotate; if carry, XOR 0x5FBD5DBD}`), big-endian
-- Additive `seed + 0x2909` and `seed + 0x564f` (the coding-SA deltas, in case shared)
+`SA2(0xFEA6D6CA) = 0xBDAD65F2` via `bench/sa2_unlock.py` (`Sa2SeedKey`, script
+`93974c58ab4a0787fedcba986b058798765432680b82494c` @0x1bb) — an **exact match** to the key ODIS
+sent and the ECU accepted. One live-validated (seed,key) pair; the algorithm generalizes it for any
+seed. The VM was already validated against 3 independent public test vectors; it is now also
+validated against live OEM traffic on this exact part.
 
-**Untested / remaining candidates:** the other 4 coding-SA deltas (`+0x75fb/+0x9ce8/+0xefc2/+0xfe10`),
-`shift5`/single-XOR login variants, `ecu_azx`'s `seed+0x11170`. **CAUTION: the flash-SA lockout
-(`7F 27 36 exceedNumberOfAttempts`) is NVM-PERSISTENT, not volatile like the coding one** — it
-tripped after ~2 wrong keys and did not clear on power-cycle (clears on a time delay instead, which
-appeared to lengthen with repeated attempts). **STATUS (2026-10-05): a further candidate sweep
-tripped it again, and this time a power-cycle did not restore access to the FBL context at all
-(3 reconnect attempts failed outright) — the lockout may now be escalated/longer-duration than
-before. Before testing any further candidate, confirm with `bench/fbl_check.py` (seed-request
-only, never burns an attempt) that the lockout has actually cleared.**
-**(2026-10-05 follow-up, `fbl_check.py`, minimal 1-msg stimulus):** `10 89`→`50 89` but `10 85`→
-`7F 10 22 conditionsNotCorrect` — the module now refuses the ProgrammingSession *descent itself*, so
-`27 01` never reaches the FBL context (`7F 27 12 subFnNotSupported`, i.e. still in the app session).
-The escalated flash-SA lockout appears to also block the `10 85` handoff to SBOOT, not just the key
-compare. Net: FBL is unreachable right now; leave the module powered down for an extended cool-off
-(hours) and re-probe with `fbl_check.py` before any further flash-SA work.
-Test candidates sparingly,
-one at a time, with waits between — do not loop automated retries against it. Tool: `bench/fbl_sa2.py`
-(single back-to-back
-attempt), `bench/fbl_keytest.py` (candidate list, one per invocation via `--start`/`--n 1`),
-`bench/fbl_check.py` (lockout-state probe — seed-only, never burns an attempt).
+**Context (all confirmed by the capture):** reached after `10 85` + a TP2.0 reconnect to addr 0x03
+(the channel refreshes before the key exchange). Seed high byte is `0xFD/FE/FF` (timer-idiom
+seed-gen). `27 02` is state-gated — ODIS sends it **immediately** after `27 01` (~40 ms, no
+intervening frame). A separate SBOOT dispatcher answers this level-1 SA (it presents a different
+`0x27` subfunction-support set than either KWP table; `asw_start_sboot` @0x8f440 shows the ASW is
+launched by SBOOT) — but that SBOOT dispatcher **uses the SGO SA2**, not a proprietary algorithm.
 
-**Where the SGO's SA2 fits — RESOLVED (2026-10-05, cross-community research):** the OEM flash
-container (`8R0907379BG_0030.sgo`) embeds a 24-byte SA2 bytecode program at offset `0x1bb`
-(identical across all 4 sibling SGOs — genuine, not a template): `ADD 0x974c58ab; BCC+7;
-EOR 0xfedcba98; BRA+5; EOR 0x98765432; FOR 11 {RSR}; FINISH`. Our VM implementation
-(`bench/sa2_unlock.py`, `Sa2SeedKey`) is **validated against 3 independent public test vectors**
-(bri3d/sa2_seed_key format, incl. one using the `0x5FBD5DBD` constant) — it is correct. All 4
-byte-order variants were rejected by the live flash-SA compare.
+**Why the earlier bench run saw `invalidKey` on SGO SA2 (correction):** the prior conclusion that
+all 4 SGO-SA2 byte orders were "genuinely wrong keys, not a harness bug" is **disproven** by the
+capture — BE seed / BE key is exactly what ODIS uses. The bench failures were state/lockout
+artifacts, not a wrong algorithm:
+- the NVM-persistent flash-SA lockout (`7F 27 36 exceedNumberOfAttempts`), which the bench
+  repeatedly tripped and escalated — eventually even blocking the `10 85` descent itself
+  (`7F 10 22 conditionsNotCorrect`), so `27 02` was being compared against a locked/garbage state;
+- and/or a stale per-request seed or a non-back-to-back `27 02` (any intervening frame →
+  `subFnNotSupported` or a compare against a rotated seed).
 
-**The SGO's SA2 bytecode is NOT expected to work for our flash-SA — this is now understood, not an
-open question.** Cross-referencing community knowledge (nefmoto, bri3d/sa2_seed_key, icanhack.nl,
-BtB paper) yields a clear architectural picture:
+**Flash sequence ODIS used (two download blocks, both accepted):**
 
-- **For engine/powertrain ECUs (MED17, Simos, ME7, etc.):** SA2 bytecode from the SGO/ODX **IS**
-  the flash-level SecurityAccess algorithm. ODIS reads the SA2 script and computes the key to
-  unlock a ProgrammingSession. d3irb (bri3d, author of `sa2_seed_key`) confirms: "it is the
-  universal seed/key authentication mechanism for flashing pretty much all VAG control units since
-  the early 2000s" (nefmoto topic 18663). HelperD (nefmoto topic 20977) confirmed the SA2 bytes
-  are even embedded verbatim in the MED17 firmware binary. The icanhack.nl ECU Flashing knowledge
-  base documents this as the standard: "The script travels inside the flash file… anyone who has
-  the flashdaten has the algorithm."
+| step | request | response |
+|---|---|---|
+| session | `10 85` | `50 85 14` |
+| SA | `27 01` / `27 02 <SA2(seed)>` | `67 01 <seed>` / `67 02 34` |
+| block 1 download | `34 008000 00 0B8000` (addr 0x008000, 753 664 B) | `74 cd` |
+| block 1 erase | `31 C4 0080000bffff00000000002e` | `71 C4 1f` |
+| block 1 data | `36 …` × 3695 (753 664 B) | `76 …` (all positive) |
+| block 1 exit | `37` | `77` |
+| block 1 checksum | `31 C5 0080000bffff cc76` | `71 C5` (results `73 C5 00` = OK) |
+| block 2 download | `34 804000 00 07C000` (addr 0x804000, 507 904 B) | `74 cd` |
+| block 2 erase | `31 C4 80400007ffff00000000002e` | `71 C4 19` |
+| block 2 data | `36 …` × 2490 (507 904 B) | `76 …` |
+| block 2 exit / checksum | `37` ; `31 C5 80400007ffff cc6a` | `77` ; `73 C5 00` = OK |
 
-- **For Bosch ABS/ESP modules: the SBOOT uses a SEPARATE, proprietary algorithm NOT in the SGO.**
-  nefmoto's "Bosch ABS Boot Mode" thread (topic 14951, 2018–2025, 31k+ reads) confirms the
-  community has **never cracked flash-level SA on any Bosch ABS module via diagnostics**.
-  jochen_145: "Even for OEM, ABS/ESP are completely BLACK-BOX." treadshuffle (Apr 2023): "The
-  specifics of the algo are in an external library called 'SecAcc.dll' which isn't included with
-  the RaceABS installation nor with Modas… its distribution is severely limited to only those who
-  are authorized." The SA2 in the SGO may exist for ODIS tooling compatibility (so ODIS doesn't
-  error on missing SA2 data), but the actual SBOOT flash-SA is independent.
-  **(2026-10-05 update, ODIS-E investigation — avenue 9 below):** `SecAcc.dll` does NOT ship with
-  ODIS-E either. ODIS-E v17.0.1 has TWO distinct server-side security systems: (a) **SFD (Schutz
-  Fahrzeug Diagnose)** — a 2019/2020+ coding/adaptation protection system for MQB/MQB Evo modules
-  (Gateway, Central Electronics, etc.) that uses time-limited tokens from VW's online backend, and
-  (b) a **flash-security D3 server mechanism** (`flash\d3server\` package) for flash-level SA key
-  computation. Neither exposes a local algorithm. The VWMCD database for AU37X (Q5) has NO KWP2000
-  brake BasisVariant at all — only UDS. The `libGWSK32.dll` in VWMCD is gateway-only. All ODIS
-  class files are encrypted with VW's custom `VaudesSmardlang` ClassLoader.
-  **(2026-10-05 update, community research — avenue 10 below):** SFD is confirmed by Ross-Tech
-  (wiki.ross-tech.com) and vagprogramming.com as **coding/adaptation protection only** — it
-  replaces the old 5-digit login code for coding access, not flash-level SecurityAccess. SFD
-  applies to modules like Gateway (19), Central Electronics (09), Instrument Cluster (17), etc.
-  The `SecurityAccessSFD*` classes in ODIS handle this coding gate. The `flash\d3server\` package
-  is the separate flash-SA server mechanism. For pre-SFD engine ECUs, ODIS used SA2 bytecode in
-  ODX/FRF containers for flash SA — but Bosch ABS/ESP modules do NOT use SA2 (confirmed earlier).
-  The Bosch ABS flash-SA algorithm is proprietary SBOOT-side, with key computation server-side
-  via the D3 infrastructure. No community source has ever published a Bosch ABS flash-SA algo.
+Routine `0xC4` = erase, `0xC5` = checksum/verify (last 2 bytes of its request = the expected
+checksum word). Total ~1.26 MB over ~15 min, zero transfer errors.
 
-- **Even on modern Simos18 (where SA2 works for CBOOT-level flash), the SBOOT has its own
-  completely separate authentication** — RSA-encrypted Mersenne Twister challenge, documented by
-  bri3d in `github.com/bri3d/Simos18_SBOOT`. SA2 is what the Customer Bootloader (CBOOT) uses
-  during normal UDS programming sessions; the Supplier Bootloader (SBOOT) has its own
-  manufacturer-level seed/key. bri3d also notes: "Bosch use a similar PWM 'break-in' mechanism
-  and overall architecture, but a **totally different command protocol which looks more like KWP**"
-  — which matches our ESP8 exactly (KWP2000, not UDS).
+**Remaining bench caveat:** the flash-SA lockout is NVM-persistent and was last seen escalated
+(power-cycle did not clear it; it clears on a time delay). Before reproducing ODIS's unlock,
+confirm the lockout has cleared with `bench/fbl_check.py` (seed-only, never burns an attempt), then
+do the clean back-to-back `27 01` → `27 02 <SA2(seed)>` on a fresh power-cycle. Tools:
+`bench/fbl_sa2.py` (single back-to-back attempt), `bench/sa2_unlock.py` (the SA2 VM),
+`bench/fbl_check.py` (lockout probe).
 
-- **Implication for our ESP8:** our `10 85` descent hands off to SBOOT (proven: different SID
-  support set, separate dispatcher). The flash-SA `27 01/02` in this SBOOT context is a Bosch
-  proprietary algorithm, almost certainly NOT SA2-based, NOT any simple additive scheme, and NOT
-  publicly documented. The SGO's SA2 rejection is expected behavior. Remaining additive-delta
-  candidates (avenue 1) are deprioritized — the SBOOT algo is likely structurally different from
-  any of the known SA families (additive, rot5, shift5, LFSR). **Best remaining avenues are
-  hardware/exploit paths: JTAG dump (avenue 3), fault injection (avenue 5), or diagnostic
-  code-execution (avenue 2).**
-
-  New lead from bri3d's SBOOT docs: Bosch SBOOTs may have a **PWM "break-in" mechanism** similar
-  to Continental's — two square-wave signals on specific pins at boot that force the ECU into the
-  SBOOT command shell. On TMS470, the GPTA timing comparator is the likely peripheral. If such a
-  break-in exists on our ESP8, it would provide direct SBOOT-shell access without needing to
-  solve the flash-SA at all (the SBOOT shell would have its own, separate authentication, but
-  it's a different attack surface). Worth investigating the bench cable's `CNF1/BOOT1/BOOT2`
-  leads as candidate break-in pins.
+**SGO SA2 provenance:** the OEM container (`8R0907379BG_0030.sgo`) embeds the 24-byte SA2 program
+at offset `0x1bb`, identical across all 4 sibling SGOs: `ADD 0x974c58ab; BCC+7; EOR 0xfedcba98;
+BRA+5; EOR 0x98765432; FOR 11 {RSR}; FINISH`. For VAG generally, SA2 bytecode in the flash
+container is the standard flash-level seed/key mechanism (bri3d/`sa2_seed_key`, icanhack.nl,
+nefmoto 18663/20977); this ESP8 follows that pattern — the detour searching RaceABS, ODIS-E and
+VWMCD for an "external" Bosch-ABS algorithm (see the condensed research avenues below) was looking
+for something that was in the SGO the whole time.
 
 ### Does the coding (level-3) unlock open the memory-read/flash-write services?
 
-**Tested, NO.** With the coding SA unlocked: `23`/`35`/`2C` in the app session all refuse (`35`→
-`7F 35 80`; `2C`→`7F 2C 11 serviceNotSupported`; `23` not in table A at all). `34`/`35` in the
-programming session also `7F .. 80` (wrong-session-ish) even with the coding grant active — the
-transfer/read services are gated by the **flash SA**, not the coding one. `kwp_security_access_sm`
-(`0x8b850`) — which records a session-0x85 grant via `security_unlock_set` — only runs that grant
-**after a valid flash-SA key**, not on plain session entry (checked and ruled out; see git history
-of `esp8-progsession-bypass` memory note for the disproof).
+**No — but the flash SA (above) does.** With only the *coding* SA unlocked: `23`/`35`/`2C` in the
+app session all refuse (`35`→`7F 35 80`; `2C`→`7F 2C 11 serviceNotSupported`; `23` not in table A
+at all), and `34`/`35` in the programming session also `7F .. 80`. The transfer/read services are
+gated by the **flash SA**, not the coding one: `kwp_security_access_sm` (`0x8b850`) records the
+session-0x85 grant via `security_unlock_set` only **after a valid flash-SA key**. Since the flash SA
+is now solved (SGO SA2), the correct unlock sequence — `10 85` → SA2 key → grant — is what opens
+`23`/`34`/`35`. ODIS's capture shows `34` RequestDownload accepted immediately after the SA2 key, so
+`23` ReadMemoryByAddress in the same unlocked programming session is the expected memory-dump path
+(bench-confirm it after reproducing the unlock).
 
 ## Flash validation — RSA-1024, confirmed (signature_analysis.md, unchanged, still current)
 
@@ -250,18 +210,23 @@ the verify branch at flash time. See `signature_analysis.md` for the full descri
 
 ## Bottom line / where this is blocked
 
-Both the **memory dump** and **patched-firmware flash** paths are gated behind the **flash-level
-SecurityAccess**, whose seed-gen + key-verify live in **SBOOT** — a separate flash region not
-present in our dump (the SGO container only ships ASW+CAL). This is not a wall we're declaring
-closed — see below for what's still open — but every pure-software/bench-diagnostic avenue from
-*this* image converges on needing SBOOT:
-- Diagnostic read (`23`) is SA-gated behind the flash SA, not the coding SA.
-- The coding-SA unlock (which we have) doesn't reach the transfer services.
-- The flash-SA algorithm isn't in the ASW to reverse statically or emulate.
+- **Flash SA — SOLVED.** It is the SGO SA2 (BE/BE), confirmed against live ODIS traffic (§2).
+- **Memory dump (`23` ReadMemoryByAddress) — unblocked, pending bench confirm.** It is gated behind
+  the flash SA; with the SA2 unlock in hand, the `10 85` → SA2 → `23` path should read arbitrary
+  memory. Reproduce ODIS's unlock on the bench, then probe `23`.
+- **Flashing stock/OEM firmware — possible now** (this is exactly what the captured session did).
+- **Flashing *patched* firmware — still blocked, by the RSA-1024 signature, NOT by the SA.** Both
+  signed regions carry RSA-1024 signatures that can't be forged (private key is SBOOT-side). A
+  modified image won't validate at flash time regardless of having the SA2 key. Bypassing that
+  verification is the one remaining hard problem, and it's what the hardware/exploit avenues below
+  are for — they are no longer needed to *reach* the module, only to defeat signature enforcement
+  (or to dump SBOOT itself, which the SGO container doesn't ship).
 
-**Open avenues** (not yet exhausted):
-1. **Finish the flash-SA candidate sweep** (remaining additive deltas + login variants) — slow due
-   to the persistent lockout, one candidate at a time with waits.
+**Open avenues** — now scoped to the RSA-signature bypass / SBOOT dump, not to the flash SA
+(avenue numbers kept stable; cross-references elsewhere still resolve):
+1. **Flash-SA candidate sweep — CLOSED (solved).** The flash SA is the SGO SA2 (§2); no further
+   key-guessing is needed. What remains of this avenue is purely operational: reproduce ODIS's
+   unlock on the bench (clear the NVM lockout first — see §2 and avenue 6).
 2. **Code-execution via a diagnostic vulnerability** — the published technique (Garcia et al.,
    "Beneath the Bonnet: a Breakdown of Diagnostic Security") for VAG/Ford/Fiat ECUs: once
    authenticated at the *download* level, `RequestDownload` a small secondary bootloader into RAM,
@@ -369,16 +334,15 @@ closed — see below for what's still open — but every pure-software/bench-dia
    caveat: a few table-A handlers live in the `>0xa2000` seg2 that doesn't disassemble cleanly, but no
    NVM/SPI driver exists anywhere in the image for such a handler to call.
 
-7. **Literature/community research — COMPLETED (2026-10-05, browser + web search).** Exhaustive
-   sweep of nefmoto, icanhack.nl, bri3d's repos, BtB paper (Van den Herrewegen & Garcia, ESORICS
-   2018), Van den Herrewegen PhD thesis, and general web search. **Key conclusion: no one has
-   publicly cracked flash-level SA on a Bosch ABS/ESP module via diagnostics.** The SGO's SA2
-   bytecode is the flash SA for engine ECUs (MED17/Simos/ME7) but NOT for Bosch ABS — see the
-   "Where the SGO's SA2 fits" section above for the full analysis. Remaining community leads:
-   (a) TI TMS470 `e2e.ti.com` thread "tms470mf06607-tms470-bootloader" (403'd via direct fetch;
-   snippet described a CAN-reflash bootloader loaded to RAM at `0x207800`, 2KB, and dump tools
-   "JCommander"/"savebin" over JTAG); (b) bri3d's Simos18 SBOOT docs mention Bosch SBOOTs have
-   PWM "break-in" mechanisms — a new lead for avenue 3/5.
+7. **Literature/community research — done (2026-10-05, browser + web search).** Swept nefmoto,
+   icanhack.nl, bri3d's repos, BtB paper (Van den Herrewegen & Garcia, ESORICS 2018), the Van den
+   Herrewegen PhD thesis, and general web search. At the time this concluded "nobody has publicly
+   cracked Bosch ABS flash-SA, so the SGO SA2 must not apply to ABS" — **that inference was wrong**
+   (the 2026-10-10 ODIS capture proves the SGO SA2 *is* our flash SA; see §2). Still-useful leads
+   for the RSA-bypass / SBOOT-dump work: (a) TI TMS470 `e2e.ti.com` thread
+   "tms470mf06607-tms470-bootloader" (CAN-reflash bootloader to RAM `0x207800`, 2KB; dump tools
+   "JCommander"/"savebin" over JTAG); (b) bri3d's Simos18 SBOOT docs — Bosch SBOOTs may have a PWM
+   "break-in" mechanism (feeds avenues 3/5).
 
 8. **RaceABS tool software-RE — DONE 2026-10-04/05.** New build = architecture only; **OLD build
    dynamic-unpacked → the actual motorsport seed→key algorithm recovered** (but it is 16-bit and
@@ -465,9 +429,13 @@ closed — see below for what's still open — but every pure-software/bench-dia
    - **Main installer** (449MB EXE): the 449MB `[0]` payload is a custom VW format, not Inno/NSIS.
      String search across the full binary found zero hits for `SecAcc`, `SeedKey`, `SecAccess`.
    - **VWMCD** (3.34GB diagnostic database): only one DLL in the entire archive — `libGWSK32.dll`
-     (6.6KB) in `BG744/` (gateway platform), a **Gateway** Seed/Key DLL, not ABS. AU37X (Q5) has
-     `BV_Brake1UDS.bv.db` (1.2MB) but **NO KWP2000 brake variant** — our ESP8's protocol isn't even
-     defined in ODIS-E v17's Q5 database. The BV files are zlib-compressed proprietary binary.
+     (6.6KB) in `BG744/` (gateway platform), a **Gateway** Seed/Key DLL, not ABS. The ESP8's
+     project is **`AU48X`** (B8 Q5, 8R), which has **`@BV_Brake1KWP2000CAN20`** — the TP2.0+KWP2000
+     brake variant matching this module; its diagnostic layer is present, but it holds only the
+     SecurityAccess service definition, not the seed→key (brake defined at base-variant level, no
+     per-part SA2 in the data — see the AU48X/VWMCD notes under the SGO/flash-SA discussion above).
+     `AU37X` is the unrelated modern e-tron Q5. The `.bv.db`/`.sd.db` files are zlib-compressed
+     proprietary binary.
    - **PostSetup ISO** (Brand-A diagnostic data): JARs contain encrypted `.class` procedure scripts
      (VW `VaudesSmardlang` custom ClassLoader encryption — `javap` cannot read any of them; the
      constant pool first byte is a non-standard tag). The `1.58.0_2c.zip` has J104 scripts
@@ -486,11 +454,12 @@ closed — see below for what's still open — but every pure-software/bench-dia
        `$OnlineAccessDuration` / `$OnlineRequestedRole` — time-limited, role-based server access
      - Protocol-specific: `SecurityAccessScedulerJobKwp2000.class` (5.5KB) confirms KWP2000
        support exists and routes through the server-side backend
-   - **What this means for our ESP8:** the flash-SA key for Bosch ABS modules is computed
-     **server-side by VW's D3 infrastructure** — there is no local DLL, no local algorithm, and no
-     way to extract the secret from ODIS-E. The `SecAcc.dll` referenced on nefmoto is likely
-     Bosch-internal tooling, never distributed with any ODIS version.
-     This avenue is **exhausted** — ODIS-E cannot help us obtain the flash-SA algorithm.
+   - **What this means for our ESP8:** `SecAcc.dll` / a local seed→key DLL does not ship with
+     ODIS-E, and the `flash\d3server\` package shows ODIS *can* also compute flash keys server-side
+     via VW's D3 backend. **But that does not mean our module's flash-SA is server-side-only** — the
+     2026-10-10 ODIS capture shows this ESP8 is unlocked with the plain SGO SA2 (§2). The D3 path is
+     a parallel/newer mechanism, not a prerequisite here. The search through ODIS-E for an external
+     ABS algorithm was unnecessary (the algorithm was in the SGO).
 
 10. **Community research on SFD / D3 server architecture — COMPLETED 2026-10-05.** Searched
     nefmoto, MHH Auto, vagprogramming.com, Ross-Tech wiki, and general web for details on
@@ -509,19 +478,15 @@ closed — see below for what's still open — but every pure-software/bench-dia
     - **Flash D3 server** is a SEPARATE mechanism from SFD. The `flash\d3server\` package in ODIS
       handles flash-level security by contacting the VW backend for key computation during ECU
       reprogramming. This is the mechanism that replaced local DLLs / SA2 bytecode for flash SA.
-    - **Pre-SFD flash security for engine ECUs** used SA2 bytecode embedded in .frf/.odx containers.
-      But Bosch ABS/ESP modules **never used SA2** (confirmed avenues 1-7). The Bosch ABS SBOOT
-      uses its own proprietary seed→key algorithm, and ODIS computes the key server-side via D3.
-    - **Nefmoto/MHH**: zero results for Bosch ABS flash security specifics. These communities
-      focus on engine ECU tuning (ME7/MED17/Simos). Nobody has published a Bosch ABS flash-SA
-      algorithm from any source. MHH is Cloudflare-gated (could not access directly).
-    - **Conclusion**: the original claim "ODIS contacts VW's D3 backend server with the ECU's
-      seed" is CORRECT for the flash D3 mechanism, but this is NOT the same as SFD (which is
-      coding protection). The `SecurityAccessSFD*` classes handle coding; the `flash\d3server\`
-      package handles flash SA. Both are server-side, but they are different systems.
-      For our ESP8, this means **the flash-SA algorithm exists only in the Bosch SBOOT firmware
-      and on VW's D3 server** — it has never been distributed locally in any tool or container.
-      Avenue **exhausted** — confirms hardware/exploit as the only remaining viable path.
+    - **Pre-SFD flash security for engine ECUs** used SA2 bytecode embedded in .frf/.odx/SGO
+      containers. (An earlier claim here that "Bosch ABS/ESP modules never used SA2" is **wrong** —
+      see §2: this ESP8's flash SA *is* the SGO SA2.) The D3 server is a separate/newer server-side
+      key path ODIS can also use; it is not required for this module.
+    - **Nefmoto/MHH**: zero results for Bosch ABS flash-SA specifics — those communities focus on
+      engine ECU tuning (ME7/MED17/Simos). MHH is Cloudflare-gated. (Lack of a public ABS write-up
+      is why the SGO SA2 was wrongly assumed inapplicable; the ODIS capture settled it directly.)
+    - **SFD ≠ flash SA** stands: `SecurityAccessSFD*` = coding protection; `flash\d3server\` = a
+      server-side flash-key path. Useful context, but orthogonal to this module's SA2 unlock.
 
 ## Bench tools (current, in `bench/`)
 

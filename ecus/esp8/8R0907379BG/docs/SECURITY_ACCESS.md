@@ -496,6 +496,10 @@ the verify branch at flash time. See `signature_analysis.md` for the full descri
   flow (coding SA, programming-session descent/reconnect).
 - `esp_unlock.py` — coding (level-3) SA unlock + post-unlock capability probes.
 - `fbl_sa2.py`, `fbl_keytest.py`, `fbl_check.py` — flash-SA (level-1/SBOOT) testing tools.
+- `prog_session.py` — **ODIS-proven full programming-access entry + memory dump (0x23)**. Replicates
+  the exact captured sequence: stimulus → 10 89 → 10 85 → reconnect → SA2 unlock → ReadMemoryByAddress.
+  Safe by default (dry-run); `--unlock` sends the key, `--read ADDR LEN` reads memory,
+  `--dump ADDR LEN FILE` dumps to a file. Auto-detects the 0x23 address/length layout.
 - `read_probe.py`, `flash_probe.py` — post-coding-unlock capability probes (21/22/2C/35/23/34).
 - `nm_operational.py` — full ComM-operational (NM container) driver, untested on bench.
 - `sa2_unlock.py` — the SGO SA2 VM (`Sa2SeedKey`), validated against 3 independent test vectors.

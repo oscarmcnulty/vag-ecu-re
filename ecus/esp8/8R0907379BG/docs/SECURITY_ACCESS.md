@@ -208,18 +208,65 @@ patched ASW with a corrected runtime CRC might boot despite an invalid signature
 CBOOT verify branch; (3) an SBOOT exploit to write flash bypassing enforcement; (4) voltage-glitch
 the verify branch at flash time. See `signature_analysis.md` for the full descriptor format.
 
+## TP2.0 multi-frame fix — op=2 (no ACK), CRITICAL (2026-10-10)
+
+**Root cause of the `invalidKey` bug:** `tp20_kwp.py`'s `_send_frames()` used op=0 (more data,
+ACK expected) for non-last frames. ODIS uses op=2 (more data, NO ACK expected). The extra ACK
+round-trip between the two CAN frames of the `27 02` key (6 KWP bytes = 2 TP2.0 frames) causes
+the SBOOT's SA state machine to reject the key. Fixed by changing op from 0 to 2 — frames now go
+back-to-back, matching the wire sequence from the ODIS pcap capture.
+
+Pcap evidence (F:\data\20a2-0001-20261010-153902.pcap, pkt 838682):
+- ODIS frame 1: `21 00 06 27 02 BD AD 65` (op=2, seq=1, no ACK)
+- ODIS frame 2: `12 F2` (op=1, seq=2, last+ACK)
+- ECU responds: `12 00 03 67 02 34` (SA ACCEPTED)
+
+## SBOOT bootloader service map (2026-10-10)
+
+After flash SA2 unlock + `10 85` in the bootloader, the following KWP SIDs are available:
+
+| SID  | Service                  | NRC / Status              |
+|------|--------------------------|---------------------------|
+| 0x10 | DiagnosticSession        | 50 85 00 (programming OK) |
+| 0x22 | ReadDataByIdentifier     | works with 2-byte DIDs    |
+| 0x27 | SecurityAccess           | level 1 only              |
+| 0x31 | RoutineControl           | subFnNotSupported (needs routine ID) |
+| 0x33 | WriteMemoryByAddress     | subFnNotSupported (needs params)     |
+| 0x34 | RequestDownload          | conditionsNotCorrect (needs erase first) |
+| 0x36 | TransferData             | securityAccessDenied (needs active download) |
+| 0x37 | RequestTransferExit      | conditionsNotCorrect (no active transfer) |
+
+**NOT supported:** SID 0x23 (ReadMemoryByAddress), 0x35 (RequestUpload) -- NRC 0x90.
+
+**RequestDownload format:** `34 00 <addr> <size>` (8 KWP bytes total). Both 3-byte and 4-byte
+address variants return `conditionsNotCorrect` (right format, but needs preceding erase routine).
+
+**Bootloader DIDs (22 with 2-byte UDS-style DIDs):**
+
+| DID    | Label             | Value                          |
+|--------|-------------------|--------------------------------|
+| F17C   | bootloaderVersion | BPA-08502.10.13002C609C        |
+| F187   | sparePartNo       | 8R0907379BG                    |
+| F189   | swVersion         | 0030                           |
+| F191   | hwNumber          | 8R0907379AM                    |
+| F197   | systemName        | ESP8 quattro                   |
+| F1A3   | hwVersion         | H09                            |
+| F1AA   | moduleDesignation | J104                           |
+| F1DF   | progPreconditions | 0x40                           |
+
 ## Bottom line / where this is blocked
 
-- **Flash SA — SOLVED.** It is the SGO SA2 (BE/BE), confirmed against live ODIS traffic (§2).
-- **Memory dump (`23` ReadMemoryByAddress) — unblocked, pending bench confirm.** It is gated behind
-  the flash SA; with the SA2 unlock in hand, the `10 85` → SA2 → `23` path should read arbitrary
-  memory. Reproduce ODIS's unlock on the bench, then probe `23`.
+- **Flash SA — SOLVED AND PROVEN ON BENCH (2026-10-10).** SGO SA2 (BE/BE) unlock works reliably
+  (4/4 consecutive unlocks). Root cause of earlier `invalidKey` was TP2.0 op mode (op=0 vs op=2).
+- **Memory dump (`23` ReadMemoryByAddress) — NOT available in bootloader.** SID 0x23 returns NRC
+  0x90 in the SBOOT. Memory reading requires the ASW path (coding SA in the application firmware),
+  not the flash SA bootloader path.
 - **Flashing stock/OEM firmware — possible now** (this is exactly what the captured session did).
 - **Flashing *patched* firmware — still blocked, by the RSA-1024 signature, NOT by the SA.** Both
   signed regions carry RSA-1024 signatures that can't be forged (private key is SBOOT-side). A
   modified image won't validate at flash time regardless of having the SA2 key. Bypassing that
   verification is the one remaining hard problem, and it's what the hardware/exploit avenues below
-  are for — they are no longer needed to *reach* the module, only to defeat signature enforcement
+  are for -- they are no longer needed to *reach* the module, only to defeat signature enforcement
   (or to dump SBOOT itself, which the SGO container doesn't ship).
 
 **Open avenues** — now scoped to the RSA-signature bypass / SBOOT dump, not to the flash SA
@@ -496,10 +543,12 @@ the verify branch at flash time. See `signature_analysis.md` for the full descri
   flow (coding SA, programming-session descent/reconnect).
 - `esp_unlock.py` — coding (level-3) SA unlock + post-unlock capability probes.
 - `fbl_sa2.py`, `fbl_keytest.py`, `fbl_check.py` — flash-SA (level-1/SBOOT) testing tools.
-- `prog_session.py` — **ODIS-proven full programming-access entry + memory dump (0x23)**. Replicates
-  the exact captured sequence: stimulus → 10 89 → 10 85 → reconnect → SA2 unlock → ReadMemoryByAddress.
-  Safe by default (dry-run); `--unlock` sends the key, `--read ADDR LEN` reads memory,
-  `--dump ADDR LEN FILE` dumps to a file. Auto-detects the 0x23 address/length layout.
+- `prog_session.py` — **ODIS-proven full programming-access entry + SA2 unlock**. Replicates the
+  exact captured sequence: stimulus -> 10 89 -> 10 85 -> reconnect -> SA2 unlock. Safe by default
+  (dry-run); `--unlock` sends the key, `--identify` reads all bootloader DIDs. Note: SID 0x23
+  (ReadMemoryByAddress) is NOT supported in the SBOOT bootloader (NRC 0x90).
+- `sa2_clean.py` — minimal SA2 unlock + bootloader probe. Detects if module is already in bootloader
+  (state B) and skips descent. Includes service scan, DID scan, RequestDownload format probing.
 - `read_probe.py`, `flash_probe.py` — post-coding-unlock capability probes (21/22/2C/35/23/34).
 - `nm_operational.py` — full ComM-operational (NM container) driver, untested on bench.
 - `sa2_unlock.py` — the SGO SA2 VM (`Sa2SeedKey`), validated against 3 independent test vectors.

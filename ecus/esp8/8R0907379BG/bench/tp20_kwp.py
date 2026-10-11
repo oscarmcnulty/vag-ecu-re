@@ -13,8 +13,8 @@ Requires ignition switch ON (module awake/broadcasting). Timing is tight: the ch
 the parameter request doesn't follow the 0xD0 within ~1s, so A0 is sent the instant the first 0xD0
 arrives (and resent on each retransmit). A background channel-test (0xA3) keepalive holds the session.
 
-Data PDU: [op<<4|seq, len_hi, len_lo, kwp...]; op 0x1=last+ACK, 0x0=more, 0xB=ACK, 0xA3=channel test,
-0xA0/0xA1=params, 0xA8=disconnect.
+Data PDU: [op<<4|seq, len_hi, len_lo, kwp...]; op 0x1=last+ACK, 0x2=more(noACK), 0xB=ACK,
+0xA3=channel test, 0xA0/0xA1=params, 0xA8=disconnect.
 
 Usage (32-bit python, ignition ON):
   tp20_kwp.py                       # open session, run a default KWP probe set
@@ -113,8 +113,8 @@ class TP20KWP:
 
     def _send_frames(self, kwp):
         """TP2.0 data TX, multi-frame safe. First frame carries the 2-byte length + up to 5 KWP
-        bytes; subsequent frames carry up to 7 each. Non-last frames use op0 (more, ACK-expected)
-        and we wait for the ECU's 0xB ACK before the next; last frame uses op1 (last, ACK)."""
+        bytes; subsequent frames carry up to 7 each. Non-last frames use op2 (more, NO ACK) so
+        they go back-to-back (matches ODIS wire behaviour); last frame uses op1 (last, ACK)."""
         n = len(kwp)
         chunks = [kwp[:5]]
         rest = kwp[5:]
@@ -122,24 +122,13 @@ class TP20KWP:
             chunks.append(rest[:7]); rest = rest[7:]
         for idx, ch in enumerate(chunks):
             last = idx == len(chunks) - 1
-            op = 1 if last else 0
+            op = 1 if last else 2
             if idx == 0:
                 frame = bytes([(op << 4) | (self.seq & 0xF), (n >> 8) & 0xFF, n & 0xFF]) + ch
             else:
                 frame = bytes([(op << 4) | (self.seq & 0xF)]) + ch
             self.c.write(self.tx, frame)
             self.seq = (self.seq + 1) & 0xF
-            if not last:                      # wait for the ECU's TP ACK before next frame
-                t = time.time()
-                while time.time() - t < 0.5:
-                    rr = self._rd(40)
-                    if not rr:
-                        continue
-                    rid, pl = rr
-                    if rid == self.rx and pl and (pl[0] >> 4) == 0xB:
-                        break
-                    if rid == self.rx:
-                        self._handle_ctrl(pl)
 
     def request(self, kwp: bytes, timeout=2.0, pending_max=8.0):
         self._send_frames(kwp)

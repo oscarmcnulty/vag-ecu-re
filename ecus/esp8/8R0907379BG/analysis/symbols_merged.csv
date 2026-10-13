@@ -150,7 +150,7 @@ address,name,type,comment,source
 0x0008b1d4,esc_valve_cmd_phase_c,FUNCTION,Base ESC per-wheel valve command builder (pressure-phase variant; see esc_valve_apply_wheel 0x8fcb8).,re-trace
 0x000934d0,esc_valve_load_wheel,FUNCTION,Loads a wheel inlet/outlet valve command from its flags (param_2+3/+7/+0xb/+0x33) via esc_cmd_slot_alloc(0x978d4) + FUN_000a1290; writes wheel valve cmd struct +0x10/+0x14/+0x18.,re-trace
 0x00407344,esc_wheel_valve_cmd,LABEL,"Base ESC per-wheel valve-command structs (4x, stride 0x38: 0x407344/0x40737c/0x4073b4/0x4073ec). Hold inlet/outlet valve pressure+timing; read by esc_valve_apply_wheel (0x8fcb8), flushed to valve MMIO 0xfff7d400/d500/d600.",re-trace
-0xfff7d400,esc_valve_mmio,LABEL,Base ESC hydraulic valve-bank HW registers (0xfff7d400/d500/d600 wheel channels; pump 0xfff7f0a0). The solenoid/pump actuator the ESC hydraulic pressure path drives (base ABS/ESC + external EPB/ANB Fremdbremsung requests). Init by esc_hydraulic_hw_init (0x99cd0).,re-trace
+0xfff7d400,esc_valve_mmio,LABEL,"Stock B1M frame = SPI2 (datasheet SPNS155I Table 8-7, 0xFFF7D400-D4FF); repurposed by the Bosch-custom mask. Base ESC hydraulic valve-bank HW registers (0xfff7d400/d500/d600 wheel channels; pump 0xfff7f0a0). The solenoid/pump actuator the ESC hydraulic pressure path drives (base ABS/ESC + external EPB/ANB Fremdbremsung requests). Init by esc_hydraulic_hw_init (0x99cd0).",re-trace
 0x0040553b,anb_freigabe_gate,LABEL,"ANB freigabe/enable gate (bit3), set by anb_signal_conditioning(0x3bf58); an arm precondition in anb_decel_request_build(0x4bf3c).",re-trace
 0x004055b4,anb_quality,LABEL,ANB request quality byte; must be > 0xc for the ANB arm (anb_decel_request_build 0x4bf3c).,re-trace
 0x004055e4,anb_freshness_counter,LABEL,ANB request freshness/stale counter; must be < 0x37 for the ANB arm (anb_decel_request_build 0x4bf3c).,re-trace
@@ -334,3 +334,25 @@ address,name,type,comment,source
 0x0005cad2,can_tx_prio1_wrapper,FUNCTION,"Thin wrapper: can_tx_request(1, param_1, param_2, 0). Priority-1 CAN TX with status pointer.",re-trace
 0x00094ed4,kwp_tester_present_handler,FUNCTION,"KWP TesterPresent handler via internal opcode 0xFF. Checks transport_channel_buf: if session idle (+0x22f==0) or state==1: validates PDU (len==3 at +0x108 AND opcode==0xFF at +0x10a AND sub==0x00 at +0x10b); on valid: calls FUN_000985dc (session check) -- if fail sets state=1; if pass initializes session (clears flags via FUN_00098638/FUN_000985f0/FUN_00050838 etc) and sets state=2. If session active: sends CAN response via can_tx_request and handles ACK states (0x10=pending 0x20=done with resp_frame_copy). On invalid PDU: sets NRC 0x22.",re-trace
 0x0009f0c0,tp20_session_timeout_check,FUNCTION,"TP2.0 session timeout checker. Calls FUN_00001628 (timer read); if result matches either of two target values AND status bit7 set at PTR_DAT_0009f118 AND transport_channel_buf PDU-length counter has exceeded threshold: sets bit 0x80 at transport_channel_buf+0x222 (session-expired flag). Always ORs 0x02 into +0x22c (watchdog-serviced flag).",re-trace
+0xfff7d500,periph_i2c5_valve,LABEL,"Stock B1M frame = I2C5 (SM470R1B1M-HT datasheet SPNS155I Table 8-7, 0xFFF7D500-D5FF). Firmware repurposes it as an ESC valve-bank / wheel-channel register (Bosch-custom mask). Written by esc_valve_apply_wheel(0x8fcb8) / esc_hydraulic_hw_init(0x99cd0).",verified
+0xfff7d600,periph_rsvd_d600_valve,LABEL,"Stock B1M frame = RESERVED (datasheet Table 8-7, 0xFFF7D600-D7FF). Firmware repurposes it as an ESC valve-bank / wheel-channel register (Bosch-custom mask). Used by esc_valve_apply_wheel(0x8fcb8).",verified
+0xfff7e400,hecc1_mailbox_ram,LABEL,"HECC1 mailbox RAM (datasheet Table 8-7, 0xFFF7E400-E5FF; 32x16-byte mailboxes). CAN module A (sensor/chassis bus). ctrl-sel 1 in rx_mailbox_resolver(0x501d4).",verified
+0xfff7e600,hecc2_mailbox_ram,LABEL,"HECC2 mailbox RAM (datasheet Table 8-7, 0xFFF7E600-E7FF). CAN module B (vehicle/diag bus); the UDS diag mailbox (0x6b4/0x6b8) lives here. ctrl-sel 2 in rx_mailbox_resolver(0x501d4).",verified
+0xfff7ec00,periph_gio,LABEL,"GIO general-purpose I/O (datasheet Table 8-7, 0xFFF7EC00-ECFF). Firmware uses it for ESC valve-enable / driver GPIO config: esc_hydraulic_hw_init(0x99cd0) writes +0x24..+0x68.",verified
+0xfff7f000,periph_mibadc,LABEL,"MibADC multi-buffered A/D converter (datasheet Table 8-7, 0xFFF7F000-F0FF). Sensor acquisition; the pump/motor sub-register @0xFFF7F0A0 is inside this frame.",verified
+0xfff7f0a0,periph_pump_motor,LABEL,"ESC pump/motor driver register (inside the MibADC frame 0xFFF7F000-F0FF per datasheet). Programmed by esc_hydraulic_hw_init(0x99cd0 via DAT_00099d90).",verified
+0xfff7f400,periph_sci1,LABEL,"Stock B1M frame = SCI1 serial comms (datasheet Table 8-7, 0xFFF7F400-F4FF). Firmware writes config bytes (+0x2f/0x33/0x37) in esc_hydraulic_hw_init(0x99cd0) — usage inconsistent with stock SCI, likely repurposed by the Bosch-custom mask.",verified
+0xfff7f800,periph_spi1,LABEL,"SPI1 (datasheet Table 8-7, 0xFFF7F800-F8FF). Serial link to an external driver/sensor IC.",verified
+0xfff7fc00,periph_het,LABEL,"HET high-end timer (datasheet Table 8-7, 0xFFF7FC00-FCFF). PWM/timing for actuators.",verified
+0xfffff700,periph_msm,LABEL,"MSM memory security module control registers (datasheet Table 8-7, 0xFFFFF700-F7FF). 128-bit password unlock per zone; see docs/SECURITY_ACCESS.md.",verified
+0xffffff00,sys_rti,LABEL,"RTI real-time interrupt / system-tick timer base (SM470R1B1M-HT datasheet SPNS155I Table 8-7, 0xFFFFFF00-FF1F). SYS-module timer; heavily referenced by the scheduler (x13 pool loads in code).",verified
+0xffffff20,sys_cim,LABEL,"CIM central interrupt manager base (datasheet Table 8-7, 0xFFFFFF20-FF3F). SYS-module interrupt controller; referenced x9 in code.",verified
+0xffffff40,sys_psa,LABEL,"PSA parallel signature analyzer base (datasheet Table 8-7, 0xFFFFFF40-FF5F).",verified
+0xffffff60,sys_dwd,LABEL,"DWD digital windowed watchdog base (datasheet Table 8-7, 0xFFFFFF60-FF6F).",verified
+0xffffffcc,sys_ctrl,LABEL,"SYSTEM module control registers base (datasheet Table 8-7, 0xFFFFFFCC-FFFF).",verified
+0xfffffe00,sys_dec,LABEL,"DEC base (datasheet Table 8-7, 0xFFFFFE00-FE7F).",verified
+0xfffffe80,sys_dma,LABEL,"DMA controller base (datasheet Table 8-7, 0xFFFFFE80-FEFF). 16-channel DMA.",verified
+0xfffffd00,sys_mmc,LABEL,"MMC memory-map control base (datasheet Table 8-7, 0xFFFFFD00-FD7F). Holds the memory-select registers (MFBAHR/MFBALR) that map flash/RAM banks; key to the >1MB flash-mapping question.",verified
+0xfffffc00,sys_iem,LABEL,"IEM base (datasheet Table 8-7, 0xFFFFFC00-FCFF).",verified
+0xfffff800,sys_dma_cmd_buffer,LABEL,"DMA command buffer base (datasheet Table 8-7, 0xFFFFF800-F9FF).",verified
+0xfff7ed00,periph_ebm,LABEL,"EBM expansion-bus module base (datasheet Table 8-7, 0xFFF7ED00-EDFF). External-memory interface (CS[5]/CS[6]); key to the >1MB flash-mapping question.",verified

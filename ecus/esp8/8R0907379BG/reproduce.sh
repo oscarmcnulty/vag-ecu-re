@@ -81,6 +81,15 @@ say 06_syms '^ApplySymbols'
 run 06b_comsig  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
                  -postScript EspDecodeComSignals.java
 say 06b_comsig '^EspDecodeComSignals'
+# 06c: datasheet-driven MMIO aids (SM470R1B1M-HT / TMS470R1x, SPNS155I Table 8-7). Creates the
+# volatile PERIPH block so the periph_*/hecc_*/esc_valve_mmio base labels resolve to real memory,
+# types each literal-pool peripheral-base constant as a pointer (so the decompiler renders
+# base->reg instead of *(DAT_000xxxxx + off)), and labels the ARM exception vectors 0x0..0x1c.
+# Fail-soft: every mutation is try/caught, so a miss never aborts the run. See docs/RE_findings.md.
+run 06c_periph  "$PROJ" "$NAME" -process "$PROG" -noanalysis -scriptPath "$ESP" \
+                 -postScript EspPeripherals.java "$LOADBASE" "${CODE_HI:-0xa2000}" \
+                 "${SEG2_START:-0xbb045}" "${SEG2_CODE_END:-0x10a000}"
+say 06c_periph '^EspPeripherals'
 # --- RAM base-pointer fold (two-pass decompile) ---
 # The decompiler constant-folds *(base+off) to concrete addresses only for RO-marked initialized RAM,
 # which dissolves the "runtime-only" COM/config/DID routing (obj-table base 0x4069b4->0x40a1a8, ECD/

@@ -35,15 +35,47 @@ ways — firmware fingerprint and TI datasheet/reference-guide cross-check.
   | 0xFFF7E400 | **HECC1 mailbox RAM** (32×16-byte mailboxes) | ctrl-sel 1 in `rx_mailbox_resolver` |
   | 0xFFF7EA00 | **HECC2 control regs** | `hecc_module_b` (was `flexcan_module_b`) — the vehicle/diag bus |
   | 0xFFF7E600 | **HECC2 mailbox RAM** | ctrl-sel 2; diag mailbox lives here |
-  | 0xFFF7D400/D500/D600 | ESC valve-bank drivers | `esc_valve_mmio` |
-  | 0xFFF7F0A0 | ESC pump/motor driver | — |
-  | 0xFFF7EC00 / 0xFFF7F400 | ESC valve config regs | — |
+  | 0xFFF7D400 | **SPI2** (stock B1M frame) — firmware uses as ESC valve-bank/wheel-channel | `esc_valve_mmio` |
+  | 0xFFF7D500 | **I2C5** (stock B1M frame) — firmware uses as ESC valve-bank/wheel-channel | `periph_i2c5_valve` |
+  | 0xFFF7D600 | **RESERVED** (stock B1M frame) — firmware uses as ESC valve-bank/wheel-channel | `periph_rsvd_d600_valve` |
+  | 0xFFF7EC00 | **GIO** (stock B1M frame) — firmware uses for ESC valve-enable/driver GPIO | `periph_gio` |
+  | 0xFFF7F000 (0xF0A0) | **MibADC** (stock B1M frame) — firmware pump/motor sub-reg @0xF0A0 | `periph_mibadc` |
+  | 0xFFF7F400 | **SCI1** (stock B1M frame) — firmware writes config bytes (+0x2f/0x33/0x37) | `periph_sci1` |
+  | 0xFFF7F800 | **SPI1** | `periph_spi1` |
+  | 0xFFF7FC00 | **HET** (high-end timer) | `periph_het` |
+  | 0xFFFFF700 | **MSM** (memory security module) | `periph_msm` |
   The CAN cell is **TI HECC** (the old `flexcan_*` symbol names were wrong — HECC uses memory-mapped
   16-byte mailboxes + the CANTA/CANRMP/CANRML control regs our ISR polls; it is NOT Freescale FlexCAN
   and NOT D_CAN). Clock: external **15.000 MHz crystal** (Kinseki, on teardown photo) → internal PLL.
+- **CORRECTION 2026-10-11 (verified against the SM470R1B1M-HT datasheet SPNS155I, Table 8-7):** the HECC1/
+  HECC2 control + mailbox-RAM frames above match the datasheet **exactly** (4/4). But the ESC actuator
+  frames were previously mislabeled as dedicated "valve/pump" peripherals — in the stock B1M map they are
+  **SPI2 (0xD400), I2C5 (0xD500), RESERVED (0xD600), GIO (0xEC00), MibADC (0xF000), SCI1 (0xF400)**. The
+  firmware drives valve/pump hardware **through** these frames, i.e. they are repurposed by the Bosch-custom
+  mask (or wired to external driver ICs), not stock-function peripherals. See the custom-mask note below.
+- **CUSTOM-MASK / PART# caveat (2026-10-11):** this is a Bosch-custom derivative on the TMS470R1x BE
+  platform, **not a bone-stock catalog B1M**. Evidence: (1) the ESC actuators sit in stock SPI2/I2C5/GIO/
+  SCI1/MibADC/reserved frames (above); (2) the firmware flat-addresses flash content **past the 1 MB B1M
+  limit** — SEG2 executable code to file 0x10a000, the signed CAL block to 0x133be9, and main-code pointers
+  reaching 0x1312d0 (~1.22 MB). No standard TMS470R1x exceeds 1 MB, so either external memory is mapped on
+  the expansion bus (CS[5]/CS[6]) or the die carries extended flash. Consequence for the die teardown: the
+  **catalog SM470R1B1M-HT bare-die Table 4-1 (152 pads, 5.30×5.38 mm) is NOT a pad-for-pad template** for
+  this silicon. The die is also one of several in a multi-die chip-on-board hybrid (the MCU is the die with
+  the on-die flash/RAM arrays; the smaller companion dies are valve/pump drivers + watchdog). Do not gate
+  the MCU ID on a pad-overlay match — the exact HECC address match + ERCOSEK string already settle the family.
 - **For fault injection:** no cache/MMU/branch-prediction (ARM7TDMI 3-stage pipeline) ⇒ deterministic
   timing, glitch-friendly. Flash is TI **F035** with the TI **MSM** (Memory Security Module) readout
   protection — the SBOOT-side gate to target. See `docs/SECURITY_ACCESS.md` avenues 3 & 5.
+- **Peripheral/MMIO labels (symbols_merged.csv + symbols.csv, 2026-10-11):** all datasheet frame bases
+  the firmware uses are now labelled with datasheet+usage comments — the HECC frames + mailbox RAM, the
+  repurposed ESC frames (SPI2/I2C5/RESERVED/GIO/SCI1/MibADC), SPI1, HET, MSM, EBM, and the SYS-module
+  bases (RTI/CIM/PSA/DWD/DEC/DMA/MMC/IEM/DMA-cmd-buffer/SYS). Applied by `ApplySymbols.java` at reproduce
+  step 06.
+- **Register-level decompile aid (`ghidra_scripts/EspPeripherals.java`, reproduce step 06c):** creates a
+  volatile `PERIPH` block (0xFFF00000+0x100000) so the MMIO labels resolve; defines a `HECC` control-register
+  struct (CANME/CANMD/CANTRS/CANTA/CANRMP/CANRML/… per SPNU197e) + a `HECC_MBOX[32]` mailbox-RAM struct and
+  types the HECC base/RAM literal-pool pointers with them (CAN ISRs now read `hecc1->CANTA`, `mbox[n].MID`);
+  types the other peripheral-base pool constants as named pointers; and labels the ARM vectors 0x0..0x1c.
 - Citations: TI SPNU197e (TMS470R1x CAN/HECC Reference Guide), TMS470R1B1M datasheet (ti.com).
 
 ## Ghidra project state  (ecus/esp8/ghidra_proj, ARM:BE:32:v4t — refined from v5t 2026-10-05)
@@ -134,3 +166,121 @@ in `SECURITY_ACCESS.md`.
 2. UDS dispatcher (read/flash): find the ISO-TP RX handler that switches on the SID; trace 0x27
    (SA2 gate), 0x23/0x2E/0x34. (SID-CMP search unreliable — data false positives; use the RX buffer path.)
 3. Re-run full analysis with larger heap for max coverage before deep tracing.
+
+---
+# UPDATE 3 — Path D: adaptation/calibration channel analysis (2026-10-12)
+
+## Adaptation channel protocol (0xB8/0xB9/0xBA/0xBB) — firmware analysis
+
+**Objective**: determine if VAG adaptation channels provide an arbitrary memory read path.
+
+### Handler chain (from KWP dispatch)
+1. **`kwp_adaptation_handler` @0x1d7a8** — main dispatcher for SIDs 0xB8-0xBB (plus 0xC1, 0xFB).
+   16-entry × 8-byte channel table at **0xB8D98** (DATA region, pointer from literal pool @0x1d92c).
+   Request format: `B8 <hi> <lo>` — two data bytes construct a 16-bit channel ID as `lo + hi * 256`.
+   On match: stores table[i].byte6 as "type identifier" to RAM 0x4079CA; loads table[i].bytes[0:4]
+   into R4 as parameter; BLs to the ARM/Thumb interwork veneer at 0xa2428, which dispatches to the
+   type-specific sub-handler.
+
+2. **`kwp_coding_channel_handler` @0x1bf30** — 6-state protocol machine.
+   13-entry × 2-byte channel table at **0xB91E4** (pointer from DAT_0001c3c4).
+   States: 0=idle, 1=channel lookup, 2-3=data exchange (0xBA=write, 0xB9=next), 4=param config,
+   5=finalize. Reads from a 4-byte-record table at **PTR_DAT_0001c318** (indexed by channel).
+
+3. **`kwp_coding_data_dispatch` @0x1c128** — record-based data reader.
+   Base pointer = **PTR_DAT_0001c5e8 → 0xB9048** (fixed flash address). On 0xB8 (open): sets read
+   pointer to this base. On 0xB9 (advance): pointer += 4, reads next 4-byte record. Max 68 records
+   (0x44). Records contain timing/flags/mode packed in 4 bytes (timing = byte0 × 200ms).
+
+4. **FUN_0001c438** — variant of the data dispatch. Base pointer = **PTR_DAT_0001c734 → 0xB8ED4**.
+   Identical to 0x1c128 but with a different base table and sentinel-based wrapping (0xFFFFFFFF wraps
+   to start).
+
+5. **`kwp_adaptation_access_check` @0x1c6b0** — access-level gate for 0xB8/0xBA.
+   Reads `sec_access_state` and `diag_access_level_read()`. For 0xB8: calls FUN_0005f362 (sets a
+   single flag byte). For 0xBA with level 4: sets +0x37 = 3; level 6-7: sets +0xc = 0xC3.
+
+6. **FUN_0009c204** — calibration measurement channel handler.
+   Gated on calibration SA (bit 25 = 0x02000000) AND session 0x83/0x86 (flag check: `(flags|flags>>3)&1`).
+   Stores 16-bit channel ID from request to PTR_DAT+2. Sets control flags (|= 0x10). Does NOT
+   directly read from a memory address — the channel ID is stored, not dereferenced.
+
+### Channel table contents (0xB8D98, 16 entries × 8 bytes)
+| # | ch_id | state | perm | notes |
+|---|-------|-------|------|-------|
+| 0 | 0x2B40 | 0x2A | 0x42 | extended |
+| 1 | **0x002C** | 0x00 | 0xD1 | **= channel 44 (workshop code)** — state=0 → read blocked after open |
+| 2 | 0x0109 | 0x5A | 0xD2 | extended |
+| 3 | 0x52D2 | 0x61 | 0x0A | extended |
+| 4 | 0x0D22 | 0x80 | 0x40 | extended |
+| 5 | 0x5A09 | 0xDA | 0xD2 | extended |
+| 6 | 0xD2D2 | 0x55 | 0x09 | extended |
+| 7 | 0x0A09 | 0x92 | 0xD2 | extended |
+| 8 | 0x0278 | 0x0A | 0x08 | extended |
+| 9 | 0x420A | 0x15 | 0xD2 | extended |
+| 10 | 0x8040 | 0x75 | 0x09 | extended |
+| 11 | 0xD5D2 | 0x06 | 0x78 | extended |
+| 12 | 0x3EE0 | 0x02 | 0x46 | extended |
+| 13 | 0x0C09 | 0x95 | 0xD2 | extended |
+| 14 | 0xADD2 | 0x35 | 0x09 | extended |
+| 15 | 0x4D09 | 0x6D | 0xD2 | extended |
+
+Note: the table is in the DATA region (0xa2000-0xbb045). The byte values happen to decode as valid
+Thumb instructions (e.g., 0xD1xx = BNE, 0xD2xx = BCS), which initially caused confusion, but the
+literal pool reference and runtime access pattern are confirmed by Thumb disassembly of the handler.
+Channel 0x002C (44) matches the standard VAG "workshop code" adaptation channel, validating the table.
+
+### Special channel: 0x0FFF (security reset)
+When `buf[0x22f] == 4` (protocol state) AND SID == 0xB8 AND channel == 0x0FFF:
+→ calls `security_unlock_set(0)` — resets/locks the security access state.
+NOT an SA unlock path. It CLEARS security, not grants it.
+
+### VERDICT: no arbitrary memory read via adaptation channels
+**All data handlers read from FIXED flash tables.** None use the channel ID as a memory address or
+offset. The data flow for each path:
+
+- **kwp_coding_data_dispatch**: fixed base 0xB9048, sequential 4-byte reads up to 68 records
+- **FUN_0001c438**: fixed base 0xB8ED4, sequential 4-byte reads with 0xFFFFFFFF sentinel wrap
+- **kwp_coding_channel_handler**: indexed from PTR_DAT_0001c318, channel-index selects a record
+- **FUN_0009c204**: stores channel ID to RAM but never dereferences it as a pointer
+
+No handler computes `data = *(base + channel_id * stride)` with user-controlled channel_id.
+The adaptation protocol exposes calibration parameters (timing values, flag bits, mode codes), NOT
+arbitrary memory contents.
+
+### Bench confirmation (2026-10-12, session 0x83 + calibration SA unlocked)
+`bench/adapt_probe.py` run with correct 3-byte format (`B8 <hi> <lo>`) and all firmware table IDs:
+- **SID 0xB8/0xB9/0xBA**: NRC 0x11 (serviceNotSupported) in all formats — not implemented at all
+- **VAG-proprietary SIDs 0x46-0x50**: all NRC 0x11 despite CLASS table entries — dead code
+- **SID 0x21 extended formats** (address payload): NRC 0x31 (requestOutOfRange) — no address-based reads
+- **SID 0x2C DynamicallyDefineLocalIdentifier**: NRC 0x11 — not implemented
+- **SID 0x22 extended DIDs**: only 4 positive (0x0405-0x0408), single status bytes, no memory content
+- **SID 0x31 RoutineControl**: 0 positive across 0x00-0xFF (0xC1 returned conditionsNotCorrect)
+
+Firmware analysis + bench probe agree: adaptation channels are dead on this part number.
+
+### Summary of all diagnostic memory access paths explored
+| Path | Handler | Result |
+|------|---------|--------|
+| **SID 0x23 ReadMemByAddr** | 0x987f4 (Table A) | No bounds check, BUT unreachable — SBOOT takes over in 0x85 |
+| **SID 0x3D WriteMemByAddr** | shared with 0x23 | Same — unreachable via SBOOT |
+| **SID 0x35 Upload** | SBOOT-only | NRC 0x90 always |
+| **SID 0x34 Download** | SBOOT-only | 2KB SRAM window (0x400000-0x400800), no exec trigger |
+| **SID 0x21 MeasBlocks** | Table A | 48 fixed blocks — no arbitrary addressing |
+| **SID 0x22 ReadDID** | Table A | Standard ranges + 4 extended DIDs (status bytes only) |
+| **SID 0x2C DynDefDID** | — | NRC 0x11 — not implemented |
+| **SID 0x31 RoutineCtrl** | Table A | 0 accessible routines (0xC1 gated by conditionsNotCorrect) |
+| **Adaptation 0xB8-0xBB** | 0x1d7a8 | NRC 0x11 — not implemented on this part number |
+| **VAG SIDs 0x46-0x50** | CLASS table | NRC 0x11 — dead code, no handler wired |
+
+**No diagnostic-protocol memory read primitive exists on this ECU.**
+
+### Remaining viable paths for memory readback
+1. **Path A — Flash-modify-reboot** (medium risk): write a custom routine into flash via SBOOT
+   download that implements ReadMemByAddr, then reboot into modified ASW. Risk: brick if
+   flash write corrupts the image (need known-good backup first).
+2. **Path B — JTAG** (best option): TMS470R1B1M has TDI/TDO/TMS/TCK pads on the bare die.
+   Die pad locations documented in `docs/jtag_pad_id.md`. Full memory read/write with no
+   firmware dependency. Requires micro-probing on the decapped die.
+3. **Path C — Fault injection**: voltage glitch or clock glitch to skip security checks.
+   High complexity, low predictability on this MCU generation.

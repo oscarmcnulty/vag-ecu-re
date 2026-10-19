@@ -1,0 +1,132 @@
+diff --git a/board/main.c b/board/main.c
+index 458db967..034690b9 100644
+--- a/board/main.c
++++ b/board/main.c
+@@ -60,6 +60,12 @@ void debug_ring_callback(uart_ring *ring) {
+ 
+ // ****************************** safety mode ******************************
+ 
++#ifndef STM32H7
++// EPB-relay bridge engagement state (SAFETY_VW_EPB_RELAY); driven by ACC_05 liveness at 8 Hz.
++// F4 (black panda) only -- the H7 build uses fdcan and does not include the EPB relay driver.
++static bool epb_bridge_engaged = false;
++#endif
++
+ // this is the only way to leave silent mode
+ void set_safety_mode(uint16_t mode, uint16_t param) {
+   uint16_t mode_copy = mode;
+@@ -105,6 +111,22 @@ void set_safety_mode(uint16_t mode, uint16_t param) {
+       }
+       can_silent = ALL_CAN_LIVE;
+       break;
++    case SAFETY_VW_EPB_RELAY:
++      // Secondary inline EPB-relay panda. Start DISENGAGED (stock passthrough): intercept relay
++      // closed so the EPB wire stays a direct EPB<->ABS link, and all buses listen-only. The 8 Hz
++      // tick handler (epb_relay_apply_engagement) opens the relay and enables bus 0<->2 forwarding
++      // only while ACC_05 is live on bus 1. No USB host is required to reach this mode.
++      set_intercept_relay(false, false);
++      heartbeat_counter = 0U;
++      heartbeat_lost = false;
++      if (current_board->harness_config->has_harness) {
++        current_board->set_can_mode(CAN_MODE_NORMAL);
++      }
++      can_silent = ALL_CAN_SILENT;
++#ifndef STM32H7
++      epb_bridge_engaged = false;
++#endif
++      break;
+     default:
+       set_intercept_relay(true, false);
+       heartbeat_counter = 0U;
+@@ -122,9 +144,50 @@ bool is_car_safety_mode(uint16_t mode) {
+   return (mode != SAFETY_SILENT) &&
+          (mode != SAFETY_NOOUTPUT) &&
+          (mode != SAFETY_ALLOUTPUT) &&
++         (mode != SAFETY_VW_EPB_RELAY) &&
+          (mode != SAFETY_ELM327);
+ }
+ 
++#ifndef STM32H7
++// ACC_05 liveness poll (8 Hz). Returns true while counter-valid ACC_05 keeps arriving on bus 1
++// (engage the bridge), false once it has been stale for EPB_RELAY_STALE_TICKS ticks (disengage).
++// Starts stale => the panda boots disengaged and self-heals. Reads epb_relay.acc05_good, the
++// monotonic count of checksum+counter-valid ACC_05 frames maintained by epb_relay_rx().
++static bool epb_relay_should_engage(void) {
++  static uint32_t last_good = 0U;
++  static uint8_t  stale     = EPB_RELAY_STALE_TICKS;   // start stale => boot disengaged
++  uint32_t now = epb_relay.acc05_good;
++  if (now != last_good) {
++    last_good = now;
++    stale = 0U;
++  } else if (stale < EPB_RELAY_STALE_TICKS) {
++    stale++;
++  } else {
++    // already fully stale
++  }
++  return (stale < EPB_RELAY_STALE_TICKS);
++}
++
++// EPB-relay bridge: engage (intercept relay open, bus 0<->2 forwarding, bus 1 listen-only) while
++// ACC_05 is live, otherwise disengage to stock passthrough (relay closed = direct EPB<->ABS wire,
++// all buses listen-only). Only touches hardware on an actual state change, so can_init_all() runs
++// on transitions, not every tick. Called at 8 Hz from the tick handler.
++static void epb_relay_apply_engagement(bool engage) {
++  if (engage == epb_bridge_engaged) { return; }
++  epb_bridge_engaged = engage;
++  if (engage) {
++    set_intercept_relay(true, false);
++    can_silent = (int)(1U << CAN_NUM_FROM_BUS_NUM(1U));   // bus 1 (ACC_05 tap) listen-only; buses 0/2 live
++    current_safety_config.disable_forwarding = false;
++  } else {
++    set_intercept_relay(false, false);
++    can_silent = ALL_CAN_SILENT;
++    current_safety_config.disable_forwarding = true;
++  }
++  can_init_all();
++}
++#endif
++
+ // ***************************** main code *****************************
+ 
+ // cppcheck-suppress unusedFunction ; used in headers not included in cppcheck
+@@ -171,6 +234,13 @@ static void tick_handler(void) {
+       set_power_save_state(power_save_status);
+     }
+ 
++#ifndef STM32H7
++    // EPB-relay bridge: engage/disengage on ACC_05 liveness (8 Hz). No USB host involved.
++    if (current_safety_mode == SAFETY_VW_EPB_RELAY) {
++      epb_relay_apply_engagement(epb_relay_should_engage());
++    }
++#endif
++
+     // decimated to 1Hz
+     if (loop_counter == 0U) {
+       can_live = pending_can_live;
+@@ -233,7 +303,9 @@ static void tick_handler(void) {
+         heartbeat_engaged_mismatches = 0U;
+       }
+ 
+-      if (!heartbeat_disabled) {
++      // SAFETY_VW_EPB_RELAY is autonomous (no USB host) and self-gates on ACC_05 liveness,
++      // so it is exempt from the USB-heartbeat cutout / power-save that would force SILENT.
++      if (!heartbeat_disabled && (current_safety_mode != SAFETY_VW_EPB_RELAY)) {
+         // if the heartbeat has been gone for a while, go to SILENT safety mode and enter power save
+         if (heartbeat_counter >= (check_started() ? HEARTBEAT_IGNITION_CNT_ON : HEARTBEAT_IGNITION_CNT_OFF)) {
+           print("device hasn't sent a heartbeat for 0x");
+@@ -336,8 +408,15 @@ int main(void) {
+     fan_init();
+   }
+ 
++#ifndef STM32H7
++  // Boot directly into the autonomous EPB-relay bridge (starts DISENGAGED = stock passthrough;
++  // engages only when ACC_05 is live on bus 1). This is what makes the secondary panda work with
++  // no USB host attached. To use this panda for anything else, reflash or set mode over USB.
++  set_safety_mode(SAFETY_VW_EPB_RELAY, 0U);
++#else
+   // init to SILENT and can silent
+   set_safety_mode(SAFETY_SILENT, 0U);
++#endif
+ 
+   // enable CAN TXs
+   enable_can_transceivers(true);

@@ -52,7 +52,7 @@
 #define EPB_RELAY_STALE_TICKS    4U     // 8 Hz ticks (~0.5 s) with no counter-valid ACC_05 -> disengage
 
 // ---- EPB motor clamp via ESP_05 (prototype 2026-10-18) ------------------------------------
-#define EPB_CLAMP_ENABLE        1U   // master enable for the ESP_05 clamp rewrite
+#define EPB_CLAMP_ENABLE        0U   // master enable for the ESP_05 clamp rewrite
 #define EPB_CLAMP_SPEED_MAX_KPH 2U   // only ever command the clamp below this (never while rolling)
 #define EPB_CLAMP_DWELL_FRAMES  150U // ESP_01 frames at standstill before clamping (hold hydraulically
                                      //   first). ESP_01 ~50 Hz => ~3 s. Tune once rate is confirmed.

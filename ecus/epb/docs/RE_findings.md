@@ -480,3 +480,27 @@ under the first-frame grace (counter value irrelevant), the timeout/error counte
 after a few correctly-sequenced frames ACC_05 becomes confirmed-valid and the ACC->EPB path is
 available. No instant-from-power-on requirement; the fault is not latched. (A DTC may still be LOGGED
 historic, but the apply path gates on current freshness, not the stored DTC -- see sec.12.)
+
+## 11. ESP/ACC request arbitration — RTE snapshot getters (2026-10-19 trace)
+The apply decision reads the RTE **snapshot** (rte_copy_sig_image bulk-copies signal image
+0x2806..0x288e -> 0x1251; ESP flags 0x283d/e/f land at snapshot 0x1288/9/a). Getters (all
+PPAGE 0xe2, read snapshot low bytes 0x288-0x28a):
+- **FUN_788efe** = ESP_Anforderung_EPB enum map: raw **2(close)->6**, 1(open)->5, 0/3->3.
+- **FUN_788dbb** = esp_flags.3 = ESP_Verzoeg_EPB_verf (EPB-decel available).
+- **FUN_788dce** = esp_flags.2 = ESP_Verz_EPB_aktiv.
+- **FUN_788d49** = esp_flags.4 = ESP_Status_Bremsdruck.
+- **FUN_788b8f** = ESP-request VALID/consistent qualifier: returns 1 iff esp_flags_valid.0 AND
+  esp_flags.5 AND esp_flags_valid.7. (esp_flags.5 is set by esp05_epb_decode only when the ESP
+  request is consistent w/ ESP_Verzoeg_EPB_verf — so this qualifier effectively requires verf.)
+- rte_get_acc_betaetigung_epb(0x788ead)=snapshot 0x1251.0 ; rte_get_acc_epb_field(0x1251 bits1-3)
+  = ACC_Status_ACC qualifier for the ACC path.
+Supervisor FUN_7890a6 (called by rte_input_snapshot_task) is a 20ms-tick timer/debounce
+(counters 0x235/0x237/0x238, cap 999) that dispatches the arbitration SWCs via RTE pointers
+(0x7e00aa/0x7e00ae) and the 3 apply fns (FUN_78972d/7e88c1/7eec4c -> epb_actuator_ch_enable_b).
+The final close boolean is INDIRECT-DISPATCHED (RTE/COM table) — not statically resolvable;
+needs EmulS12X or the ESP8-side verf logic to pin the exact AND/OR. KEY ARCHITECTURAL POINT:
+ESP_Anforderung_EPB is the ABS's OWN signal; spoofing only the EPB-bound (bus2) copy leaves the
+ABS broadcasting anf=0 while the EPB sees anf=2 -> the ESP<->EPB consistency fails and the ABS
+sets ESP_Verzoeg_EPB_verf=0 (EPB-decel lockout, §10 / memory). The ACC_Betaetigung_EPB (ACC_05)
+channel is the ACC's legitimate EPB-close request (qualified by ACC_Status_ACC, NOT by ESP
+consistency) and is openpilot-controlled -> the correct clamp path is ACC_05, not an ESP_05 spoof.

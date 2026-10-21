@@ -156,3 +156,7 @@ ecus/*/*/analysis/indirect_branches.csv
 
 # local 32-bit python for bench (Scanmatik 32-bit DLL) - do not commit
 /tools/
+
+# Raw CAN sniffs / comma drive logs captured on-car (large raw data, not repo
+# content). Analysis findings are written up in ecus/*/docs, not the raw traces.
+captures/

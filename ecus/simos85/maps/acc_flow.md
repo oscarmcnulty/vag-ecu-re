@@ -239,14 +239,22 @@ permission loss, inhibit, override or lateral sub-state split. But one of those 
 speed-correlated: below **~15 km/h** the ESP asserts `ECD_nicht_verfuegbar`, which `801408bc` debounces
 into `d000b296 = 0` and the `a5a2` inhibit, and the machine then **deactivates `1→0`** (confirmed on-car,
 `low_speed_floors.md` Mechanism B). So in practice ACC drops out at ~15 km/h — via an ESP input, not an
-engine speed floor — taking accel down with it. The lever is the ESP's ECD threshold, not an engine cal.
+engine speed floor — taking accel down with it. The ESP owns the *threshold*, but the engine's *response* is an engine cal: `ECD_nicht_verfuegbar` reaches
+the CRUC only via the `a5a2` inhibit (bit `0x04` of inhibit mask `0x80043422`), so `0x80043422 = 0xEB` keeps
+ACC regulating (accel alive) below 15 km/h while decel authority (`b296`) stays withdrawn. CONFIRMED — see
+`low_speed_floors.md` §2.
 
-**Residual (GAP, low):** the permission/inhibit *inputs* to `8013ef46` — `a587`, `a593/594`, the
-`d000b1c7` ESP flag, `a335`, the `0x80086b00/b50/bc0` pedal switches and the ESP feedback bits — are
-computed outside the CRUC chain and were not each traced to root. None is read from ego speed *within*
-the machine, but an upstream input that is itself standstill-correlated (an ESP autohold flag, a driver
-brake tap at the stop) could raise an inhibit near 0 km/h. That would be an ESP/driver-domain handoff,
-not a cruise speed floor, and it does not affect the openpilot relay path.
+**Resolved (was GAP):** the permission/inhibit inputs to `8013ef46` have now been traced to root. Exactly
+one is speed-correlated: inhibit bit `0x04` (`a5a2`), which equals the debounced ESP `ECD_nicht_verfuegbar`
+(its other two OR-terms `b29e`/`b29f` are cal-disabled). Every other input — permission
+`a587`/`a593`/`a594`/`a55d`/`a5a5`/`b297`, inhibit `acc_brakeoverride_ROUTE_B`/`b298`/`a335`/`d1179`/egas-L2 —
+is coding-, fault-, status-enum- or driver-switch-driven with no ego-speed compare (where a writer does read
+speed, e.g. `8013bee8`/`80141248`, it routes to the `b28b` speed-band field or the accel limit, not the gate).
+So the single engine-observable sub-15 km/h deactivator is ECD via `a5a2`, and it is cal-defeatable
+(`0x80043422` bit `0x04`). **Accel authority** itself is gated by `a5ac` = (`STATE_CRU_CTL ∈ {1,2,5,6}`),
+which arbitrates `acc_engine_torque_request` (`d0007ce0`) into the engine torque demand (`80141528:145-156`,
+consumers `8011b414`/`8014e91e`/`8014f794`/`801647c0`/`80141904`); leaving {1,5} zeroes ACC torque. The torque
+path has no independent 15 km/h floor (only the 3.0 km/h `C_VS_MIN_CRU` in the PI controller `801e9b86`/`801e9b58`).
 
 ## 5. Output gate and TSK egress (CONFIRMED)
 
@@ -395,4 +403,6 @@ single-radar limit, not the engine's.
 2. **`d0007baa` absolute m/s² scale** — runtime gain `b0d4` versus the FR's 0.005; reconcile on the bench.
 3. **`d0007e84` physical scale** — an ACC-internal value, not ego speed; unverified.
 4. Full semantic naming of the `d8ce` engage-inhibit bit-word and the `d890` ACC-state byte.
-5. The permission/inhibit input roots to `8013ef46` (§4.3 residual).
+5. **RESOLVED** (§4.3): the only speed-correlated gate into `8013ef46` is `a5a2` = debounced ECD; all other
+   permission/inhibit inputs traced, none ego-speed. Accel authority = `a5ac` (`STATE_CRU_CTL ∈ {1,2,5,6}`),
+   cal-defeatable via `0x80043422` bit `0x04`.

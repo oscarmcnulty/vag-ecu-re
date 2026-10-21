@@ -36,7 +36,9 @@ Without a reflash the practical decel lever is the sending side: clamp commands 
 | (its hysteresis / clear values) | u8 | `0x800456be`, `0x800456c3` | 13 | keep MON − 2 | `low_speed_floors.md` §3 |
 | activation floor | `C_VS_MIN_CRU`, u16 1/128 km/h | `0x8007a26a` | 384 = 3.0 km/h | raw = km/h × 128 | `low_speed_floors.md` §3 |
 | creep / accel-control gate | `C_VS_MIN_AC_CTL_CRU`, u16 1/128 | `0x80079536` | 384 = 3.0 km/h | raw = km/h × 128 | `low_speed_floors.md` §3 |
-| **ESP ECD permission** (mechanism B) | — | **not in this ECU** | — | the ESP declares `ECD_nicht_verfuegbar` below ~15 km/h; no engine cal changes it | `low_speed_floors.md` §2, §5 |
+| **keep ACC accel below 15 km/h** (mechanism B response) | CRUC inhibit-mask bit `0x04` (`a5a2` = debounced ECD) | `0x80043422` / file `0x43422` | `0xEF` | **`0xEB`** (clear bit `0x04`) — ECD withdrawal no longer deactivates ACC, so accel survives below ~15 km/h; decel authority (`b296`) is independent and stays withdrawn. `a5a2` is the debounced ECD flag only (other OR-terms cal-disabled), sole consumer `8013ef46:300`. CAL region, OBD-flashable. | `low_speed_floors.md` §2 |
+| (ESP ECD *threshold* itself) | — | **not in this ECU** | — | the ESP asserts `ECD_nicht_verfuegbar` below ~15 km/h; no engine cal moves the ESP threshold — but the engine *response* row above achieves the goal | `low_speed_floors.md` §2, §5 |
+| (alt lever, less clean) | `a5a2`/`a5a1` source-mask hi-byte | `0x80043297` / file `0x43297` | `0x01` | `0x00` removes ECD from `a5a2` **and** the diagnostic sibling `a5a1`; prefer the `0x80043422` edit | `low_speed_floors.md` §2 |
 | (which ECD bit the engine debounces) | u8, bit 0 | `0x80043cd0` | `0x01` → uses `ECD_nicht_verfuegbar` | clearing bit 0 switches to `ECD_Fehler` — does **not** remove the gate | `low_speed_floors.md` §2 |
 
 ## Architecture / mode selection
@@ -54,7 +56,7 @@ Without a reflash the practical decel lever is the sending side: clamp commands 
 | `d0007e84` state 1→2 threshold | `0x800439f8` | 1004 | high-side selector; `d0007e84` is **not** ego speed, scale unverified |
 | its hysteresis back to state 1 | `0x800439fa` | 973 | |
 | engage-permission mask | `0x80043421` (high byte of the word at `0x80043420`) | `0x1B` | `d000115f` must equal this and be non-zero |
-| inhibit mask | `0x80043422` | `0xEF` | any surviving inhibit bit leaves the regulating set |
+| inhibit mask (bit `0x04` = `a5a2` = debounced ECD) | `0x80043422` | `0xEF` | any surviving inhibit bit leaves {1,5}; `0xEF→0xEB` drops the ECD deactivation so ACC keeps accelerating below ~15 km/h |
 | creep-flag threshold (2.34 km/h) | `0x80043c78` | 300 | sub-flag only |
 | launch latch (7.81 km/h) | literal `1000` in `8013ef46:265` | in code | one-way launch enable, not a stop floor |
 

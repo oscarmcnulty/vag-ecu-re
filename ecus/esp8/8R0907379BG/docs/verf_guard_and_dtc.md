@@ -107,3 +107,17 @@ broadcast signal. Spoofing only the EPB-bound (bus2) copy leaves the ABS still b
 while the EPB sees `anf=2` → the ESP↔EPB consistency check fails and the ABS sets `verf=0`. The
 legitimate ACC EPB-close request is `ACC_Betaetigung_EPB` on **ACC_05** (qualified by `ACC_Status_ACC`,
 not by ESP consistency) — so the correct openpilot clamp path is ACC_05, not an ESP_05 spoof.
+
+## verf VALUE source — resolved to one hop from the wall (addresses)
+
+The `esp_msg_pack_525c` (0x525c) literal pool is fully resolved. `verf`'s real value (when the guard
+passes) comes from fixed RAM bytes **`0x405e70`** (==1 → verf bool), `0x405e71/72/73` (bools), and
+**`0x405e74`** (raw decel byte, scaled `(b·0xe1e − 0x92774) >> 8` → TX staging `0x408a7a`).
+`ESP_Anforderung_EPB` source is `0x405e8b`→staging `0x408a8f` or `0x405e8c`→`0x407300` (INFERRED;
+needs the ESP_05 bit map to disambiguate). These source bytes have **no static writer** — only the
+RAM-dispatched router `esp05_status_route_a6c8` (0xa6c8) writes them, from a boot-built object-table
+DEST_PTR (stride-0x18 record, deposited by `com_signal_commit_record` 0x50090, flash descriptor
+stream `0xb6a44`, +8 DEST_PTR = zero in static image = the wall). The static angle is **exhausted**
+(the `0xa7e14` TLV has zero literal refs and is read only by the boot-installed iterator). Full chain,
+the empirical stock handoff template, and the openpilot recipe are in
+`autohold_and_standstill_handoff.md`.

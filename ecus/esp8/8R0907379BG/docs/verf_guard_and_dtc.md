@@ -45,8 +45,10 @@ since the clamp was disabled).
 of the **runtime COM object table**. The upstream app producer (what sets `verf=1` when the EPB
 decel channel is truly available), the code that sets `ESP_Anforderung_EPB=2`, and the EPB_01
 handshake are all behind the **object-table wall** (table base `*0x4069b4` = `0x40a1a8`, reads as
-zero in the static image). The ~5.8 s standstill-release timer is not an ABS counter here (likely
-EPB-module or ACC interlock).
+zero in the static image). **CORRECTED:** the ~5.8 s standstill-release timer **IS an ABS/ESP counter**
+(a standstill-anchored hold-duration limiter on the EPB-Verzoeg path) — proven from CAN outputs in
+`standstill_release_timer.md`; the "not an ABS counter / likely EPB-module or ACC interlock" guess here
+is overturned. Only the exact RAM address/threshold stays behind the COM/dispatch wall.
 
 **Single remaining static-analysis unlock = a bench RAM read of `0x404084+` and `0x406000–0x40a000`**
 (materialized fault array + COM object table) while toggling inputs. Static analysis is exhausted.

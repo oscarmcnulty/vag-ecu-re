@@ -28,8 +28,12 @@ stock sequence below is a complete template, and the architecturally correct sta
     not a v=0 latch.
 - `ESP_Autohold_aktiv` (ESP_05 bit56) is a **status mirror** of an app-computed state, routed from
   the object table; it is not a controllable register and no reachable received CAN signal drives it.
-- **No ~5.8 s timer exists in the ABS** — searched the ANB/hold/phase code for 0x244/0x488/0x580/
-  0x1160 counters, none found. The standstill-release timer is EPB-module / ACC-interlock logic.
+- **CORRECTED (see `standstill_release_timer.md`):** the ~5.8 s openpilot-inject release timer **IS
+  an ABS/ESP timer** — a standstill-anchored hold-duration limiter on the EPB-Verzoeg (Notbremsfunktion)
+  path, proven from the ECU's own CAN outputs (ESP drops its own `ESP_Verz_EPB_aktiv`+`Status_Bremsdruck`
+  while the injected request is held constant). The earlier "no ABS timer / likely EPB-module or
+  ACC-interlock" conclusion (narrow 0x244/0x488/0x580/0x1160 code-literal scan) is **overturned**. The
+  exact RAM counter/threshold stays behind the runtime COM/dispatch wall, but ownership is now proven.
 
 ## ESP_05 TX producer chain — resolved to one hop from the wall (PROVEN addresses)
 

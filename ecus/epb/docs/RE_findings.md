@@ -540,3 +540,37 @@ pinned statically — the consumer is the one runtime-dispatched SWC behind the 
 What IS proven: the EPB exposes the ESP request + Autohold + Verz_aktiv + verf + Bremsdruck +
 dynamic-brake pressure, all individually, to that SWC. (Earlier provisional "no getter reads
 Autohold" was WRONG — corrected here.)
+
+## 25. The RTE "wall" is RESOLVED — static in-image dispatch (2026-10-25) — SUPERSEDES §13/§16/§19/§22
+
+The conclusions in §13/§16/§19/§22 ("arbitration SWC is definitively runtime-only", "RTE
+runtime-dispatch wall") were **wrong about the EPB** and are superseded here. Full write-up +
+the enumerated table: `docs/swc_dispatch_resolved.md` and `analysis/swc_dispatch_table.csv`.
+
+The EPB has **no boot-materialised dispatch wall** (that is the ESP8, not this ECU). The SWC
+"function mapping" is a **static, in-image, table-driven cooperative scheduler**, fully recovered:
+
+- **Scheduler** `FUN_7e236a(id)`: descriptor table in flash at `0x7f4800+0x2390` (GPAGE-global),
+  per-runnable state/period in RAM CB array `0x1fbf`/`0x1fc0` (stride 4); runs a runnable when its
+  period elapses and latches its boolean result at `0x1fc0 + id*4` bit 0.
+- **Runnable table** `0x7f5000–0x7f8000`: **172** `{addr16,page}` entries, each resolved to a
+  concrete function (CSV). Apply runnable `7e88c1` = `@7f561b`; monitor `7ec0ab` = `@7f6180`.
+- **Arbitration = page-fb control cluster** `7ed041`(ch0)/`7ed292`(ch1)/`7ed657`(combined)/`7ed7b8`/
+  `7edec3`/`7ee001`/`7ee054`/`7ee085`/`7ee2e2`. Each: schedules a decision sub-runnable via
+  `FUN_7e236a(ctx->0x10+0xc)`, then calls `FUN_7ecc02(ctx,cmd)` to set/clear the arbitrated
+  apply bits in command register `DAT_000240` (bit4 = ch0 apply, bit5 = ch1 apply; cmd 100='d'
+  = apply, 0 = release). Speed gate `0x4b1`(1201) via Rte_Read `FUN_79058c`; clamp-force ramp
+  field `ctx->0x31` bits `0x7c`, +4/cycle (⇒ the empirical Spann 2→17 ramp).
+- **Apply** `7e88c1`: reads enable-getter `78cd37` + apply-value getter `78cd33` → actuator
+  `FUN_7e81f6(B)` with B=2 (apply/close) or B=1 (release/open).
+- `DAT_000240` is the arbitration **output**; it is consumed by monitors/reporters only
+  (`7eec4c` EPB_01 TX packer, `799eaa` status encoder, `7ec0ab` force/current filter).
+
+Why §13/§16/§22 saw a "wall": Ghidra didn't cross-reference `0x4a` far-calls across PPAGE banks,
+and the Rte_Read getters (`788efe`=ESP_Anforderung_EPB, `788f21`=Autohold, `788ead`=ACC, etc.)
+are invoked via PPAGE-register-indirect calls that create no Ghidra reference — the "no caller"
+illusion. Decoding raw `0x4a` bytes and byte-scanning the snapshot RAM (`0x1288/89/8a/1251/1286`)
+dissolves it. The Autohold question left open at the end of §24 is now answerable at the
+structural level: `788f21` (Autohold) feeds the same scheduler-dispatched decision runnable as
+the ESP/ACC request — a first-class arbitration input, consumed by the static control cluster
+above, not a dead field.

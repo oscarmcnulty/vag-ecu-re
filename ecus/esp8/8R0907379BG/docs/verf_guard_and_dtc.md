@@ -24,56 +24,42 @@ decel availability. This doc records why, and the envelope to avoid it.
   hold / EPB handoff, not a hold you can command from CAN.
 - **Standstill hold is the EPB static clamp by design** (see `ecus/epb` RE findings).
 
-## `verf` compose — PROVEN guard condition
+## `verf` compose + DTC event machine — PROVEN (detail is in the symbols)
 
-`esp_msg_pack_525c` (0x525c) emits the real EPB-block values **only if ALL of**:
+The byte-level trace lives in `analysis/symbols_merged.csv` so it reads in the decompile:
+`esp_msg_pack_525c` (0x525c) carries the full guard condition in its comment, and the guard
+inputs are labelled — `esp05_verf_group_state` (0x406d2a), `esp_comm_status_word` (0x40800a),
+`esp05_verf_fault_e160..e163` (0x404344/46/48/4a), `esp_dtc_event_status_array` (0x404084, byte =
+`event_id*2`, written by `diag_dtc_event_report` 0x8473e), and the value source
+`esp05_verf_value_src`/`esp05_verf_decel_src` (0x405e70/74). Not re-enumerated here.
 
-- group-state byte `0x406d2a`: **bit7 clear** (not "signal invalid") AND **bit1 clear** (not "error");
-- global ESP comm-status word `0x40800a`: bits **{4,6,14,15}** all clear (mask 0x4050 + sign bit).
-  Written by `com_group_commit` (0x827ac / 0xa2aac); read by every packer;
-- the 4 per-signal DTC/fault bytes `0x404344/46/48/4a` (EPB block of the fault array at
-  `0x404084`) **all zero** (DTC-driven; `0x404346` writer = DTC setter `FUN_000cc984`).
+**What it means (integration):** `verf` (ESP_05 bit60) + `ESP_Verz_EPB_aktiv` (bit58) are forced
+to default 0 unless group-state `0x406d2a` (bit7/bit1 clear), comm-status `0x40800a` (bits
+{4,6,14,15} clear), and the four EPB-block DTC bytes `0x404344/46/48/4a` are all clean. So
+**`verf` is a "system-healthy AND no relevant DTC" flag, not an EPB-status/authorship coupling.**
+This matches the adversarial log re-review: once the fault clears, `verf=1` coexists with EPB
+closed, and it resets to 1 at every ABS boot (not a monotonic latch). The injected value-2 that
+dropped `verf` tripped an EPB-plausi DTC in the verf block (events 0x160–0x163), not a
+frame-authorship check.
 
-Otherwise `verf` (and `ESP_Verz_EPB_aktiv` bit58) are forced to **default 0**. So **`verf` is a
-"system-healthy AND no relevant DTC" availability flag**, not an EPB-status coupling. This matches
-the adversarial log re-review: once the fault clears, `verf=1` coexists with EPB closed, and `verf`
-is not a monotonic latch (it resets to 1 at every ABS boot and has read healthy on every drive
-since the clamp was disabled).
+**Other blocks (not yet in symbols, bench-checkable):** the same `event*2` off `0x404084`
+indexing maps the Autohold/`Status_Bremsdruck`/`Anforderung_EPB` byte7 block (state `0x406d32`,
+events 0xb5–0xb8 → `0x4041ee+`), the base ESP_05 block (state `0x406d52`, events 0xd5–0xd8), and
+the sum/counter block (state `0x406d26`, events 0x220–0x223). The per-event evaluator + human DTC
+code for 0x160–0x163 / 0xb5–0xb8 are **not statically resolvable** (raised by table/loop
+monitors — bulk reporter `FUN_0003b1d8` at table 0xbc600 — plus boot-installed COM-Rx-E2E with
+object-table-routed inputs; DTC-code tables 0xb4b6c/0xb3750 don't decode to clean VW 3-byte DTCs
+statically).
 
-**`verf` VALUE source** (when the guard passes) = booleans `0x405e70/71/72/73` + decel value
-`0x405e74`, routed from `esp05_status_src` (0x405f68) via `esp05_status_route_a6c8` (0xa6c8) out
-of the **runtime COM object table**. The upstream app producer (what sets `verf=1` when the EPB
-decel channel is truly available), the code that sets `ESP_Anforderung_EPB=2`, and the EPB_01
-handshake are all behind the **object-table wall** (table base `*0x4069b4` = `0x40a1a8`, reads as
-zero in the static image). The ~5.8 s standstill-release timer is not an ABS counter here (likely
-EPB-module or ACC interlock).
-
-**Single remaining static-analysis unlock = a bench RAM read of `0x404084+` and `0x406000–0x40a000`**
-(materialized fault array + COM object table) while toggling inputs. Static analysis is exhausted.
-
-## DTC event machine — PROVEN
-
-`diag_dtc_event_report` = `FUN_0008473e(event_id, status)` writes the per-event current status as a
-byte at **`0x404084 + event_id*2`** (status=1 ⇒ currently FAILED). Every ESP_05 guard "fault byte"
-is thus `event_id*2` off `0x404084`. The four validity blocks in 0x525c map to these event sets
-(proven by offset → `event*2` arithmetic):
-
-| ESP_05 block | state byte | events | status bytes |
-|---|---|---|---|
-| **verf + `Verz_EPB_aktiv`** (block 0x543c) | `0x406d2a` | **0x160–0x163** | `0x404344/46/48/4a` |
-| Autohold / `Status_Bremsdruck` / `Anforderung_EPB` byte7 (block 0x57c0) | `0x406d32` | 0xb5–0xb8 | `0x4041ee+` |
-| base ESP_05 (block) | `0x406d52` | 0xd5–0xd8 | — |
-| sum/counter block | `0x406d26` | 0x220–0x223 | — |
-
-So **`verf=0` IFF** any of events 0x160–0x163 failed, OR `0x40800a` bits {4,6,14,15} set, OR
-`0x406d2a` bit1/7 set.
-
-**Not statically resolvable:** the per-event evaluator code + human DTC code for 0x160–0x163 (and
-0xb5–0xb8). They are raised by table/loop monitors (bulk reporter `FUN_0003b1d8` at table 0xbc600)
-plus boot-installed COM-Rx-E2E, with object-table-routed inputs. The DTC-code tables 0xb4b6c /
-0xb3750 do not decode to clean VW 3-byte DTCs statically (consistent with the Simos8.5 DTC finding).
-Confirming which input each of 0x160–0x163 monitors needs the bench RAM read above. The `event*2`
-indexing itself is solid and bench-checkable.
+**verf VALUE source** is one hop behind the wall: when the guard passes, `0x405e70/71/72/73`
+bools + `0x405e74` decel are routed from `esp05_status_src` (0x405f68) via
+`esp05_status_route_a6c8` (0xa6c8) out of the runtime COM object table (base
+`*0x4069b4`=`0x40a1a8`, zero in the static image). The app producer, the `ESP_Anforderung_EPB=2`
+setter, and the EPB_01 handshake all sit behind that object-table wall. (The ~5.8 s
+standstill-release timer IS an ABS/ESP counter — a standstill-anchored hold-duration limiter on
+the EPB-Verzoeg path, proven from CAN outputs in `standstill_release_timer.md`.) **Single
+remaining static-analysis unlock = a bench RAM read of `0x404084+` and `0x406000–0x40a000` while
+toggling inputs.** Static analysis is exhausted.
 
 ## Trigger table — what our injection can trip
 
@@ -107,3 +93,13 @@ broadcast signal. Spoofing only the EPB-bound (bus2) copy leaves the ABS still b
 while the EPB sees `anf=2` → the ESP↔EPB consistency check fails and the ABS sets `verf=0`. The
 legitimate ACC EPB-close request is `ACC_Betaetigung_EPB` on **ACC_05** (qualified by `ACC_Status_ACC`,
 not by ESP consistency) — so the correct openpilot clamp path is ACC_05, not an ESP_05 spoof.
+
+## verf VALUE source — one hop behind the wall
+
+Covered above and in the symbols (`esp05_verf_value_src`/`esp05_verf_decel_src`): the values are
+written only by the RAM-dispatched router `esp05_status_route_a6c8` (0xa6c8) from a boot-built
+object-table DEST_PTR (stride-0x18 record, `com_signal_commit_record` 0x50090, flash descriptor
+stream `0xb6a44`, +8 DEST_PTR = zero in the static image = the wall). `ESP_Anforderung_EPB` source
+is `0x405e8b`→staging `0x408a8f` or `0x405e8c`→`0x407300` (INFERRED). The full COM chain, the
+empirical stock handoff template, and the openpilot recipe are in
+`autohold_and_standstill_handoff.md`.

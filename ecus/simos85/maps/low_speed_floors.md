@@ -7,7 +7,7 @@ set the status enum, or withdraw braking.
 
 | # | mechanism | where it lives | what it does |
 |---|---|---|---|
-| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | **THE operative floor + DEACTIVATOR:** `ECD_nicht_verfuegbar` is a clean 15 km/h gate (asserted 100%% below 15 km/h, 0%% above 16). Debounced in `801408bc` it forces `d000b296 = 0` (decel authority withdrawn) and co-sets the `a5a2` inhibit; the CRUC then **deactivates** `STATE_CRU_CTL 1→0` ~50 ms later, which kills accel too (the whole ACC drops to standby). |
+| **B** | `ECD_nicht_verfuegbar` — the ESP's *Externally Controlled Deceleration* permission | **in the ESP/ABS**, arriving on ESP_05 (0x106) bit 33 | **THE operative floor + DEACTIVATOR:** `ECD_nicht_verfuegbar` is a clean 15 km/h gate (asserted 100%% below 15 km/h, 0%% above 16). Debounced in `801408bc` it forces `d000b296 = 0` (decel authority withdrawn) and co-sets the `a5a2` inhibit; the CRUC then **deactivates** `STATE_CRU_CTL 1→0` ~50 ms later, which kills accel too (the whole ACC drops to standby). **Engine-side cal lever (CONFIRMED):** `a5a2` is the debounced ECD flag ONLY (its two other OR-terms are cal-disabled) and its sole consumer is CRUC inhibit bit `0x04`; `0x80043422` `0xEF→0xEB` drops that bit so ECD no longer deactivates ACC and accel survives below 15 km/h, while decel authority (`b296`) stays withdrawn. See §2. |
 | **A** | `C_VS_MIN_CRU_MON` = 15 km/h internal L2 crawl monitor | **inside this ECU**, cal `0x800794ef` / `0x800794f2` | **reporting-only** — debounced `≤15 km/h` flag → telltale field `a35f` on frame 0x5C0 + unread `d88b` bits. Does NOT stop ACC or set status 3. See §1 correction. |
 
 **No engine-internal speed threshold latches an ACC fault.** Neither status enum is speed-driven:
@@ -19,7 +19,8 @@ downstream consistency effect — **not** from this ECU measuring speed. **GAP:*
 cause needs the ESP image or decoded on-car logs.
 
 Practical consequence: **editing `C_VS_MIN_CRU_MON` (0x800794ef/f2) changes only the 0x5C0 telltale, not
-whether ACC brakes** — the operative floor is the ESP's ECD refusal, which is not in this ECU at all.
+whether ACC brakes** — the operative floor is the ESP's ECD refusal. The ESP owns the *threshold*, but the engine's
+*response* to it — the `a5a2` CRUC inhibit — is defeatable by an engine cal (`0x80043422` bit `0x04`); see §2.
 See §5 for what the MED17.1.1 pack established about the ESP side.
 
 Addresses are load base `0x80000000`; file offset = `addr & 0x1FFFFFFF`. Ego speed working copy is
@@ -145,7 +146,20 @@ Details worth knowing:
   `ECD_nicht_verfuegbar` as a function of speed at ~15 km/h. The mode byte is also mirrored into
   `d000b28c` by every CRUC handler and drives two timers in `8013ef46` (:216 / :226).
 
-**There is no cal in this ECU that changes the ESP's mind.** The ECD decision is made in another module.
+**No engine cal changes the ESP's ECD *threshold*** — that decision is made in the ESP. **But the
+engine's *response* to ECD withdrawal is cal-defeatable in this ECU (CONFIRMED).** The debounced ECD flag
+(`d000b299` bit0) reaches the CRUC only through `a5a2` (`d000a5a2`): `801408bc:116/232` build
+`a5a2 = (b299 & cal 0x80043296 hi-byte 0x01) || (b29e & cal 0x80043d2c lo=0x00) || (b29f & cal 0x80043cae=0x00)` —
+the last two terms are cal-disabled, so **`a5a2` == the debounced ECD flag only**. Its sole consumer is
+`8013ef46:300`, the CRUC inhibit bit `0x04` (mask `0x80043422 = 0xEF`, applied at `:324`). Setting
+**`0x80043422 = 0xEB`** drops bit `0x04`, so ECD withdrawal no longer forces `STATE_CRU_CTL` out of {1,5};
+ACC stays regulating and keeps accelerating below ~15 km/h. Decel authority travels via `d000b296`
+(independent of `a5a2`) and stays withdrawn when ECD is unavailable, so decel into the unavailable ABS
+remains blocked. **Why accel dies at all:** ACC engine torque is gated by `a5ac` = (`STATE_CRU_CTL ∈ {1,2,5,6}`,
+`80141528:145-156`); leaving {1,5} clears `a5ac` and the torque arbitration (`8011b414`/`8014e91e`/`8014f794`/
+`801647c0`/`80141904`) drops the ACC request. The torque path has no 15 km/h floor of its own (only the
+3.0 km/h `C_VS_MIN_CRU`). Alternative lever `0x80043297 0x01→0x00` also works but additionally zeroes the
+diagnostic sibling `a5a1`; prefer the inhibit-mask edit.
 
 ---
 

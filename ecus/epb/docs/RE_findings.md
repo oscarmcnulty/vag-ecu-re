@@ -480,3 +480,87 @@ under the first-frame grace (counter value irrelevant), the timeout/error counte
 after a few correctly-sequenced frames ACC_05 becomes confirmed-valid and the ACC->EPB path is
 available. No instant-from-power-on requirement; the fault is not latched. (A DTC may still be LOGGED
 historic, but the apply path gates on current freshness, not the stored DTC -- see sec.12.)
+
+## 11. ESP/ACC request arbitration — RTE snapshot getters (2026-10-19 trace)
+The apply decision reads the RTE **snapshot** (rte_copy_sig_image bulk-copies signal image
+0x2806..0x288e -> 0x1251; ESP flags 0x283d/e/f land at snapshot 0x1288/9/a). Getters (all
+PPAGE 0xe2, read snapshot low bytes 0x288-0x28a):
+- **FUN_788efe** = ESP_Anforderung_EPB enum map: raw **2(close)->6**, 1(open)->5, 0/3->3.
+- **FUN_788dbb** = esp_flags.3 = ESP_Verzoeg_EPB_verf (EPB-decel available).
+- **FUN_788dce** = esp_flags.2 = ESP_Verz_EPB_aktiv.
+- **FUN_788d49** = esp_flags.4 = ESP_Status_Bremsdruck.
+- **FUN_788b8f** = ESP-request VALID qualifier: returns 1 iff esp_flags_valid.0 AND
+  esp_flags.5 AND esp_flags_valid.7 (confirmed @788b8f/b94/b99: BRCLR 0x128a,0x1 / BRSET 0x1289,0x20
+  / BRCLR 0x128a,0x80). **CORRECTION 2026-10-25:** esp_flags.5 is NOT a verf-consistency bit. It is
+  set by `esp05_epb_decode` from the return of the GENERIC COM primitive `FUN_7e45e2` (windowed
+  0x4005e2, called by com_unpack_3/5, esp05_epb_decode, and ~15 other unpack sites) AND byte1 bit4
+  — i.e. a per-signal RX/E2E VALIDITY bit for the ESP_05 EPB-request group. So FUN_788b8f requires
+  the ESP_05 request to be RECEIVED-VALID, **independent of verf**. verf (esp_flags.3) is exposed
+  SEPARATELY via FUN_788dbb; whether arbitration gates the ESP-decel path on it is behind the wall.
+- rte_get_acc_betaetigung_epb(0x788ead)=snapshot 0x1251.0 ; rte_get_acc_epb_field(0x1251 bits1-3)
+  = ACC_Status_ACC qualifier for the ACC path.
+Supervisor FUN_7890a6 (called by rte_input_snapshot_task) is a 20ms-tick timer/debounce
+(counters 0x235/0x237/0x238, cap 999) that dispatches the arbitration SWCs via RTE pointers
+(0x7e00aa/0x7e00ae) and the 3 apply fns (FUN_78972d/7e88c1/7eec4c -> epb_actuator_ch_enable_b).
+The final close boolean is INDIRECT-DISPATCHED (RTE/COM table) — not statically resolvable;
+needs EmulS12X or the ESP8-side verf logic to pin the exact AND/OR. KEY ARCHITECTURAL POINT:
+ESP_Anforderung_EPB is the ABS's OWN signal; spoofing only the EPB-bound (bus2) copy leaves the
+ABS broadcasting anf=0 while the EPB sees anf=2 -> the ESP<->EPB consistency fails and the ABS
+sets ESP_Verzoeg_EPB_verf=0 (EPB-decel lockout, §10 / memory). The ACC_Betaetigung_EPB (ACC_05)
+channel is the ACC's legitimate EPB-close request (qualified by ACC_Status_ACC, NOT by ESP
+consistency) and is openpilot-controlled -> the correct clamp path is ACC_05, not an ESP_05 spoof.
+
+## 24. Complete ESP/ACC getter → snapshot-bit map (2026-10-25, headless xref)
+
+The RTE getter cluster at 0x788d49–0x788f55 IS the arbitration SWC's full input interface (every
+getter is COMPUTED-CALL only — no static caller — invoked via RTE fn-pointer ports). Verified by
+decompiling each + a snapshot-byte xref (EpbProbe/EpbProbe2/FindCallers headless). esp_flags land at
+snapshot 0x1289, esp_flags_valid at 0x128a, esp_epb_req at 0x1288, esp_pressure at 0x1286.
+
+**esp_flags (0x1289) — every low bit has its own getter:**
+| getter | reads | signal |
+|---|---|---|
+| FUN_788f21 | 0x1289 & 1 | **ESP_Autohold_aktiv** (bit0) |
+| FUN_788f2e | (0x1289 & 2)>>1 | esp_flags.1 (byte4 bit3 — 2nd ESP flag) |
+| FUN_788dce | 0x1289 bit2 | ESP_Verz_EPB_aktiv |
+| FUN_788dbb | 0x1289 bit3 | ESP_Verzoeg_EPB_verf (verf) |
+| FUN_788d49 | 0x1289 bit4 | ESP_Status_Bremsdruck |
+| FUN_788b8f | 0x1289 bit5 (+0x128a.0/.7) | COM-RX-valid qualifier (see §11 correction) |
+
+**esp_epb_req (0x1288):** FUN_788efe (enum map 2→6/1→5/0,3→3).
+**esp_pressure (0x1286):** FUN_788d75 (LDD = 16-bit) — the ESP dynamic-brake magnitude IS exposed.
+**esp_flags_valid (0x128a):** FUN_788d53/dc4/dd6/f18/f27/f35 + 789aa8 (per-signal validity bits).
+**ACC (0x1251/0x1252):** rte_get_acc_betaetigung_epb(0x1251.0), rte_get_acc_epb_field(0x1251.1-3),
+rte_get_acc_freshness(0x1252.0), + FUN_788ec0/ec7/ed1 (0x1252/0x1251).
+
+**=> Autohold verdict:** ESP_Autohold_aktiv IS a first-class arbitration INPUT (dedicated getter
+FUN_788f21) — it is NOT a dead/status-only field at the interface. Whether the arbitration SWC uses
+it to drive actuation vs. the drive-off auto-release (§10) vs. only mode-coordination cannot be
+pinned statically — the consumer is the one runtime-dispatched SWC behind the RTE wall (§13/§22).
+What IS proven: the EPB exposes the ESP request + Autohold + Verz_aktiv + verf + Bremsdruck +
+dynamic-brake pressure, all individually, to that SWC. (Earlier provisional "no getter reads
+Autohold" was WRONG — corrected here.)
+
+## 25. The RTE "wall" is RESOLVED — static in-image dispatch (2026-10-25) — SUPERSEDES §13/§16/§19/§22
+
+The conclusions in §13/§16/§19/§22 ("arbitration SWC is definitively runtime-only", "RTE
+runtime-dispatch wall") were **wrong about the EPB** and are superseded here. Full write-up +
+the enumerated table: `docs/swc_dispatch_resolved.md` and `analysis/swc_dispatch_table.csv`.
+
+The EPB has **no boot-materialised dispatch wall** (that is the ESP8, not this ECU). The SWC
+"function mapping" is a **static, in-image, table-driven cooperative scheduler**, fully recovered.
+
+The whole chain — scheduler `rte_sched_run_runnable` (7e236a), the 172-entry runnable table
+(0x7f5000–0x7f8000), the page-fb arbitration cluster (`epb_arb_apply_ch0/ch1/combined/alt` …),
+`epb_cmd_set_applybits` → `epb_apply_cmd_reg` (DAT_000240) → `epb_apply_runnable` →
+`epb_apply_cmd_write` (B=2 close/1 open), the RTE getters, and the `coding_ext_clamp_enable`
+(0xfe074.0) gate — **is named + plate-commented in `analysis/symbols.csv`** (so it reads in the
+decompile) and diagrammed end-to-end in `docs/swc_dispatch_resolved.md`; the table is
+`analysis/swc_dispatch_table.csv`. Not re-enumerated here.
+
+Why §13/§16/§22 saw a "wall": Ghidra didn't cross-reference `0x4a` far-calls across PPAGE banks,
+and the RTE getters are invoked via PPAGE-register-indirect calls that create no Ghidra reference
+(the "no caller" illusion). Decoding raw `0x4a` bytes and byte-scanning the snapshot RAM
+(`0x1288/89/8a/1251/1286`) dissolves it. The Autohold question left open at §24 is now answerable
+structurally: `rte_get_esp_autohold` (788f21) feeds the same scheduler-dispatched decision
+runnable as the ESP/ACC request — a first-class arbitration input, not a dead field.
